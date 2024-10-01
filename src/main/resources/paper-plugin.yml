@@ -1,0 +1,18 @@
+name: AIlex
+version: '${version}'
+main: nl.hauntedmc.ailex.AIlexPlugin
+description: AILex plugin
+author: HauntedMC
+api-version: '1.20'
+bootstrapper: nl.hauntedmc.ailex.AIlexPluginBootstrap
+loader: nl.hauntedmc.ailex.AIlexPluginLoader
+dependencies:
+  server:
+    Citizens:
+      load: BEFORE
+      required: true
+      join-classpath: true
+    packetevents:
+      load: BEFORE
+      required: true
+      join-classpath: true

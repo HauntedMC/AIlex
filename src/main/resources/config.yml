@@ -1,0 +1,38 @@
+openai:
+  api_key: ""
+  model: "gpt-3.5-turbo-instruct"
+npc:
+  general:
+    maxVelocity: 4.317
+    maxRotation: 180.0
+  behaviour:
+    seek:
+      maxAcceleration: 4.0
+    arrive:
+      maxAcceleration: 4.0
+      slowRadius: 3.5
+      timeToTarget: 0.1
+    flee:
+      maxAcceleration: 4.0
+    align:
+      maxAngularAcceleration: 360.0
+      slowRadius: 90.0
+      timeToTarget: 0.1
+    pursue:
+      maxPredictionTime: 3.0
+    evade:
+      maxPredictionTime: 2.0
+    wander:
+      wanderOffset: 2.0
+      wanderRadius: 2.0
+      wanderRate: 1.0
+      maxAcceleration: 4.0
+  action:
+    movehere:
+      targetDistance: 0.5
+    followplayer:
+      targetDistance: 2.5
+    fleeplayer:
+      targetDistance: 10.0
+    mirrorplayer:
+      targetAngle: 3.0
