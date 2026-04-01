@@ -1,16 +1,19 @@
+import io.papermc.paperweight.userdev.ReobfArtifactConfiguration
+import org.gradle.api.plugins.quality.Checkstyle
+import org.gradle.testing.jacoco.tasks.JacocoReport
+
 plugins {
     `java-library`
     `maven-publish`
-    id("io.papermc.paperweight.userdev") version "1.7.1"
+    checkstyle
+    jacoco
+    id("io.papermc.paperweight.userdev") version "1.7.7"
 }
 
 
 group = "nl.hauntedmc.ailex"
-version = "1.21-v1"
+version = "1.0.0"
 description = "AIlex"
-
-java.sourceCompatibility = JavaVersion.VERSION_21
-
 
 repositories {
     mavenCentral()
@@ -26,12 +29,26 @@ dependencies {
     implementation("net.byteflux:libby-bukkit:1.1.5")
     implementation("net.citizensnpcs:citizensapi:2.0.34-SNAPSHOT")
     implementation("net.citizensnpcs:citizens-main:2.0.34-SNAPSHOT")
-    implementation("io.github.classgraph:classgraph:4.8.171")
+    implementation("io.github.classgraph:classgraph:4.8.174")
     compileOnly("com.github.retrooper:packetevents-spigot:2.4.0")
+
+    testImplementation(platform("org.junit:junit-bom:5.13.4"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("org.mockito:mockito-junit-jupiter:5.20.0")
+    testImplementation("org.mockito:mockito-inline:5.2.0")
+    testImplementation("com.github.retrooper:packetevents-spigot:2.4.0")
 }
 
 java {
     toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+    withSourcesJar()
+}
+
+checkstyle {
+    toolVersion = "10.26.1"
+    configFile = file("config/checkstyle/checkstyle.xml")
+    isShowViolations = true
 }
 
 tasks.processResources {
@@ -47,4 +64,30 @@ tasks.jar {
     archiveFileName.set("AIlex.jar")
 }
 
-paperweight.reobfArtifactConfiguration = io.papermc.paperweight.userdev.ReobfArtifactConfiguration.MOJANG_PRODUCTION
+tasks.test {
+    useJUnitPlatform()
+    testLogging {
+        events("passed", "skipped", "failed")
+    }
+    finalizedBy(tasks.jacocoTestReport)
+}
+
+tasks.withType<Checkstyle>().configureEach {
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+}
+
+tasks.withType<JacocoReport>().configureEach {
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+}
+
+tasks.check {
+    dependsOn(tasks.jacocoTestReport)
+}
+
+paperweight.reobfArtifactConfiguration = ReobfArtifactConfiguration.MOJANG_PRODUCTION

@@ -1,0 +1,122 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. Please include enough detail for maintainers to reproduce quickly.
+  - type: checkboxes
+    id: precheck
+    attributes:
+      label: Pre-check
+      options:
+        - label: I searched existing issues and discussions.
+          required: true
+        - label: I tested on the latest available release.
+          required: true
+        - label: I removed secrets/tokens from logs and config snippets.
+          required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+      placeholder: A short description of the issue.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Provide minimal steps maintainers can follow.
+      placeholder: |
+        1. Configure ...
+        2. Run command ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      placeholder: What should happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      placeholder: What actually happened?
+    validations:
+      required: true
+  - type: input
+    id: ailex_version
+    attributes:
+      label: AIlex Version
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: paper_version
+    attributes:
+      label: Paper Version
+      placeholder: 1.20.6+
+    validations:
+      required: true
+  - type: input
+    id: java_version
+    attributes:
+      label: Java Version
+      placeholder: "21"
+    validations:
+      required: true
+  - type: input
+    id: citizens_version
+    attributes:
+      label: Citizens Version
+      placeholder: 2.0.34+
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected Area
+      options:
+        - Commands
+        - NPC Lifecycle
+        - Movement Behaviour
+        - Action System
+        - LLM Chat
+        - Build / CI
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Environment
+      options:
+        - Development
+        - Staging
+        - Production
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs or Stacktrace (Optional)
+      render: shell
+      description: Paste only the relevant part.
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional Context (Optional)
+      description: Config snippets, screenshots, or other helpful details.
+    validations:
+      required: false
