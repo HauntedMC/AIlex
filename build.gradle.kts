@@ -26,7 +26,7 @@ repositories {
 dependencies {
     paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
     implementation("net.kyori:adventure-api:4.26.1")
-    implementation("net.byteflux:libby-bukkit:1.1.5")
+    implementation("net.byteflux:libby-bukkit:1.3.1")
     implementation("net.citizensnpcs:citizensapi:2.0.41-SNAPSHOT")
     implementation("net.citizensnpcs:citizens-main:2.0.41-SNAPSHOT")
     implementation("io.github.classgraph:classgraph:4.8.174")
