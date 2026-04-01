@@ -29,7 +29,7 @@ dependencies {
     implementation("net.byteflux:libby-bukkit:1.1.5")
     implementation("net.citizensnpcs:citizensapi:2.0.41-SNAPSHOT")
     implementation("net.citizensnpcs:citizens-main:2.0.41-SNAPSHOT")
-    implementation("io.github.classgraph:classgraph:4.8.174")
+    implementation("io.github.classgraph:classgraph:4.8.184")
     compileOnly("com.github.retrooper:packetevents-spigot:2.11.2")
 
     testImplementation(platform("org.junit:junit-bom:5.13.4"))
