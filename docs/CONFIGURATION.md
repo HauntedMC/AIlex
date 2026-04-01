@@ -14,7 +14,7 @@ AIlex stores files in your Paper plugin data directory:
 Top-level sections in `config.yml`:
 
 - `openai.api_key`: API key for chat responses. Keep empty if not used.
-- `openai.model`: completion model identifier used by `ChatGPTClient`.
+- `openai.model`: OpenAI Responses API model identifier used by `ChatGPTClient`.
 - `npc.general.maxVelocity`: global NPC movement speed cap.
 - `npc.general.maxRotation`: global angular speed cap.
 - `npc.behaviour.*`: per-behaviour parameters (acceleration, slow radius, prediction time, wander tuning).
@@ -30,6 +30,7 @@ Top-level sections in `config.yml`:
 ## OpenAI Integration Notes
 
 - Leave `openai.api_key` empty when LLM chat replies are not needed.
+- Pick an active chat-capable model (for example `gpt-4.1-mini`) in `openai.model`.
 - Rotate keys immediately if a key was ever committed publicly.
 - Keep prompts/responses short to reduce latency impact.
 

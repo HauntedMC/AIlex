@@ -4,7 +4,7 @@ import io.papermc.paper.chat.ChatRenderer;
 import io.papermc.paper.event.player.AsyncChatEvent;
 
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 import nl.hauntedmc.ailex.AIlexPlugin;
@@ -92,10 +92,10 @@ public class LLMChatListener implements Listener, ChatRenderer.ViewerUnaware {
                                     source.getName(), chatMessage
                             );
 
-                            String prefix = String.format("<grey>[Speler] %s: <white>", npcName);
                             String response = chatGPTClient.getChatResponse(prompt);
 
-                            Component result =  MiniMessage.miniMessage().deserialize(prefix+response);
+                            Component result = Component.text("[Speler] " + npcName + ": ", NamedTextColor.GRAY)
+                                    .append(Component.text(response, NamedTextColor.WHITE));
 
                             if (!response.isEmpty()) {
                                 plugin.getServer().broadcast(result);

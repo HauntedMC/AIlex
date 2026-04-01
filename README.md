@@ -17,7 +17,7 @@ AIlex is currently in a very early staged release. Core building blocks are avai
 1. Place `AIlex.jar` in your Paper server `plugins/` directory.
 2. Install required dependencies (`Citizens`, `packetevents`).
 3. Start the server once to generate default plugin files.
-4. Set AIlex options in `config.yml` (especially `openai.api_key` if LLM chat is used).
+4. Set AIlex options in `config.yml` (especially `openai.api_key` and `openai.model` if LLM chat is used).
 5. Use `/ailex` subcommands to create and control AI NPCs.
 
 ## Requirements
