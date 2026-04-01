@@ -1,7 +1,9 @@
 package nl.hauntedmc.ailex.entity;
 
 import io.papermc.paper.entity.TeleportFlag;
+import io.papermc.paper.entity.LookAnchor;
 import io.papermc.paper.threadedregions.scheduler.EntityScheduler;
+import io.papermc.paper.datacomponent.DataComponentType;
 
 import net.citizensnpcs.api.CitizensAPI;
 import net.citizensnpcs.api.event.DespawnReason;
@@ -11,6 +13,7 @@ import net.citizensnpcs.api.npc.NPCRegistry;
 import net.citizensnpcs.trait.SkinTrait;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.util.TriState;
 
 import nl.hauntedmc.ailex.AIlexPlugin;
 
@@ -27,12 +30,14 @@ import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.permissions.PermissionAttachmentInfo;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -260,8 +265,18 @@ public class FakePlayer implements Entity {
     }
 
     @Override
+    public void broadcastHurtAnimation(@NotNull Collection<Player> players) {
+        npc.getEntity().broadcastHurtAnimation(players);
+    }
+
+    @Override
     public @NotNull EntityType getType() {
         return npc.getEntity().getType();
+    }
+
+    @Override
+    public @NotNull ItemStack getPickItemStack() {
+        return npc.getEntity().getPickItemStack();
     }
 
     @Override
@@ -317,6 +332,11 @@ public class FakePlayer implements Entity {
     @Override
     public @NotNull Set<Player> getTrackedBy() {
         return npc.getEntity().getTrackedBy();
+    }
+
+    @Override
+    public boolean isTrackedBy(@NotNull Player player) {
+        return npc.getEntity().isTrackedBy(player);
     }
 
     @Override
@@ -637,6 +657,11 @@ public class FakePlayer implements Entity {
     }
 
     @Override
+    public void lookAt(double x, double y, double z, @NotNull LookAnchor lookAnchor) {
+        npc.getEntity().lookAt(x, y, z, lookAnchor);
+    }
+
+    @Override
     public boolean teleport(@NotNull Location location, @NotNull PlayerTeleportEvent.TeleportCause teleportCause, @NotNull TeleportFlag @NotNull ... teleportFlags) {
         return npc.getEntity().teleport(location, teleportCause, teleportFlags);
     }
@@ -694,6 +719,16 @@ public class FakePlayer implements Entity {
     @Override
     public void setVisualFire(boolean b) {
         npc.getEntity().setVisualFire(b);
+    }
+
+    @Override
+    public void setVisualFire(@NotNull TriState state) {
+        npc.getEntity().setVisualFire(state);
+    }
+
+    @Override
+    public @NotNull TriState getVisualFire() {
+        return npc.getEntity().getVisualFire();
     }
 
     @Override
@@ -859,5 +894,20 @@ public class FakePlayer implements Entity {
     @Override
     public @NotNull PersistentDataContainer getPersistentDataContainer() {
         return npc.getEntity().getPersistentDataContainer();
+    }
+
+    @Override
+    public <T> @Nullable T getData(@NotNull DataComponentType.Valued<T> valued) {
+        return npc.getEntity().getData(valued);
+    }
+
+    @Override
+    public <T> @NotNull T getDataOrDefault(@NotNull DataComponentType.Valued<? extends T> valued, @NotNull T t) {
+        return npc.getEntity().getDataOrDefault(valued, t);
+    }
+
+    @Override
+    public boolean hasData(@NotNull DataComponentType dataComponentType) {
+        return npc.getEntity().hasData(dataComponentType);
     }
 }

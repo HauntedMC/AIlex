@@ -7,7 +7,7 @@ plugins {
     `maven-publish`
     checkstyle
     jacoco
-    id("io.papermc.paperweight.userdev") version "1.7.7"
+    id("io.papermc.paperweight.userdev") version "2.0.0-beta.19"
 }
 
 
@@ -24,7 +24,7 @@ repositories {
 }
 
 dependencies {
-    paperweight.paperDevBundle("1.20.6-R0.1-SNAPSHOT")
+    paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
     implementation("net.kyori:adventure-api:4.17.0")
     implementation("net.byteflux:libby-bukkit:1.1.5")
     implementation("net.citizensnpcs:citizensapi:2.0.34-SNAPSHOT")

@@ -3,7 +3,7 @@ version: '${version}'
 main: nl.hauntedmc.ailex.AIlexPlugin
 description: AILex plugin
 author: HauntedMC
-api-version: '1.20'
+api-version: '1.21'
 bootstrapper: nl.hauntedmc.ailex.AIlexPluginBootstrap
 loader: nl.hauntedmc.ailex.AIlexPluginLoader
 dependencies:

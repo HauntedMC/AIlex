@@ -23,7 +23,7 @@ AIlex is currently in a very early staged release. Core building blocks are avai
 ## Requirements
 
 - Java 21
-- Paper 1.20.6+
+- Paper 1.21.11+
 - Citizens 2.0.34+ (`citizensapi`/`citizens-main`)
 - packetevents 2.4.0+
 
