@@ -1,6 +1,5 @@
 package nl.hauntedmc.ailex.listener.llm;
 
-import io.papermc.paper.chat.ChatRenderer;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
 import nl.hauntedmc.ailex.AIlexPlugin;
@@ -12,9 +11,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -22,18 +21,29 @@ import static org.mockito.Mockito.when;
 class LLMChatListenerTest {
 
     @Test
-    void onChatShouldInstallViewerUnawareRenderer() {
-        AIlexPlugin plugin = mockPluginWithNpcRegistry(new HashMap<>());
+    void onChatShouldNotOverrideRendererAndSkipUnmentionedNpc() {
+        HashMap<Integer, NPC> registry = new HashMap<>();
+        NPC npc = mock(NPC.class);
+        when(npc.getName()).thenReturn("BotName");
+        registry.put(1, npc);
+
+        AIlexPlugin plugin = mockPluginWithNpcRegistry(registry);
         LLMChatListener listener = new LLMChatListener(plugin);
         AsyncChatEvent event = mock(AsyncChatEvent.class);
+        Player player = mock(Player.class);
+
+        when(player.getName()).thenReturn("Tester");
+        when(event.getPlayer()).thenReturn(player);
+        when(event.message()).thenReturn(Component.text("No mention here"));
 
         listener.onChat(event);
 
-        verify(event).renderer(any(ChatRenderer.class));
+        verify(event, never()).renderer(any());
+        verifyNoInteractions(plugin.getChatGPTClient());
     }
 
     @Test
-    void renderShouldReturnOriginalMessageAndSkipUnmentionedNpc() {
+    void forwardChatToAIShouldSkipUnmentionedNpc() {
         HashMap<Integer, NPC> registry = new HashMap<>();
         NPC npc = mock(NPC.class);
         when(npc.getName()).thenReturn("BotName");
@@ -47,9 +57,7 @@ class LLMChatListenerTest {
         when(player.getName()).thenReturn("Tester");
         Component message = Component.text("No mention here");
 
-        Component result = listener.render(player, Component.text("Tester"), message);
-
-        assertEquals(message, result);
+        listener.forwardChatToAI(player, message);
         verifyNoInteractions(chatClient);
     }
 

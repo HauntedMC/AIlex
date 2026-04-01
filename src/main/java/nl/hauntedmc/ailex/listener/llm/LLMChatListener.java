@@ -1,6 +1,5 @@
 package nl.hauntedmc.ailex.listener.llm;
 
-import io.papermc.paper.chat.ChatRenderer;
 import io.papermc.paper.event.player.AsyncChatEvent;
 
 import net.kyori.adventure.text.Component;
@@ -9,23 +8,23 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 import nl.hauntedmc.ailex.AIlexPlugin;
 import nl.hauntedmc.ailex.npc.NPC;
+import nl.hauntedmc.ailex.npc.NPCHandler;
 import nl.hauntedmc.ailex.util.LoggerUtils;
 import nl.hauntedmc.ailex.ai.llm.ChatGPTClient;
 
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.scheduler.BukkitRunnable;
 
-import org.jetbrains.annotations.NotNull;
-
 import java.util.ArrayList;
 
 /**
- * Listener for chat events
- * Use ViewerUnaware to render chat messages without knowing the audience
+ * Listener for chat events.
+ * This listener observes player chat for NPC mentions and never overrides server chat rendering.
  */
-public class LLMChatListener implements Listener, ChatRenderer.ViewerUnaware {
+public class LLMChatListener implements Listener {
 
     private final ChatGPTClient chatGPTClient;
     private final AIlexPlugin plugin;
@@ -40,26 +39,12 @@ public class LLMChatListener implements Listener, ChatRenderer.ViewerUnaware {
     }
 
     /**
-     * Handle the chat event, use the renderer for further processing
+     * Handle the chat event and forward player messages to AI when an NPC is mentioned.
      * @param event the chat event
      */
     @EventHandler
     public void onChat(AsyncChatEvent event) {
-        event.renderer(ChatRenderer.viewerUnaware(this)); // Tell the event to use our renderer
-    }
-
-    /**
-     * Render the chat message
-     * Forward the chat message to the AI if an NPC is mentioned
-     * @param source the message source
-     * @param sourceDisplayName the display name of the source player
-     * @param message the chat message
-     * @return the rendered chat message
-     */
-    @Override
-    public @NotNull Component render(@NotNull Player source, @NotNull Component sourceDisplayName, @NotNull Component message) {
-        forwardChatToAI(source, message);
-        return message;
+        forwardChatToAI(event.getPlayer(), event.message());
     }
 
     /**
@@ -68,9 +53,14 @@ public class LLMChatListener implements Listener, ChatRenderer.ViewerUnaware {
      * @param message the chat message
      */
     void forwardChatToAI(Player source, Component message) {
+        NPCHandler npcHandler = plugin.getNPCHandler();
+        if (npcHandler == null) {
+            return;
+        }
+
         ArrayList<String> npcNames = new ArrayList<>();
 
-        for (NPC npc : plugin.getNPCHandler().getNPCRegistry().values()) {
+        for (NPC npc : npcHandler.getNPCRegistry().values()) {
             npcNames.add(npc.getName());
         }
 
@@ -98,7 +88,7 @@ public class LLMChatListener implements Listener, ChatRenderer.ViewerUnaware {
                                     .append(Component.text(response, NamedTextColor.WHITE));
 
                             if (!response.isEmpty()) {
-                                plugin.getServer().broadcast(result);
+                                Bukkit.getScheduler().runTask(plugin, () -> plugin.getServer().broadcast(result));
                             }
                         } catch (Exception e) {
                             LoggerUtils.logError(e.getMessage());
