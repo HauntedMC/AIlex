@@ -27,8 +27,8 @@ dependencies {
     paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
     implementation("net.kyori:adventure-api:4.17.0")
     implementation("net.byteflux:libby-bukkit:1.1.5")
-    implementation("net.citizensnpcs:citizensapi:2.0.34-SNAPSHOT")
-    implementation("net.citizensnpcs:citizens-main:2.0.34-SNAPSHOT")
+    implementation("net.citizensnpcs:citizensapi:2.0.41-SNAPSHOT")
+    implementation("net.citizensnpcs:citizens-main:2.0.41-SNAPSHOT")
     implementation("io.github.classgraph:classgraph:4.8.174")
     compileOnly("com.github.retrooper:packetevents-spigot:2.11.2")
 
