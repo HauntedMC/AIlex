@@ -79,7 +79,7 @@ class MainCommandTest {
         MainCommand command = new MainCommand(plugin);
         CommandSourceStack source = mock(CommandSourceStack.class);
 
-        Collection<String> suggestions = command.suggest(source, new String[]{"action", "1"});
+        Collection<String> suggestions = command.suggest(source, new String[]{"action", "1", ""});
 
         assertTrue(suggestions.contains("movehere"));
         assertTrue(suggestions.contains("followplayer"));
@@ -91,14 +91,16 @@ class MainCommandTest {
     void suggestShouldReturnBehaviourOptionsForSetMoveBehaviour() {
         AIlexPlugin plugin = mock(AIlexPlugin.class);
         NPCHandler npcHandler = mock(NPCHandler.class);
+        HashMap<Integer, nl.hauntedmc.ailex.npc.NPC> registry = new HashMap<>();
+        registry.put(1, mock(nl.hauntedmc.ailex.npc.NPC.class));
         when(plugin.getNPCHandler()).thenReturn(npcHandler);
-        when(npcHandler.getNPCRegistry()).thenReturn(new HashMap<>());
+        when(npcHandler.getNPCRegistry()).thenReturn(registry);
 
         MainCommand command = new MainCommand(plugin);
         CommandSourceStack source = mock(CommandSourceStack.class);
 
-        Collection<String> settingSuggestions = command.suggest(source, new String[]{"set", "1"});
-        Collection<String> behaviourSuggestions = command.suggest(source, new String[]{"set", "1", "movebehaviour"});
+        Collection<String> settingSuggestions = command.suggest(source, new String[]{"set", "1", ""});
+        Collection<String> behaviourSuggestions = command.suggest(source, new String[]{"set", "1", "movebehaviour", ""});
 
         assertTrue(settingSuggestions.contains("movebehaviour"));
         assertTrue(behaviourSuggestions.contains("seek"));
@@ -109,14 +111,36 @@ class MainCommandTest {
     void suggestShouldReturnNpcTypesForCreateSubcommand() {
         AIlexPlugin plugin = mock(AIlexPlugin.class);
         NPCHandler npcHandler = mock(NPCHandler.class);
+        HashMap<Integer, nl.hauntedmc.ailex.npc.NPC> registry = new HashMap<>();
+        registry.put(1, mock(nl.hauntedmc.ailex.npc.NPC.class));
         when(plugin.getNPCHandler()).thenReturn(npcHandler);
-        when(npcHandler.getNPCRegistry()).thenReturn(new HashMap<>());
+        when(npcHandler.getNPCRegistry()).thenReturn(registry);
 
         MainCommand command = new MainCommand(plugin);
         CommandSourceStack source = mock(CommandSourceStack.class);
 
-        Collection<String> suggestions = command.suggest(source, new String[]{"create", "1"});
+        Collection<String> suggestions = command.suggest(source, new String[]{"create", "1", ""});
         assertTrue(suggestions.contains("ailex_npc"));
+    }
+
+    @Test
+    void suggestShouldKeepIdSuggestionsWhenIdArgumentIsCurrentToken() {
+        AIlexPlugin plugin = mock(AIlexPlugin.class);
+        NPCHandler npcHandler = mock(NPCHandler.class);
+        HashMap<Integer, nl.hauntedmc.ailex.npc.NPC> registry = new HashMap<>();
+        registry.put(3, mock(nl.hauntedmc.ailex.npc.NPC.class));
+        registry.put(7, mock(nl.hauntedmc.ailex.npc.NPC.class));
+        when(plugin.getNPCHandler()).thenReturn(npcHandler);
+        when(npcHandler.getNPCRegistry()).thenReturn(registry);
+
+        MainCommand command = new MainCommand(plugin);
+        CommandSourceStack source = mock(CommandSourceStack.class);
+
+        Collection<String> suggestions = command.suggest(source, new String[]{"action", ""});
+
+        assertTrue(suggestions.contains("3"));
+        assertTrue(suggestions.contains("7"));
+        assertFalse(suggestions.contains("movehere"));
     }
 
     @Test

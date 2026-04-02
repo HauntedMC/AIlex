@@ -247,29 +247,73 @@ public class MainCommand implements BasicCommand {
             return new ArrayList<>(subcommands);
         }
 
-        // Return NPC IDs for subcommands that require an ID
-        if (args.length == 1 && !args[0].equals("create") && subcommands.contains(args[0])) {
-            return plugin.getNPCHandler().getNPCRegistry().keySet().stream()
-                    .map(String::valueOf)
-                    .collect(Collectors.toList());
+        String subcommand = args[0].toLowerCase(Locale.ROOT);
+
+        if (args.length == 1) {
+            if (subcommands.contains(subcommand) && !subcommand.equals("reload")) {
+                return suggestNpcIds("");
+            }
+            return filterByPrefix(subcommands, args[0]);
         }
 
-        if (args.length == 2 && args[0].equalsIgnoreCase("action")) {
-            return new ArrayList<>(actions);
-        }
+        switch (subcommand) {
+            case "action":
+                if (args.length == 2) {
+                    return suggestNpcIds(args[1]);
+                }
+                if (args.length == 3) {
+                    return filterByPrefix(actions, args[2]);
+                }
+                return List.of();
 
-        if (args.length == 2 && args[0].equalsIgnoreCase("set")) {
-            return new ArrayList<>(settings);
-        }
+            case "cancelaction":
+            case "currentaction":
+            case "remove":
+            case "save":
+                if (args.length == 2) {
+                    return suggestNpcIds(args[1]);
+                }
+                return List.of();
 
-        if (args.length == 3 && args[0].equalsIgnoreCase("set")) {
-            return new ArrayList<>(behaviours);
-        }
+            case "create":
+                if (args.length == 2) {
+                    return suggestNpcIds(args[1]);
+                }
+                if (args.length == 3) {
+                    return filterByPrefix(npcTypes, args[2]);
+                }
+                return List.of();
 
-        if (args.length == 2 && args[0].equalsIgnoreCase("create")) {
-            return new ArrayList<>(npcTypes);
-        }
+            case "set":
+                if (args.length == 2) {
+                    return suggestNpcIds(args[1]);
+                }
+                if (args.length == 3) {
+                    return filterByPrefix(settings, args[2]);
+                }
+                if (args.length == 4 && "movebehaviour".equalsIgnoreCase(args[2])) {
+                    return filterByPrefix(behaviours, args[3]);
+                }
+                return List.of();
 
-        return List.of(); // return an empty list if no suggestions are available
+            default:
+                return List.of();
+        }
+    }
+
+    private List<String> suggestNpcIds(String prefix) {
+        return filterByPrefix(
+                plugin.getNPCHandler().getNPCRegistry().keySet().stream()
+                        .map(String::valueOf)
+                        .collect(Collectors.toList()),
+                prefix
+        );
+    }
+
+    private List<String> filterByPrefix(Collection<String> values, String prefix) {
+        String valuePrefix = prefix == null ? "" : prefix.toLowerCase(Locale.ROOT);
+        return values.stream()
+                .filter(value -> value.toLowerCase(Locale.ROOT).startsWith(valuePrefix))
+                .collect(Collectors.toList());
     }
 }
