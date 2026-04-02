@@ -50,5 +50,6 @@ class NPCDataTest {
         NPCData data = new NPCData(10, "Unit", new Location(null, 0, 1, 2), "class");
         assertEquals(NPCProperties.DEFAULT_PREFIX, data.getProperties().getPrefix());
         assertEquals(NPCProperties.DEFAULT_TAB_LIST_ORDER, data.getProperties().getTabListOrder());
+        assertEquals(NPCProperties.DEFAULT_SYSTEM_PROMPT, data.getProperties().getSystemPrompt());
     }
 }

@@ -65,7 +65,9 @@ class ConfigHandlerTest {
                 "npc.defaults.entity.respawnOnDeath", false,
                 "npc.defaults.entity.chatEnabled", false,
                 "npc.defaults.entity.listedInTab", false,
-                "npc.defaults.entity.alwaysUseNameHologram", true
+                "npc.defaults.entity.alwaysUseNameHologram", true,
+                "npc.defaults.entity.prompts.systemPrompt", "system prompt",
+                "npc.defaults.entity.prompts.userPromptTemplate", "template {player_name} {chat_message}"
         ));
 
         NPCProperties properties = ConfigHandler.getInstance().getDefaultNPCProperties();
@@ -77,5 +79,7 @@ class ConfigHandlerTest {
         assertEquals(false, properties.isChatEnabled());
         assertEquals(false, properties.isListedInTab());
         assertEquals(true, properties.isAlwaysUseNameHologram());
+        assertEquals("system prompt", properties.getSystemPrompt());
+        assertEquals("template {player_name} {chat_message}", properties.getUserPromptTemplate());
     }
 }

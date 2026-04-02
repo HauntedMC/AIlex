@@ -77,7 +77,11 @@ public class ConfigHandler {
                 config.getBoolean("npc.defaults.entity.chatEnabled", NPCProperties.DEFAULT_CHAT_ENABLED),
                 config.getBoolean("npc.defaults.entity.listedInTab", NPCProperties.DEFAULT_LISTED_IN_TAB),
                 config.getBoolean("npc.defaults.entity.alwaysUseNameHologram",
-                        NPCProperties.DEFAULT_ALWAYS_USE_NAME_HOLOGRAM)
+                        NPCProperties.DEFAULT_ALWAYS_USE_NAME_HOLOGRAM),
+                config.getString("npc.defaults.entity.prompts.systemPrompt",
+                        NPCProperties.DEFAULT_SYSTEM_PROMPT),
+                config.getString("npc.defaults.entity.prompts.userPromptTemplate",
+                        NPCProperties.DEFAULT_USER_PROMPT_TEMPLATE)
         );
     }
 }

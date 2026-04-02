@@ -53,7 +53,18 @@ class DataHandlerTest {
                 "UnitNPC",
                 new Location(null, 10, 20, 30),
                 "nl.hauntedmc.ailex.npc.impl.AilexNPC",
-                new NPCProperties("<gray>[Bot]", "<green>◆", -321, false, false, false, false, true)
+                new NPCProperties(
+                        "<gray>[Bot]",
+                        "<green>◆",
+                        -321,
+                        false,
+                        false,
+                        false,
+                        false,
+                        true,
+                        "system prompt",
+                        "template {player_name} {chat_message}"
+                )
         );
         DataHandler.saveNPC(npcData);
 
@@ -73,6 +84,9 @@ class DataHandlerTest {
         assertEquals(false, loadedNpc.getProperties().isChatEnabled());
         assertEquals(false, loadedNpc.getProperties().isListedInTab());
         assertEquals(true, loadedNpc.getProperties().isAlwaysUseNameHologram());
+        assertEquals("system prompt", loadedNpc.getProperties().getSystemPrompt());
+        assertEquals("template {player_name} {chat_message}",
+                loadedNpc.getProperties().getUserPromptTemplate());
     }
 
     @Test
@@ -128,7 +142,9 @@ class DataHandlerTest {
                 "npc.defaults.entity.respawnOnDeath", false,
                 "npc.defaults.entity.chatEnabled", false,
                 "npc.defaults.entity.listedInTab", false,
-                "npc.defaults.entity.alwaysUseNameHologram", true
+                "npc.defaults.entity.alwaysUseNameHologram", true,
+                "npc.defaults.entity.prompts.systemPrompt", "default system prompt",
+                "npc.defaults.entity.prompts.userPromptTemplate", "default template {npc_name}"
         ));
 
         AIlexPlugin plugin = mock(AIlexPlugin.class);
@@ -164,5 +180,7 @@ class DataHandlerTest {
         assertEquals(false, loadedNpc.getProperties().isChatEnabled());
         assertEquals(false, loadedNpc.getProperties().isListedInTab());
         assertEquals(true, loadedNpc.getProperties().isAlwaysUseNameHologram());
+        assertEquals("default system prompt", loadedNpc.getProperties().getSystemPrompt());
+        assertEquals("default template {npc_name}", loadedNpc.getProperties().getUserPromptTemplate());
     }
 }

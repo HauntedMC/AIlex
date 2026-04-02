@@ -33,6 +33,16 @@ Top-level sections in `config.yml`:
 - `chatEnabled`: whether mention-based AI chat replies are enabled for this NPC.
 - `listedInTab`: whether NPC should appear in tab list.
 - `alwaysUseNameHologram`: Citizens name-hologram behavior.
+- `prompts.systemPrompt`: per-NPC system prompt used for LLM behavior/persona.
+- `prompts.userPromptTemplate`: per-NPC user prompt template.
+
+Supported placeholders in `prompts.userPromptTemplate`:
+
+- `{player_name}`
+- `{player_display_name}`
+- `{npc_name}`
+- `{npc_display_name}`
+- `{chat_message}`
 
 ## Per-NPC Data Schema
 
@@ -47,6 +57,8 @@ Each NPC in `data.yml` now stores entity properties under:
 - `npcs.<id>.entity.properties.chatEnabled`
 - `npcs.<id>.entity.properties.listedInTab`
 - `npcs.<id>.entity.properties.alwaysUseNameHologram`
+- `npcs.<id>.entity.properties.prompts.systemPrompt`
+- `npcs.<id>.entity.properties.prompts.userPromptTemplate`
 
 ## Safe Change Workflow
 

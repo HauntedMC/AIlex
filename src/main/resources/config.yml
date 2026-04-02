@@ -12,6 +12,9 @@ npc:
       chatEnabled: true
       listedInTab: true
       alwaysUseNameHologram: false
+      prompts:
+        systemPrompt: "Je bent een gemiddelde Nederlandse Minecraft speler op een survival server. Antwoord kort, casual en gematigd positief."
+        userPromptTemplate: "Een online speler genaamd {player_name} zei: \"{chat_message}\". Reageer als {npc_name} in maximaal 1 korte chatregel."
   general:
     maxVelocity: 4.317
     maxRotation: 180.0

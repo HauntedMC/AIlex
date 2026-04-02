@@ -356,6 +356,14 @@ public abstract class NPC implements Kinematic {
         return properties.isListedInTab();
     }
 
+    public String getSystemPrompt() {
+        return properties.getSystemPrompt();
+    }
+
+    public String getUserPromptTemplate() {
+        return properties.getUserPromptTemplate();
+    }
+
     private static String buildDisplayName(String prefix, String name) {
         return joinParts(prefix, name);
     }

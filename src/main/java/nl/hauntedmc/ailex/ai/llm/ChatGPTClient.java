@@ -72,7 +72,17 @@ public class ChatGPTClient {
      * @return the text response from the API
      */
     public String getChatResponse(String prompt) {
-        if (prompt == null || prompt.isBlank()) {
+        return getChatResponse("", prompt);
+    }
+
+    /**
+     * Sends a request to the OpenAI API using an NPC-specific system prompt and user prompt.
+     * @param systemPrompt - optional system prompt for NPC persona/behavior
+     * @param userPrompt - user prompt content
+     * @return the text response from the API
+     */
+    public String getChatResponse(String systemPrompt, String userPrompt) {
+        if (userPrompt == null || userPrompt.isBlank()) {
             return FALLBACK_RESPONSE;
         }
 
@@ -80,7 +90,7 @@ public class ChatGPTClient {
             return FALLBACK_RESPONSE;
         }
 
-        HttpRequest request = createHttpRequest(prompt);
+        HttpRequest request = createHttpRequest(systemPrompt, userPrompt);
 
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
@@ -124,8 +134,8 @@ public class ChatGPTClient {
      * @param prompt - the prompt to send to the API
      * @return the HttpRequest
      */
-    private HttpRequest createHttpRequest(String prompt) {
-        String inputJson = createRequestBody(prompt);
+    private HttpRequest createHttpRequest(String systemPrompt, String prompt) {
+        String inputJson = createRequestBody(systemPrompt, prompt);
 
         return HttpRequest.newBuilder()
                 .uri(URI.create(OPENAI_RESPONSES_API_URL))
@@ -143,10 +153,23 @@ public class ChatGPTClient {
      * @return JSON payload as string
      */
     String createRequestBody(String prompt) {
+        return createRequestBody("", prompt);
+    }
+
+    /**
+     * Creates a JSON request body for the OpenAI Responses API.
+     * @param systemPrompt Optional system prompt for NPC persona/behavior
+     * @param prompt User prompt text
+     * @return JSON payload as string
+     */
+    String createRequestBody(String systemPrompt, String prompt) {
         JsonObject payload = new JsonObject();
         payload.addProperty("model", model);
 
         JsonArray input = new JsonArray();
+        if (systemPrompt != null && !systemPrompt.isBlank()) {
+            input.add(createInputMessage("system", systemPrompt));
+        }
         input.add(createInputMessage("system", SYSTEM_RESPONSE_INSTRUCTION));
         input.add(createInputMessage("user", prompt));
         payload.add("input", input);

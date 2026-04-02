@@ -9,6 +9,7 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import nl.hauntedmc.ailex.AIlexPlugin;
 import nl.hauntedmc.ailex.npc.NPC;
 import nl.hauntedmc.ailex.npc.NPCHandler;
+import nl.hauntedmc.ailex.npc.NPCProperties;
 import nl.hauntedmc.ailex.util.FormatterUtils;
 import nl.hauntedmc.ailex.util.LoggerUtils;
 import nl.hauntedmc.ailex.ai.llm.ChatGPTClient;
@@ -27,6 +28,11 @@ public class LLMChatListener implements Listener {
 
     private final ChatGPTClient chatGPTClient;
     private final AIlexPlugin plugin;
+    static final String PLACEHOLDER_PLAYER_NAME = "{player_name}";
+    static final String PLACEHOLDER_PLAYER_DISPLAY_NAME = "{player_display_name}";
+    static final String PLACEHOLDER_NPC_NAME = "{npc_name}";
+    static final String PLACEHOLDER_NPC_DISPLAY_NAME = "{npc_display_name}";
+    static final String PLACEHOLDER_CHAT_MESSAGE = "{chat_message}";
 
     /**
      * Constructor for the ChatListener
@@ -69,19 +75,14 @@ public class LLMChatListener implements Listener {
             String npcName = npc.getName();
             if (chatMessage.toLowerCase().contains(npcName.toLowerCase())) {
                 String npcDisplayName = npc.getDisplayName();
+                String sourceName = source.getName();
+                String systemPrompt = buildSystemPrompt(npc);
+                String userPrompt = buildUserPrompt(npc, sourceName, chatMessage);
                 new BukkitRunnable() {
                     @Override
                     public void run() {
                         try {
-                            String prompt = String.format(
-                                    "Je speelt op dit moment op een Nederlandse Minecraft server. Een online speler genaamd %s zei: \"%s\"." +
-                                            " Antwoord als een gemiddelde minecraft speler. Geef korte antwoorden en wees gematigd positief." +
-                                            " Je antwoorden hoeven niet heel formeel, mag best casual en in spreektaal met soms een spelfoutje." +
-                                            " Groet de speler niet in je antwoord, je antwoord is een reactie mogelijk midden in een gesprek.",
-                                    source.getName(), chatMessage
-                            );
-
-                            String response = chatGPTClient.getChatResponse(prompt);
+                            String response = chatGPTClient.getChatResponse(systemPrompt, userPrompt);
 
                             Component result = FormatterUtils.serializer.deserialize(npcDisplayName + ": ")
                                     .append(Component.text(response, NamedTextColor.WHITE));
@@ -97,5 +98,27 @@ public class LLMChatListener implements Listener {
                 return;
             }
         }
+    }
+
+    String buildSystemPrompt(NPC npc) {
+        String configuredSystemPrompt = npc.getSystemPrompt();
+        if (configuredSystemPrompt == null || configuredSystemPrompt.isBlank()) {
+            return NPCProperties.DEFAULT_SYSTEM_PROMPT;
+        }
+        return configuredSystemPrompt;
+    }
+
+    String buildUserPrompt(NPC npc, String sourceName, String chatMessage) {
+        String template = npc.getUserPromptTemplate();
+        if (template == null || template.isBlank()) {
+            template = NPCProperties.DEFAULT_USER_PROMPT_TEMPLATE;
+        }
+
+        return template
+                .replace(PLACEHOLDER_PLAYER_NAME, sourceName)
+                .replace(PLACEHOLDER_PLAYER_DISPLAY_NAME, sourceName)
+                .replace(PLACEHOLDER_NPC_NAME, npc.getName())
+                .replace(PLACEHOLDER_NPC_DISPLAY_NAME, npc.getDisplayName())
+                .replace(PLACEHOLDER_CHAT_MESSAGE, chatMessage);
     }
 }

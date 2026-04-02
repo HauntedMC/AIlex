@@ -13,6 +13,8 @@ public class NPCProperties {
     public static final boolean DEFAULT_CHAT_ENABLED = true;
     public static final boolean DEFAULT_LISTED_IN_TAB = true;
     public static final boolean DEFAULT_ALWAYS_USE_NAME_HOLOGRAM = false;
+    public static final String DEFAULT_SYSTEM_PROMPT = "Je bent een gemiddelde Nederlandse Minecraft speler op een survival server. Antwoord kort, casual en gematigd positief.";
+    public static final String DEFAULT_USER_PROMPT_TEMPLATE = "Een online speler genaamd {player_name} zei: \"{chat_message}\". Reageer als {npc_name} in maximaal 1 korte chatregel.";
 
     private String prefix;
     private String tabPrefix;
@@ -22,6 +24,8 @@ public class NPCProperties {
     private boolean chatEnabled;
     private boolean listedInTab;
     private boolean alwaysUseNameHologram;
+    private String systemPrompt;
+    private String userPromptTemplate;
 
     public NPCProperties() {
         this(
@@ -32,7 +36,9 @@ public class NPCProperties {
                 DEFAULT_RESPAWN_ON_DEATH,
                 DEFAULT_CHAT_ENABLED,
                 DEFAULT_LISTED_IN_TAB,
-                DEFAULT_ALWAYS_USE_NAME_HOLOGRAM
+                DEFAULT_ALWAYS_USE_NAME_HOLOGRAM,
+                DEFAULT_SYSTEM_PROMPT,
+                DEFAULT_USER_PROMPT_TEMPLATE
         );
     }
 
@@ -50,6 +56,26 @@ public class NPCProperties {
     public NPCProperties(String prefix, String tabPrefix, int tabListOrder, boolean damageable,
                          boolean respawnOnDeath, boolean chatEnabled, boolean listedInTab,
                          boolean alwaysUseNameHologram) {
+        this(prefix, tabPrefix, tabListOrder, damageable, respawnOnDeath, chatEnabled, listedInTab,
+                alwaysUseNameHologram, DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_PROMPT_TEMPLATE);
+    }
+
+    /**
+     * Constructor for mutable entity properties.
+     * @param prefix The display prefix shown before the NPC name in chat/nameplate.
+     * @param tabPrefix The prefix shown in tab before prefix/name.
+     * @param tabListOrder Specific tab sort order for this NPC.
+     * @param damageable Whether this NPC should be damageable by players/world.
+     * @param respawnOnDeath Whether the NPC should automatically respawn after death.
+     * @param chatEnabled Whether mention-based AI replies are enabled for this NPC.
+     * @param listedInTab Whether this NPC should be listed in the tab list.
+     * @param alwaysUseNameHologram Whether Citizens should force name holograms.
+     * @param systemPrompt System prompt used for LLM responses for this NPC.
+     * @param userPromptTemplate User prompt template with placeholders for this NPC.
+     */
+    public NPCProperties(String prefix, String tabPrefix, int tabListOrder, boolean damageable,
+                         boolean respawnOnDeath, boolean chatEnabled, boolean listedInTab,
+                         boolean alwaysUseNameHologram, String systemPrompt, String userPromptTemplate) {
         this.prefix = prefix == null ? "" : prefix;
         this.tabPrefix = tabPrefix == null ? "" : tabPrefix;
         this.tabListOrder = tabListOrder;
@@ -58,6 +84,8 @@ public class NPCProperties {
         this.chatEnabled = chatEnabled;
         this.listedInTab = listedInTab;
         this.alwaysUseNameHologram = alwaysUseNameHologram;
+        this.systemPrompt = systemPrompt == null ? "" : systemPrompt;
+        this.userPromptTemplate = userPromptTemplate == null ? "" : userPromptTemplate;
     }
 
     public static NPCProperties defaultValues() {
@@ -73,12 +101,17 @@ public class NPCProperties {
                 respawnOnDeath,
                 chatEnabled,
                 listedInTab,
-                alwaysUseNameHologram
+                alwaysUseNameHologram,
+                systemPrompt,
+                userPromptTemplate
         );
     }
 
     public boolean isValid() {
-        return prefix != null && tabPrefix != null;
+        return prefix != null
+                && tabPrefix != null
+                && systemPrompt != null
+                && userPromptTemplate != null;
     }
 
     public String getPrefix() {
@@ -143,5 +176,21 @@ public class NPCProperties {
 
     public void setAlwaysUseNameHologram(boolean alwaysUseNameHologram) {
         this.alwaysUseNameHologram = alwaysUseNameHologram;
+    }
+
+    public String getSystemPrompt() {
+        return systemPrompt;
+    }
+
+    public void setSystemPrompt(String systemPrompt) {
+        this.systemPrompt = systemPrompt == null ? "" : systemPrompt;
+    }
+
+    public String getUserPromptTemplate() {
+        return userPromptTemplate;
+    }
+
+    public void setUserPromptTemplate(String userPromptTemplate) {
+        this.userPromptTemplate = userPromptTemplate == null ? "" : userPromptTemplate;
     }
 }

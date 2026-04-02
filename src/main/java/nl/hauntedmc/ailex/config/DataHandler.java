@@ -55,6 +55,8 @@ public class DataHandler {
         dataConfig.set(propertiesPath + ".chatEnabled", properties.isChatEnabled());
         dataConfig.set(propertiesPath + ".listedInTab", properties.isListedInTab());
         dataConfig.set(propertiesPath + ".alwaysUseNameHologram", properties.isAlwaysUseNameHologram());
+        dataConfig.set(propertiesPath + ".prompts.systemPrompt", properties.getSystemPrompt());
+        dataConfig.set(propertiesPath + ".prompts.userPromptTemplate", properties.getUserPromptTemplate());
         save();
     }
 
@@ -108,7 +110,9 @@ public class DataHandler {
                 dataConfig.getBoolean(path + ".respawnOnDeath", defaults.isRespawnOnDeath()),
                 dataConfig.getBoolean(path + ".chatEnabled", defaults.isChatEnabled()),
                 dataConfig.getBoolean(path + ".listedInTab", defaults.isListedInTab()),
-                dataConfig.getBoolean(path + ".alwaysUseNameHologram", defaults.isAlwaysUseNameHologram())
+                dataConfig.getBoolean(path + ".alwaysUseNameHologram", defaults.isAlwaysUseNameHologram()),
+                dataConfig.getString(path + ".prompts.systemPrompt", defaults.getSystemPrompt()),
+                dataConfig.getString(path + ".prompts.userPromptTemplate", defaults.getUserPromptTemplate())
         );
     }
 

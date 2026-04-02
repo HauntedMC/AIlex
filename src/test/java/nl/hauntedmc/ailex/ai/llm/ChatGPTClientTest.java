@@ -139,6 +139,31 @@ class ChatGPTClientTest {
         }
     }
 
+    @Test
+    void createRequestBodyShouldIncludeNpcSystemPromptWhenProvided() {
+        HttpClient httpClient = mock(HttpClient.class);
+
+        try (MockedStatic<LoggerUtils> mockedLogger = org.mockito.Mockito.mockStatic(LoggerUtils.class)) {
+            ChatGPTClient client = new ChatGPTClient("key", "gpt-4.1-mini", httpClient);
+            JsonObject payload = JsonParser.parseString(
+                    client.createRequestBody("system persona", "hello")
+            ).getAsJsonObject();
+
+            JsonArray input = payload.getAsJsonArray("input");
+            assertEquals(3, input.size());
+            assertEquals(
+                    "system persona",
+                    input.get(0).getAsJsonObject().getAsJsonArray("content").get(0).getAsJsonObject().get("text")
+                            .getAsString()
+            );
+            assertEquals(
+                    "hello",
+                    input.get(2).getAsJsonObject().getAsJsonArray("content").get(0).getAsJsonObject().get("text")
+                            .getAsString()
+            );
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private static HttpResponse<String> mockStringResponse(int statusCode, String body) {
         HttpResponse<String> response = (HttpResponse<String>) mock(HttpResponse.class);

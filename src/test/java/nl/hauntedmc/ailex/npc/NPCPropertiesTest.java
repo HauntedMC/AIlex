@@ -19,6 +19,8 @@ class NPCPropertiesTest {
         assertEquals(NPCProperties.DEFAULT_CHAT_ENABLED, defaults.isChatEnabled());
         assertEquals(NPCProperties.DEFAULT_LISTED_IN_TAB, defaults.isListedInTab());
         assertEquals(NPCProperties.DEFAULT_ALWAYS_USE_NAME_HOLOGRAM, defaults.isAlwaysUseNameHologram());
+        assertEquals(NPCProperties.DEFAULT_SYSTEM_PROMPT, defaults.getSystemPrompt());
+        assertEquals(NPCProperties.DEFAULT_USER_PROMPT_TEMPLATE, defaults.getUserPromptTemplate());
     }
 
     @Test

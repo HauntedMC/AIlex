@@ -17,6 +17,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class LLMChatListenerTest {
 
@@ -81,6 +82,39 @@ class LLMChatListenerTest {
 
         listener.forwardChatToAI(player, message);
         verifyNoInteractions(chatClient);
+    }
+
+    @Test
+    void buildUserPromptShouldReplaceKnownPlaceholders() {
+        NPC npc = mock(NPC.class);
+        when(npc.getName()).thenReturn("BotName");
+        when(npc.getDisplayName()).thenReturn("<gray>[Bot] BotName");
+        when(npc.getUserPromptTemplate()).thenReturn(
+                "P={player_name}|PD={player_display_name}|N={npc_name}|ND={npc_display_name}|M={chat_message}"
+        );
+
+        AIlexPlugin plugin = mockPluginWithNpcRegistry(new HashMap<>());
+        LLMChatListener listener = new LLMChatListener(plugin);
+
+        String result = listener.buildUserPrompt(npc, "Tester", "hello world");
+        assertEquals(
+                "P=Tester|PD=Tester|N=BotName|ND=<gray>[Bot] BotName|M=hello world",
+                result
+        );
+    }
+
+    @Test
+    void buildSystemPromptShouldFallbackToDefaultWhenBlank() {
+        NPC npc = mock(NPC.class);
+        when(npc.getSystemPrompt()).thenReturn(" ");
+
+        AIlexPlugin plugin = mockPluginWithNpcRegistry(new HashMap<>());
+        LLMChatListener listener = new LLMChatListener(plugin);
+
+        assertEquals(
+                nl.hauntedmc.ailex.npc.NPCProperties.DEFAULT_SYSTEM_PROMPT,
+                listener.buildSystemPrompt(npc)
+        );
     }
 
     private static AIlexPlugin mockPluginWithNpcRegistry(HashMap<Integer, NPC> registry) {
