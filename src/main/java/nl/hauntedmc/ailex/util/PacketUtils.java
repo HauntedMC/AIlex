@@ -20,6 +20,9 @@ import java.util.List;
 public class PacketUtils {
 
     private static final long PACKET_SEND_DELAY = 40L;
+    private static final long LIST_ORDER_UPDATE_DELAY = PACKET_SEND_DELAY + 1L;
+    // Minecraft tab list sorts higher priority first, so use a low value to push AI players down.
+    static final int AI_TAB_LIST_ORDER = -10_000;
 
     /**
      * Send a player info add packet to a player
@@ -27,15 +30,50 @@ public class PacketUtils {
      * @param npc the NPC to send the packet for
      */
     public static void sendPlayerInfoAddPacket(Player player, NPC npc) {
-        UserProfile userProfile = new UserProfile(npc.getUUID(), npc.getName(), List.of(new TextureProperty("textures", npc.getSkinTexture(), npc.getSkinSignature())));
-        WrapperPlayServerPlayerInfoUpdate.PlayerInfo info = new WrapperPlayServerPlayerInfoUpdate.PlayerInfo(userProfile, true, 0,  GameMode.SURVIVAL, FormatterUtils.serializer.deserialize(npc.getDisplayTabName()), null);
-        WrapperPlayServerPlayerInfoUpdate packet =  new WrapperPlayServerPlayerInfoUpdate(
-                EnumSet.of(WrapperPlayServerPlayerInfoUpdate.Action.ADD_PLAYER,
-                        WrapperPlayServerPlayerInfoUpdate.Action.UPDATE_DISPLAY_NAME,
-                        WrapperPlayServerPlayerInfoUpdate.Action.UPDATE_LISTED),
-                info);
+        sendPacketDelayed(player, new WrapperPlayServerPlayerInfoRemove(npc.getUUID()), PACKET_SEND_DELAY - 1L);
+        sendPacketDelayed(player, createPlayerInfoAddPacket(npc), PACKET_SEND_DELAY);
+        sendPacketDelayed(player, createPlayerInfoListOrderUpdatePacket(npc), LIST_ORDER_UPDATE_DELAY);
+    }
 
-        sendPacketDelayed(player, packet, PACKET_SEND_DELAY);
+    static WrapperPlayServerPlayerInfoUpdate createPlayerInfoAddPacket(NPC npc) {
+        return new WrapperPlayServerPlayerInfoUpdate(createPlayerInfoAddActions(), createPlayerInfoEntry(npc));
+    }
+
+    static EnumSet<WrapperPlayServerPlayerInfoUpdate.Action> createPlayerInfoAddActions() {
+        return EnumSet.of(
+                WrapperPlayServerPlayerInfoUpdate.Action.ADD_PLAYER,
+                WrapperPlayServerPlayerInfoUpdate.Action.UPDATE_DISPLAY_NAME,
+                WrapperPlayServerPlayerInfoUpdate.Action.UPDATE_LISTED,
+                WrapperPlayServerPlayerInfoUpdate.Action.UPDATE_LIST_ORDER
+        );
+    }
+
+    static WrapperPlayServerPlayerInfoUpdate.PlayerInfo createPlayerInfoEntry(NPC npc) {
+        UserProfile userProfile = new UserProfile(
+                npc.getUUID(),
+                npc.getName(),
+                List.of(new TextureProperty("textures", npc.getSkinTexture(), npc.getSkinSignature()))
+        );
+        return new WrapperPlayServerPlayerInfoUpdate.PlayerInfo(
+                userProfile,
+                true,
+                0,
+                GameMode.SURVIVAL,
+                FormatterUtils.serializer.deserialize(npc.getDisplayTabName()),
+                null,
+                AI_TAB_LIST_ORDER
+        );
+    }
+
+    static WrapperPlayServerPlayerInfoUpdate createPlayerInfoListOrderUpdatePacket(NPC npc) {
+        WrapperPlayServerPlayerInfoUpdate.PlayerInfo entry = new WrapperPlayServerPlayerInfoUpdate.PlayerInfo(
+                new UserProfile(npc.getUUID(), npc.getName())
+        );
+        entry.setListOrder(AI_TAB_LIST_ORDER);
+        return new WrapperPlayServerPlayerInfoUpdate(
+                WrapperPlayServerPlayerInfoUpdate.Action.UPDATE_LIST_ORDER,
+                entry
+        );
     }
 
     /**
