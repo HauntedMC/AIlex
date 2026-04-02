@@ -15,6 +15,9 @@ Top-level sections in `config.yml`:
 
 - `openai.api_key`: API key for chat responses. Keep empty if not used.
 - `openai.model`: OpenAI Responses API model identifier used by `ChatGPTClient`.
+- `openai.safety.enabled`: enables a mandatory global safety system prompt and response guard.
+- `openai.safety.system_prompt`: non-optional safety policy prompt prepended to every OpenAI request.
+- `openai.safety.fallback_response`: safe response shown when generated content violates local safety checks.
 - `npc.defaults.entity.*`: default entity properties used when creating new NPCs.
 - `npc.general.maxVelocity`: global NPC movement speed cap.
 - `npc.general.maxRotation`: global angular speed cap.
@@ -71,6 +74,7 @@ Each NPC in `data.yml` now stores entity properties under:
 
 - Leave `openai.api_key` empty when LLM chat replies are not needed.
 - Pick an active chat-capable model (for example `gpt-4.1-mini`) in `openai.model`.
+- Keep `openai.safety.enabled: true` for production/public servers.
 - Rotate keys immediately if a key was ever committed publicly.
 - Keep prompts/responses short to reduce latency impact.
 

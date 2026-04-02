@@ -8,6 +8,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -27,15 +28,28 @@ public class ChatGPTClient {
 
     static final String OPENAI_RESPONSES_API_URL = "https://api.openai.com/v1/responses";
     static final String FALLBACK_RESPONSE = "Ik kan nu even niet reageren.";
+    static final String SAFETY_FALLBACK_RESPONSE = "Daar ga ik niet op in. Laten we het gezellig houden.";
+    static final String SAFETY_SYSTEM_PROMPT = "You are a Minecraft chat NPC for a general audience including minors. "
+            + "Never generate sexual, erotic, pornographic, fetish, explicit, or 18+ content. "
+            + "Never produce grooming, exploitative, or suggestive content. "
+            + "If asked for inappropriate content, refuse briefly and redirect to a safe topic. "
+            + "Keep all replies age-appropriate and safe-for-work.";
 
     private static final int MAX_CHAT_RESPONSE_LENGTH = 300;
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(20);
     private static final String SYSTEM_RESPONSE_INSTRUCTION = "Return exactly one short plain-text chat response. Do not use markdown, quotes, or speaker labels.";
+    private static final Pattern INAPPROPRIATE_CONTENT_PATTERN = Pattern.compile(
+            "(?i)(\\b(?:sex|seks|sexual|seksueel|porn|porno|nude|naakt|erotic|erotisch|fetish|nsfw|onlyfans|"
+                    + "rape|verkracht(?:ing)?)\\b|18\\s*\\+)"
+    );
 
     private final String apiKey;
     private final String model;
     private final HttpClient httpClient;
+    private final boolean safetyEnabled;
+    private final String safetySystemPrompt;
+    private final String safetyFallbackResponse;
 
     /**
      * Constructor for the ChatGPTClient.
@@ -51,18 +65,35 @@ public class ChatGPTClient {
                 config.getString("openai.model", "gpt-4.1-mini"),
                 HttpClient.newBuilder()
                         .connectTimeout(CONNECT_TIMEOUT)
-                        .build()
+                        .build(),
+                config.getBoolean("openai.safety.enabled", true),
+                config.getString("openai.safety.system_prompt", SAFETY_SYSTEM_PROMPT),
+                config.getString("openai.safety.fallback_response", SAFETY_FALLBACK_RESPONSE)
         );
     }
 
     ChatGPTClient(String apiKey, String model, HttpClient httpClient) {
+        this(apiKey, model, httpClient, true, SAFETY_SYSTEM_PROMPT, SAFETY_FALLBACK_RESPONSE);
+    }
+
+    ChatGPTClient(String apiKey, String model, HttpClient httpClient, boolean safetyEnabled, String safetySystemPrompt,
+                  String safetyFallbackResponse) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.model = model == null ? "" : model.trim();
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
+        this.safetyEnabled = safetyEnabled;
+        this.safetySystemPrompt = safetySystemPrompt == null ? "" : safetySystemPrompt.trim();
+        this.safetyFallbackResponse = safetyFallbackResponse == null || safetyFallbackResponse.isBlank()
+                ? SAFETY_FALLBACK_RESPONSE
+                : safetyFallbackResponse.trim();
 
         LoggerUtils.logInfo("Initialized OpenAI client with model: " + (this.model.isEmpty() ? "<empty>" : this.model));
         if (!isConfigured()) {
             LoggerUtils.logWarning("OpenAI integration is disabled: set both openai.api_key and openai.model in config.yml.");
+            return;
+        }
+        if (this.safetyEnabled) {
+            LoggerUtils.logInfo("OpenAI safety prompt guard is enabled.");
         }
     }
 
@@ -111,7 +142,13 @@ public class ChatGPTClient {
                 return FALLBACK_RESPONSE;
             }
 
-            return normalizeResponse(parsedResponse);
+            String normalizedResponse = normalizeResponse(parsedResponse);
+            if (violatesSafetyPolicy(normalizedResponse)) {
+                LoggerUtils.logWarning("OpenAI response rejected by local safety guard.");
+                return safetyFallbackResponse;
+            }
+
+            return normalizedResponse;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             LoggerUtils.logError("OpenAI request interrupted: " + e.getMessage());
@@ -167,6 +204,9 @@ public class ChatGPTClient {
         payload.addProperty("model", model);
 
         JsonArray input = new JsonArray();
+        if (safetyEnabled && !safetySystemPrompt.isBlank()) {
+            input.add(createInputMessage("system", safetySystemPrompt));
+        }
         if (systemPrompt != null && !systemPrompt.isBlank()) {
             input.add(createInputMessage("system", systemPrompt));
         }
@@ -370,5 +410,12 @@ public class ChatGPTClient {
         }
 
         return normalized;
+    }
+
+    private boolean violatesSafetyPolicy(String response) {
+        if (!safetyEnabled || response == null || response.isBlank()) {
+            return false;
+        }
+        return INAPPROPRIATE_CONTENT_PATTERN.matcher(response).find();
     }
 }

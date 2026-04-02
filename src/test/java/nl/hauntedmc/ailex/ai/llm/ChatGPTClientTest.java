@@ -48,8 +48,13 @@ class ChatGPTClientTest {
             assertEquals("gpt-4.1-mini", payload.get("model").getAsString());
 
             JsonArray input = payload.getAsJsonArray("input");
-            assertEquals(2, input.size());
-            JsonObject contentObject = input.get(1)
+            assertEquals(3, input.size());
+            assertEquals(
+                    ChatGPTClient.SAFETY_SYSTEM_PROMPT,
+                    input.get(0).getAsJsonObject().getAsJsonArray("content").get(0).getAsJsonObject().get("text")
+                            .getAsString()
+            );
+            JsonObject contentObject = input.get(2)
                     .getAsJsonObject()
                     .getAsJsonArray("content")
                     .get(0)
@@ -150,17 +155,57 @@ class ChatGPTClientTest {
             ).getAsJsonObject();
 
             JsonArray input = payload.getAsJsonArray("input");
-            assertEquals(3, input.size());
+            assertEquals(4, input.size());
             assertEquals(
                     "system persona",
-                    input.get(0).getAsJsonObject().getAsJsonArray("content").get(0).getAsJsonObject().get("text")
+                    input.get(1).getAsJsonObject().getAsJsonArray("content").get(0).getAsJsonObject().get("text")
                             .getAsString()
             );
             assertEquals(
                     "hello",
-                    input.get(2).getAsJsonObject().getAsJsonArray("content").get(0).getAsJsonObject().get("text")
+                    input.get(3).getAsJsonObject().getAsJsonArray("content").get(0).getAsJsonObject().get("text")
                             .getAsString()
             );
+        }
+    }
+
+    @Test
+    void shouldReturnSafetyFallbackWhenResponseContainsInappropriateContent() throws Exception {
+        HttpClient httpClient = mock(HttpClient.class);
+        HttpResponse<String> response = mockStringResponse(200, "{\"output_text\":\"Dat klinkt wel seksueel.\"}");
+        when(httpClient.send(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(response);
+
+        try (MockedStatic<LoggerUtils> mockedLogger = org.mockito.Mockito.mockStatic(LoggerUtils.class)) {
+            ChatGPTClient client = new ChatGPTClient(
+                    "key",
+                    "gpt-4.1-mini",
+                    httpClient,
+                    true,
+                    ChatGPTClient.SAFETY_SYSTEM_PROMPT,
+                    "veilig antwoord"
+            );
+            assertEquals("veilig antwoord", client.getChatResponse("hello"));
+        }
+    }
+
+    @Test
+    void shouldAllowResponseWhenSafetyGuardIsDisabled() throws Exception {
+        HttpClient httpClient = mock(HttpClient.class);
+        HttpResponse<String> response = mockStringResponse(200, "{\"output_text\":\"seksueel\"}");
+        when(httpClient.send(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(response);
+
+        try (MockedStatic<LoggerUtils> mockedLogger = org.mockito.Mockito.mockStatic(LoggerUtils.class)) {
+            ChatGPTClient client = new ChatGPTClient(
+                    "key",
+                    "gpt-4.1-mini",
+                    httpClient,
+                    false,
+                    "",
+                    "veilig antwoord"
+            );
+            assertEquals("seksueel", client.getChatResponse("hello"));
         }
     }
 
