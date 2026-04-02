@@ -7,6 +7,7 @@ import net.citizensnpcs.api.npc.NPC;
 import net.citizensnpcs.api.npc.NPCRegistry;
 import net.citizensnpcs.trait.SkinTrait;
 
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
@@ -20,18 +21,20 @@ import static org.mockito.Mockito.when;
 class FakePlayerTest {
 
     @Test
-    void removeShouldDestroyAndDeregisterWhenNpcIsNotSpawned() {
+    void removeShouldDeregisterAndPersistWhenNpcExistsInRegistry() {
         NPCRegistry registry = mock(NPCRegistry.class);
         NPC citizensNpc = mock(NPC.class);
         SkinTrait skinTrait = mock(SkinTrait.class);
         MetadataStore metadataStore = mock(MetadataStore.class);
+        Entity bukkitEntity = mock(Entity.class);
 
         when(registry.createNPC(EntityType.PLAYER, "AIlex")).thenReturn(citizensNpc);
         when(citizensNpc.getOrAddTrait(SkinTrait.class)).thenReturn(skinTrait);
         when(citizensNpc.data()).thenReturn(metadataStore);
         when(citizensNpc.getId()).thenReturn(17);
-        when(citizensNpc.isSpawned()).thenReturn(false);
         when(registry.getById(17)).thenReturn(citizensNpc);
+        when(citizensNpc.getEntity()).thenReturn(bukkitEntity);
+        when(bukkitEntity.isValid()).thenReturn(true);
 
         try (MockedStatic<CitizensAPI> mockedCitizensApi = org.mockito.Mockito.mockStatic(CitizensAPI.class)) {
             mockedCitizensApi.when(CitizensAPI::getNPCRegistry).thenReturn(registry);
@@ -42,8 +45,9 @@ class FakePlayerTest {
             verify(metadataStore).setPersistent("should-save", false);
             verify(metadataStore).setPersistent("ailex.managed", true);
             verify(citizensNpc, never()).despawn(DespawnReason.PLUGIN);
-            verify(citizensNpc).destroy();
+            verify(citizensNpc, never()).destroy();
             verify(registry).deregister(citizensNpc);
+            verify(bukkitEntity).remove();
             verify(registry).saveToStore();
         }
     }
@@ -59,7 +63,6 @@ class FakePlayerTest {
         when(citizensNpc.getOrAddTrait(SkinTrait.class)).thenReturn(skinTrait);
         when(citizensNpc.data()).thenReturn(metadataStore);
         when(citizensNpc.getId()).thenReturn(17);
-        when(citizensNpc.isSpawned()).thenReturn(true);
         when(registry.getById(17)).thenReturn(citizensNpc);
 
         try (MockedStatic<CitizensAPI> mockedCitizensApi = org.mockito.Mockito.mockStatic(CitizensAPI.class)) {
@@ -69,10 +72,34 @@ class FakePlayerTest {
             fakePlayer.remove();
             fakePlayer.remove();
 
-            verify(citizensNpc, times(1)).despawn(DespawnReason.PLUGIN);
-            verify(citizensNpc, times(1)).destroy();
             verify(registry, times(1)).deregister(citizensNpc);
             verify(registry, times(1)).saveToStore();
+        }
+    }
+
+    @Test
+    void removeShouldFallbackToDirectDespawnWhenNpcMissingFromRegistry() {
+        NPCRegistry registry = mock(NPCRegistry.class);
+        NPC citizensNpc = mock(NPC.class);
+        SkinTrait skinTrait = mock(SkinTrait.class);
+        MetadataStore metadataStore = mock(MetadataStore.class);
+
+        when(registry.createNPC(EntityType.PLAYER, "AIlex")).thenReturn(citizensNpc);
+        when(citizensNpc.getOrAddTrait(SkinTrait.class)).thenReturn(skinTrait);
+        when(citizensNpc.data()).thenReturn(metadataStore);
+        when(citizensNpc.getId()).thenReturn(17);
+        when(registry.getById(17)).thenReturn(null);
+        when(citizensNpc.isSpawned()).thenReturn(true);
+
+        try (MockedStatic<CitizensAPI> mockedCitizensApi = org.mockito.Mockito.mockStatic(CitizensAPI.class)) {
+            mockedCitizensApi.when(CitizensAPI::getNPCRegistry).thenReturn(registry);
+
+            FakePlayer fakePlayer = new FakePlayer("AIlex");
+            fakePlayer.remove();
+
+            verify(citizensNpc).despawn(DespawnReason.REMOVAL);
+            verify(registry, never()).deregister(citizensNpc);
+            verify(registry).saveToStore();
         }
     }
 }

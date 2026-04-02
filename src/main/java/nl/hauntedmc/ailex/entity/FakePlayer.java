@@ -109,16 +109,17 @@ public class FakePlayer implements Entity {
             return;
         }
 
+        Entity spawnedEntity = npc.getEntity();
         int npcId = npc.getId();
-
-        if (npc.isSpawned()) {
-            npc.despawn(DespawnReason.PLUGIN);
-        }
-
-        npc.destroy();
 
         if (registry.getById(npcId) != null) {
             registry.deregister(npc);
+        } else if (npc.isSpawned()) {
+            npc.despawn(DespawnReason.REMOVAL);
+        }
+
+        if (spawnedEntity != null && spawnedEntity.isValid()) {
+            spawnedEntity.remove();
         }
 
         registry.saveToStore();
