@@ -4,11 +4,14 @@ import nl.hauntedmc.ailex.npc.NPCProperties;
 import nl.hauntedmc.ailex.util.LoggerUtils;
 import nl.hauntedmc.ailex.testutil.ConfigTestSupport;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -33,8 +36,12 @@ class ConfigHandlerTest {
     @Test
     void shouldInitializeAndExposeConfiguration() {
         JavaPlugin plugin = mock(JavaPlugin.class);
-        FileConfiguration configuration = mock(FileConfiguration.class);
+        YamlConfiguration configuration = new YamlConfiguration();
+        String defaultsYaml = "openai:\n  api_key: \"\"\n";
         when(plugin.getConfig()).thenReturn(configuration);
+        when(plugin.getResource("config.yml")).thenAnswer(
+                invocation -> new ByteArrayInputStream(defaultsYaml.getBytes(StandardCharsets.UTF_8))
+        );
 
         ConfigHandler.init(plugin);
 
@@ -44,8 +51,12 @@ class ConfigHandlerTest {
     @Test
     void reloadShouldRefreshPluginConfigAndLog() {
         JavaPlugin plugin = mock(JavaPlugin.class);
-        FileConfiguration configuration = mock(FileConfiguration.class);
+        FileConfiguration configuration = new YamlConfiguration();
+        String defaultsYaml = "openai:\n  api_key: \"\"\n";
         when(plugin.getConfig()).thenReturn(configuration);
+        when(plugin.getResource("config.yml")).thenAnswer(
+                invocation -> new ByteArrayInputStream(defaultsYaml.getBytes(StandardCharsets.UTF_8))
+        );
         ConfigHandler.init(plugin);
 
         try (MockedStatic<LoggerUtils> mockedLogger = org.mockito.Mockito.mockStatic(LoggerUtils.class)) {
@@ -81,5 +92,32 @@ class ConfigHandlerTest {
         assertEquals(true, properties.isAlwaysUseNameHologram());
         assertEquals("system prompt", properties.getSystemPrompt());
         assertEquals("template {player_name} {chat_message}", properties.getUserPromptTemplate());
+    }
+
+    @Test
+    void initShouldAddMissingKeysAndRemoveObsoleteKeys() {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        YamlConfiguration configuration = new YamlConfiguration();
+        configuration.set("openai.model", "gpt-4.1-mini");
+        configuration.set("obsolete.value", true);
+
+        String defaultsYaml = "openai:\n"
+                + "  api_key: \"\"\n"
+                + "  model: \"gpt-4.1-mini\"\n"
+                + "npc:\n"
+                + "  defaults:\n"
+                + "    entity:\n"
+                + "      prefix: \"<grey>[Speler]\"\n";
+
+        when(plugin.getConfig()).thenReturn(configuration);
+        when(plugin.getResource("config.yml")).thenAnswer(
+                invocation -> new ByteArrayInputStream(defaultsYaml.getBytes(StandardCharsets.UTF_8))
+        );
+
+        ConfigHandler.init(plugin);
+
+        assertEquals("", configuration.getString("openai.api_key"));
+        assertEquals("<grey>[Speler]", configuration.getString("npc.defaults.entity.prefix"));
+        assertEquals(false, configuration.contains("obsolete.value"));
     }
 }

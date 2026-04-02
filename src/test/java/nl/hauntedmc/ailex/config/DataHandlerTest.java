@@ -3,6 +3,7 @@ package nl.hauntedmc.ailex.config;
 import nl.hauntedmc.ailex.AIlexPlugin;
 import nl.hauntedmc.ailex.npc.NPCData;
 import nl.hauntedmc.ailex.npc.NPCProperties;
+import nl.hauntedmc.ailex.npc.impl.AilexNPC;
 import nl.hauntedmc.ailex.testutil.ConfigTestSupport;
 import org.bukkit.Location;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -164,7 +165,6 @@ class DataHandlerTest {
         YamlConfiguration legacyYaml = new YamlConfiguration();
         legacyYaml.set("npcs.2.name", "LegacyNPC");
         legacyYaml.set("npcs.2.spawn-location", new Location(null, 1, 2, 3));
-        legacyYaml.set("npcs.2.class", "legacy.class");
         legacyYaml.save(dataFile);
         DataHandler.init(plugin);
 
@@ -172,6 +172,7 @@ class DataHandlerTest {
         NPCData loadedNpc = loaded.get(2);
         assertNotNull(loadedNpc);
         assertEquals("LegacyNPC", loadedNpc.getName());
+        assertEquals(AilexNPC.class.getName(), loadedNpc.getNpcClass());
         assertEquals("<gray>[LegacyDefault]", loadedNpc.getProperties().getPrefix());
         assertEquals("<green>■", loadedNpc.getProperties().getTabPrefix());
         assertEquals(-5555, loadedNpc.getProperties().getTabListOrder());
@@ -182,5 +183,12 @@ class DataHandlerTest {
         assertEquals(true, loadedNpc.getProperties().isAlwaysUseNameHologram());
         assertEquals("default system prompt", loadedNpc.getProperties().getSystemPrompt());
         assertEquals("default template {npc_name}", loadedNpc.getProperties().getUserPromptTemplate());
+
+        YamlConfiguration syncedYaml = YamlConfiguration.loadConfiguration(dataFile);
+        assertEquals("LegacyNPC", syncedYaml.getString("npcs.2.entity.name"));
+        assertEquals(AilexNPC.class.getName(), syncedYaml.getString("npcs.2.class"));
+        assertEquals("<gray>[LegacyDefault]", syncedYaml.getString("npcs.2.entity.properties.prefix"));
+        assertEquals("default system prompt",
+                syncedYaml.getString("npcs.2.entity.properties.prompts.systemPrompt"));
     }
 }

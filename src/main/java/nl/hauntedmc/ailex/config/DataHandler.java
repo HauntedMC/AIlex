@@ -3,7 +3,9 @@ package nl.hauntedmc.ailex.config;
 import nl.hauntedmc.ailex.AIlexPlugin;
 import nl.hauntedmc.ailex.npc.NPCData;
 import nl.hauntedmc.ailex.npc.NPCProperties;
+import nl.hauntedmc.ailex.npc.impl.AilexNPC;
 
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.Location;
 
@@ -30,6 +32,7 @@ public class DataHandler {
             plugin.saveResource("data.yml", false);
         }
         dataConfig = YamlConfiguration.loadConfiguration(dataFile);
+        synchronizeDataWithDefaults();
     }
 
     /**
@@ -114,6 +117,59 @@ public class DataHandler {
                 dataConfig.getString(path + ".prompts.systemPrompt", defaults.getSystemPrompt()),
                 dataConfig.getString(path + ".prompts.userPromptTemplate", defaults.getUserPromptTemplate())
         );
+    }
+
+    private static void synchronizeDataWithDefaults() {
+        boolean changed = false;
+        if (!dataConfig.isConfigurationSection("npcs")) {
+            dataConfig.createSection("npcs");
+            changed = true;
+        }
+
+        ConfigurationSection npcsSection = dataConfig.getConfigurationSection("npcs");
+        if (npcsSection == null) {
+            if (changed) {
+                save();
+            }
+            return;
+        }
+
+        NPCProperties defaults = getDefaultProperties();
+        for (String npcKey : npcsSection.getKeys(false)) {
+            String basePath = "npcs." + npcKey;
+            String npcName = dataConfig.getString(basePath + ".entity.name",
+                    dataConfig.getString(basePath + ".name", "AIlexNPC-" + npcKey));
+
+            changed |= setIfMissing(basePath + ".name", npcName);
+            changed |= setIfMissing(basePath + ".entity.name", npcName);
+            changed |= setIfMissing(basePath + ".class", AilexNPC.class.getName());
+
+            String propertiesPath = basePath + ".entity.properties";
+            changed |= setIfMissing(propertiesPath + ".prefix", defaults.getPrefix());
+            changed |= setIfMissing(propertiesPath + ".tabPrefix", defaults.getTabPrefix());
+            changed |= setIfMissing(propertiesPath + ".tabListOrder", defaults.getTabListOrder());
+            changed |= setIfMissing(propertiesPath + ".damageable", defaults.isDamageable());
+            changed |= setIfMissing(propertiesPath + ".respawnOnDeath", defaults.isRespawnOnDeath());
+            changed |= setIfMissing(propertiesPath + ".chatEnabled", defaults.isChatEnabled());
+            changed |= setIfMissing(propertiesPath + ".listedInTab", defaults.isListedInTab());
+            changed |= setIfMissing(propertiesPath + ".alwaysUseNameHologram",
+                    defaults.isAlwaysUseNameHologram());
+            changed |= setIfMissing(propertiesPath + ".prompts.systemPrompt", defaults.getSystemPrompt());
+            changed |= setIfMissing(propertiesPath + ".prompts.userPromptTemplate",
+                    defaults.getUserPromptTemplate());
+        }
+
+        if (changed) {
+            save();
+        }
+    }
+
+    private static boolean setIfMissing(String path, Object value) {
+        if (dataConfig.contains(path)) {
+            return false;
+        }
+        dataConfig.set(path, value);
+        return true;
     }
 
     /**

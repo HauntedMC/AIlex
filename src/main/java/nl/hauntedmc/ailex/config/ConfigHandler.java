@@ -3,8 +3,16 @@ package nl.hauntedmc.ailex.config;
 import nl.hauntedmc.ailex.npc.NPCProperties;
 import nl.hauntedmc.ailex.util.LoggerUtils;
 
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
+
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Utility class for handling the plugin configuration.
@@ -43,6 +51,7 @@ public class ConfigHandler {
         if (instance == null) {
             instance = new ConfigHandler(plugin);
         }
+        instance.synchronizeConfigWithDefaults();
     }
 
     /**
@@ -51,6 +60,7 @@ public class ConfigHandler {
      */
     public void reload() {
         plugin.reloadConfig();
+        synchronizeConfigWithDefaults();
         LoggerUtils.logInfo("Configuration reloaded.");
     }
 
@@ -83,5 +93,80 @@ public class ConfigHandler {
                 config.getString("npc.defaults.entity.prompts.userPromptTemplate",
                         NPCProperties.DEFAULT_USER_PROMPT_TEMPLATE)
         );
+    }
+
+    /**
+     * Synchronize plugin config with bundled defaults:
+     * - missing keys are added
+     * - obsolete keys are removed
+     */
+    private void synchronizeConfigWithDefaults() {
+        InputStream defaultsStream = plugin.getResource("config.yml");
+        if (defaultsStream == null) {
+            return;
+        }
+
+        YamlConfiguration defaults = YamlConfiguration.loadConfiguration(
+                new InputStreamReader(defaultsStream, StandardCharsets.UTF_8)
+        );
+        FileConfiguration current = plugin.getConfig();
+
+        syncSection(current, defaults, "");
+        plugin.saveConfig();
+    }
+
+    private void syncSection(FileConfiguration currentConfig, ConfigurationSection defaultsSection, String currentPath) {
+        ConfigurationSection currentSection = currentPath.isEmpty()
+                ? currentConfig
+                : currentConfig.getConfigurationSection(currentPath);
+
+        if (currentSection == null) {
+            currentConfig.createSection(currentPath);
+            currentSection = currentConfig.getConfigurationSection(currentPath);
+            if (currentSection == null) {
+                return;
+            }
+        }
+
+        Set<String> currentKeys = new HashSet<>(currentSection.getKeys(false));
+        Set<String> defaultKeys = defaultsSection.getKeys(false);
+
+        for (String currentKey : currentKeys) {
+            if (!defaultKeys.contains(currentKey)) {
+                String removePath = fullPath(currentPath, currentKey);
+                currentConfig.set(removePath, null);
+            }
+        }
+
+        for (String defaultKey : defaultKeys) {
+            String keyPath = fullPath(currentPath, defaultKey);
+            Object defaultValue = defaultsSection.get(defaultKey);
+            boolean defaultIsSection = defaultsSection.isConfigurationSection(defaultKey);
+            boolean currentIsSection = currentConfig.isConfigurationSection(keyPath);
+
+            if (defaultIsSection) {
+                if (!currentConfig.contains(keyPath) || !currentIsSection) {
+                    currentConfig.set(keyPath, null);
+                    currentConfig.createSection(keyPath);
+                }
+
+                ConfigurationSection nestedDefaults = defaultsSection.getConfigurationSection(defaultKey);
+                if (nestedDefaults != null) {
+                    syncSection(currentConfig, nestedDefaults, keyPath);
+                }
+                continue;
+            }
+
+            if (!currentConfig.contains(keyPath) || currentIsSection) {
+                currentConfig.set(keyPath, defaultValue);
+            }
+        }
+    }
+
+    private String fullPath(String parentPath, String key) {
+        if (parentPath.isEmpty()) {
+            return key;
+        }
+        return parentPath + "." + key;
     }
 }
