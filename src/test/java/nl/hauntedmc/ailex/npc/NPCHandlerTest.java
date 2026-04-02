@@ -1,6 +1,7 @@
 package nl.hauntedmc.ailex.npc;
 
 import nl.hauntedmc.ailex.config.DataHandler;
+
 import org.bukkit.Location;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
@@ -45,4 +46,5 @@ class NPCHandlerTest {
             mockedDataHandler.verify(() -> DataHandler.saveNPC(npc.getNPCData()));
         }
     }
+
 }

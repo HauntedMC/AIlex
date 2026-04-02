@@ -50,9 +50,13 @@ import java.util.concurrent.CompletableFuture;
  */
 public class FakePlayer implements Entity {
 
+    private static final String AILEX_MANAGED_METADATA_KEY = "ailex.managed";
+    private static final String CITIZENS_SHOULD_SAVE_KEY = "should-save";
+
     private final NPC npc;
     private final NPCRegistry registry;
     private final SkinTrait skinTrait;
+    private boolean removed;
 
     /**
      * Constructor for the FakePlayer class
@@ -77,17 +81,32 @@ public class FakePlayer implements Entity {
         npc.setProtected(false);
         npc.setUseMinecraftAI(false);
         npc.setFlyable(false);
+        npc.data().setPersistent(CITIZENS_SHOULD_SAVE_KEY, false);
+        npc.data().setPersistent(AILEX_MANAGED_METADATA_KEY, true);
     }
 
     /**
      * Method to get the location of the NPC
      */
     public void remove() {
-        if (npc != null && npc.isSpawned()) {
+        if (removed) {
+            return;
+        }
+
+        int npcId = npc.getId();
+
+        if (npc.isSpawned()) {
             npc.despawn(DespawnReason.PLUGIN);
-            npc.destroy();
+        }
+
+        npc.destroy();
+
+        if (registry.getById(npcId) != null) {
             registry.deregister(npc);
         }
+
+        registry.saveToStore();
+        removed = true;
     }
 
     /**
