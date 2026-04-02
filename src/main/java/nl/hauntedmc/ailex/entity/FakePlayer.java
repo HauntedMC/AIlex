@@ -51,6 +51,7 @@ import java.util.concurrent.CompletableFuture;
 public class FakePlayer implements Entity {
 
     private static final String AILEX_MANAGED_METADATA_KEY = "ailex.managed";
+    private static final String AILEX_INTERNAL_ID_METADATA_KEY = "ailex.internal-id";
     private static final String CITIZENS_SHOULD_SAVE_KEY = "should-save";
 
     private final NPC npc;
@@ -60,9 +61,10 @@ public class FakePlayer implements Entity {
 
     /**
      * Constructor for the FakePlayer class
+     * @param internalId The AIlex internal id for the NPC
      * @param name The name of the player
      */
-    public FakePlayer(String name) {
+    public FakePlayer(int internalId, String name) {
         registry = CitizensAPI.getNPCRegistry();
         npc = registry.createNPC(EntityType.PLAYER, name);
         skinTrait = npc.getOrAddTrait(SkinTrait.class);
@@ -70,19 +72,20 @@ public class FakePlayer implements Entity {
         // TODO: Currently movement breaks when npc name is longer than 16 characters
         npc.setName(name);
 
-        setProperties();
+        setProperties(internalId);
     }
 
     /**
      * Method to set the properties of the NPC
      */
-    private void setProperties() {
+    private void setProperties(int internalId) {
         setDamageable(true);
         npc.setUseMinecraftAI(false);
         npc.setFlyable(false);
         setAlwaysUseNameHologram(false);
         npc.data().setPersistent(CITIZENS_SHOULD_SAVE_KEY, false);
         npc.data().setPersistent(AILEX_MANAGED_METADATA_KEY, true);
+        npc.data().setPersistent(AILEX_INTERNAL_ID_METADATA_KEY, internalId);
     }
 
     /**
@@ -110,12 +113,12 @@ public class FakePlayer implements Entity {
         }
 
         Entity spawnedEntity = npc.getEntity();
-        int npcId = npc.getId();
-
-        if (registry.getById(npcId) != null) {
+        try {
             registry.deregister(npc);
-        } else if (npc.isSpawned()) {
-            npc.despawn(DespawnReason.REMOVAL);
+        } catch (RuntimeException exception) {
+            if (npc.isSpawned()) {
+                npc.despawn(DespawnReason.REMOVAL);
+            }
         }
 
         if (spawnedEntity != null && spawnedEntity.isValid()) {

@@ -1,15 +1,26 @@
 package nl.hauntedmc.ailex.npc;
 
+import net.citizensnpcs.api.CitizensAPI;
+import net.citizensnpcs.api.npc.NPCRegistry;
+
 import nl.hauntedmc.ailex.config.DataHandler;
 import nl.hauntedmc.ailex.util.PacketUtils;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Registry for NPCs spawned by AIlex
  */
 public class NPCHandler {
+
+    private static final String AILEX_MANAGED_METADATA_KEY = "ailex.managed";
+    private static final String AILEX_INTERNAL_ID_METADATA_KEY = "ailex.internal-id";
+    private static final String CITIZENS_SHOULD_SAVE_KEY = "should-save";
 
     private final HashMap<Integer, NPC> npcRegistry;
 
@@ -95,6 +106,8 @@ public class NPCHandler {
      */
     public void loadNPCs() {
         Map<Integer, NPCData> npcDataMap = DataHandler.loadNPCs();
+        removeManagedCitizensNpcEntries(npcDataMap);
+
         for (NPCData npcData : npcDataMap.values()) {
             try {
                 Class<? extends NPC> npcClass = (Class<? extends NPC>) Class.forName(npcData.getNpcClass());
@@ -140,5 +153,60 @@ public class NPCHandler {
      */
     public void clearNPCRegistry() {
         npcRegistry.clear();
+    }
+
+    private void removeManagedCitizensNpcEntries(Map<Integer, NPCData> npcDataMap) {
+        NPCRegistry citizensRegistry = CitizensAPI.getNPCRegistry();
+        Set<Integer> trackedNpcIds = new HashSet<>(npcDataMap.keySet());
+        Set<String> expectedDisplayNames = buildExpectedDisplayNames(npcDataMap);
+        List<net.citizensnpcs.api.npc.NPC> staleCitizensNpcs = new ArrayList<>();
+
+        for (net.citizensnpcs.api.npc.NPC citizensNpc : citizensRegistry) {
+            Boolean managedByAIlexValue = citizensNpc.data().get(AILEX_MANAGED_METADATA_KEY, false);
+            boolean managedByAIlex = Boolean.TRUE.equals(managedByAIlexValue);
+
+            Integer internalIdValue = citizensNpc.data().get(AILEX_INTERNAL_ID_METADATA_KEY, Integer.MIN_VALUE);
+            boolean matchesTrackedInternalId = internalIdValue != null && trackedNpcIds.contains(internalIdValue);
+
+            Boolean shouldSaveValue = citizensNpc.data().get(CITIZENS_SHOULD_SAVE_KEY, true);
+            boolean shouldSave = !Boolean.FALSE.equals(shouldSaveValue);
+            boolean matchesLegacyEphemeralName = !shouldSave && expectedDisplayNames.contains(citizensNpc.getName());
+
+            if (managedByAIlex || matchesTrackedInternalId || matchesLegacyEphemeralName) {
+                staleCitizensNpcs.add(citizensNpc);
+            }
+        }
+
+        if (staleCitizensNpcs.isEmpty()) {
+            return;
+        }
+
+        for (net.citizensnpcs.api.npc.NPC citizensNpc : staleCitizensNpcs) {
+            citizensRegistry.deregister(citizensNpc);
+        }
+
+        citizensRegistry.saveToStore();
+    }
+
+    private Set<String> buildExpectedDisplayNames(Map<Integer, NPCData> npcDataMap) {
+        Set<String> expectedDisplayNames = new HashSet<>();
+        for (NPCData npcData : npcDataMap.values()) {
+            NPCProperties properties = npcData.getProperties() == null ? NPCProperties.defaultValues() : npcData.getProperties();
+            expectedDisplayNames.add(joinParts(properties.getPrefix(), npcData.getName()));
+        }
+        return expectedDisplayNames;
+    }
+
+    private static String joinParts(String... parts) {
+        StringBuilder output = new StringBuilder();
+        for (String part : parts) {
+            if (part != null && !part.isBlank()) {
+                if (output.length() > 0) {
+                    output.append(' ');
+                }
+                output.append(part);
+            }
+        }
+        return output.toString();
     }
 }

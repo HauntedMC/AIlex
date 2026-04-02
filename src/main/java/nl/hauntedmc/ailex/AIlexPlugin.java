@@ -60,6 +60,7 @@ public class AIlexPlugin extends JavaPlugin {
         ConfigHandler.init(this);
         DataHandler.init(this);
         chatGPTClient = new ChatGPTClient(this);
+        npcHandler = new NPCHandler();
 
         // Register all commands and listeners
         registerCommands();
@@ -68,9 +69,12 @@ public class AIlexPlugin extends JavaPlugin {
         // Initialize PacketEvents
         PacketEvents.getAPI().init();
 
-        // Load all NPCs from the database
-        npcHandler = new NPCHandler();
-        npcHandler.loadNPCs();
+        // Delay NPC loading one tick so all dependent plugins have fully enabled.
+        getServer().getScheduler().runTask(this, () -> {
+            if (isEnabled()) {
+                npcHandler.loadNPCs();
+            }
+        });
 
         LoggerUtils.logInfo("AIlex has been enabled");
     }
@@ -81,11 +85,13 @@ public class AIlexPlugin extends JavaPlugin {
      */
     @Override
     public void onDisable() {
-        // Unload all NPCs
-        npcHandler.unloadAllNPCs();
+        if (npcHandler != null) {
+            // Unload all NPCs
+            npcHandler.unloadAllNPCs();
 
-        // Clear the NPCRegistry after removing all NPCs
-        npcHandler.clearNPCRegistry();
+            // Clear the NPCRegistry after removing all NPCs
+            npcHandler.clearNPCRegistry();
+        }
 
         // Terminate PacketEvents
         PacketEvents.getAPI().terminate();

@@ -79,7 +79,7 @@ public abstract class NPC implements Kinematic {
         initializeKinematics(spawnLocation);
 
         // Spawn the fake player entity
-        fakePlayer = new FakePlayer(displayName);
+        fakePlayer = new FakePlayer(id, displayName);
         fakePlayer.setDamageable(properties.isDamageable());
         fakePlayer.setAlwaysUseNameHologram(properties.isAlwaysUseNameHologram());
 
