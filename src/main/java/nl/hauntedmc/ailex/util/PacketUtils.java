@@ -120,7 +120,7 @@ public class PacketUtils {
             throw new IllegalArgumentException("Player or packet cannot be null");
         }
     }
-    
+
     /**
      * Send a packet to a player with a delay
      * @param player the player to send the packet to
