@@ -2,6 +2,16 @@ openai:
   api_key: ""
   model: "gpt-4.1-mini"
 npc:
+  defaults:
+    entity:
+      prefix: "<grey>[Speler]"
+      tabPrefix: "<green>●"
+      tabListOrder: -10000
+      damageable: true
+      respawnOnDeath: true
+      chatEnabled: true
+      listedInTab: true
+      alwaysUseNameHologram: false
   general:
     maxVelocity: 4.317
     maxRotation: 180.0

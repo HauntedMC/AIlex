@@ -42,12 +42,14 @@ class PacketUtilsTest {
         when(npc.getSkinTexture()).thenReturn("texture");
         when(npc.getSkinSignature()).thenReturn("signature");
         when(npc.getDisplayTabName()).thenReturn("<green>● <grey>[Speler] AI-Bot");
+        when(npc.getTabListOrder()).thenReturn(-4321);
+        when(npc.isListedInTab()).thenReturn(true);
 
         var actions = PacketUtils.createPlayerInfoAddActions();
         WrapperPlayServerPlayerInfoUpdate.PlayerInfo entry = PacketUtils.createPlayerInfoEntry(npc);
 
         assertTrue(actions.contains(WrapperPlayServerPlayerInfoUpdate.Action.UPDATE_LIST_ORDER));
-        assertEquals(PacketUtils.AI_TAB_LIST_ORDER, entry.getListOrder());
+        assertEquals(-4321, entry.getListOrder());
         assertEquals("AI-Bot", entry.getGameProfile().getName());
     }
 }

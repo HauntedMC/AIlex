@@ -11,6 +11,7 @@ public class NPCData {
     private String name;
     private Location spawnLocation;
     private final String npcClass;
+    private NPCProperties properties;
 
     /**
      * Constructor for the NPCData
@@ -20,10 +21,23 @@ public class NPCData {
      * @param npcClass The class of the NPC
      */
     public NPCData(int id, String name, Location spawnLocation, String npcClass) {
+        this(id, name, spawnLocation, npcClass, NPCProperties.defaultValues());
+    }
+
+    /**
+     * Constructor for the NPCData with explicit properties.
+     * @param id The id of the NPC
+     * @param name The name of the NPC
+     * @param spawnLocation The spawn location of the NPC
+     * @param npcClass The class of the NPC
+     * @param properties Runtime and display properties of the NPC
+     */
+    public NPCData(int id, String name, Location spawnLocation, String npcClass, NPCProperties properties) {
         this.id = id;
         this.name = name;
         this.spawnLocation = spawnLocation;
         this.npcClass = npcClass;
+        this.properties = properties == null ? NPCProperties.defaultValues() : properties;
     }
 
     /**
@@ -59,6 +73,14 @@ public class NPCData {
     }
 
     /**
+     * Get the properties of the NPC.
+     * @return The properties of the NPC
+     */
+    public NPCProperties getProperties() {
+        return properties;
+    }
+
+    /**
      * Set the name of the NPC
      * @param name The new name of the NPC
      */
@@ -72,6 +94,14 @@ public class NPCData {
      */
     public void setSpawnLocation(Location location) {
         spawnLocation = location;
+    }
+
+    /**
+     * Set the properties of the NPC.
+     * @param properties The new properties for the NPC
+     */
+    public void setProperties(NPCProperties properties) {
+        this.properties = properties == null ? NPCProperties.defaultValues() : properties;
     }
 
     /**
@@ -93,7 +123,10 @@ public class NPCData {
         if (npcClass == null || npcClass.isEmpty()) {
             valid = false;
         }
-        
+        if (properties == null || !properties.isValid()) {
+            valid = false;
+        }
+
         return valid;
     }
 }

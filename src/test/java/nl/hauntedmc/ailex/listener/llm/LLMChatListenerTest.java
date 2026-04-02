@@ -25,6 +25,7 @@ class LLMChatListenerTest {
         HashMap<Integer, NPC> registry = new HashMap<>();
         NPC npc = mock(NPC.class);
         when(npc.getName()).thenReturn("BotName");
+        when(npc.isChatEnabled()).thenReturn(true);
         registry.put(1, npc);
 
         AIlexPlugin plugin = mockPluginWithNpcRegistry(registry);
@@ -47,6 +48,7 @@ class LLMChatListenerTest {
         HashMap<Integer, NPC> registry = new HashMap<>();
         NPC npc = mock(NPC.class);
         when(npc.getName()).thenReturn("BotName");
+        when(npc.isChatEnabled()).thenReturn(true);
         registry.put(1, npc);
 
         AIlexPlugin plugin = mockPluginWithNpcRegistry(registry);
@@ -56,6 +58,26 @@ class LLMChatListenerTest {
         Player player = mock(Player.class);
         when(player.getName()).thenReturn("Tester");
         Component message = Component.text("No mention here");
+
+        listener.forwardChatToAI(player, message);
+        verifyNoInteractions(chatClient);
+    }
+
+    @Test
+    void forwardChatToAIShouldSkipMentionedNpcWhenChatDisabled() {
+        HashMap<Integer, NPC> registry = new HashMap<>();
+        NPC npc = mock(NPC.class);
+        when(npc.getName()).thenReturn("BotName");
+        when(npc.isChatEnabled()).thenReturn(false);
+        registry.put(1, npc);
+
+        AIlexPlugin plugin = mockPluginWithNpcRegistry(registry);
+        ChatGPTClient chatClient = plugin.getChatGPTClient();
+        LLMChatListener listener = new LLMChatListener(plugin);
+
+        Player player = mock(Player.class);
+        when(player.getName()).thenReturn("Tester");
+        Component message = Component.text("hey BotName");
 
         listener.forwardChatToAI(player, message);
         verifyNoInteractions(chatClient);

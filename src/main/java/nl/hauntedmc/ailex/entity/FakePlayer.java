@@ -69,7 +69,6 @@ public class FakePlayer implements Entity {
 
         // TODO: Currently movement breaks when npc name is longer than 16 characters
         npc.setName(name);
-        npc.setAlwaysUseNameHologram(false);
 
         setProperties();
     }
@@ -78,11 +77,28 @@ public class FakePlayer implements Entity {
      * Method to set the properties of the NPC
      */
     private void setProperties() {
-        npc.setProtected(false);
+        setDamageable(true);
         npc.setUseMinecraftAI(false);
         npc.setFlyable(false);
+        setAlwaysUseNameHologram(false);
         npc.data().setPersistent(CITIZENS_SHOULD_SAVE_KEY, false);
         npc.data().setPersistent(AILEX_MANAGED_METADATA_KEY, true);
+    }
+
+    /**
+     * Configure whether this fake player can be damaged.
+     * @param damageable true when damage should be allowed
+     */
+    public void setDamageable(boolean damageable) {
+        npc.setProtected(!damageable);
+    }
+
+    /**
+     * Configure Citizens name hologram behavior.
+     * @param alwaysUseNameHologram true to always render a name hologram
+     */
+    public void setAlwaysUseNameHologram(boolean alwaysUseNameHologram) {
+        npc.setAlwaysUseNameHologram(alwaysUseNameHologram);
     }
 
     /**

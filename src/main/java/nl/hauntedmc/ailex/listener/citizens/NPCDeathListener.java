@@ -36,7 +36,9 @@ public class NPCDeathListener implements Listener {
                 .forEach(npc -> {
                     npc.clearActionQueue();
                     npc.cancelCurrentAction();
-                    npc.respawn();
+                    if (npc.isRespawnOnDeath()) {
+                        npc.respawn();
+                    }
                 });
     }
 }

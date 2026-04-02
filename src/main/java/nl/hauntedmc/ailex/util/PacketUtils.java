@@ -21,8 +21,6 @@ public class PacketUtils {
 
     private static final long PACKET_SEND_DELAY = 40L;
     private static final long LIST_ORDER_UPDATE_DELAY = PACKET_SEND_DELAY + 1L;
-    // Minecraft tab list sorts higher priority first, so use a low value to push AI players down.
-    static final int AI_TAB_LIST_ORDER = -10_000;
 
     /**
      * Send a player info add packet to a player
@@ -56,12 +54,12 @@ public class PacketUtils {
         );
         return new WrapperPlayServerPlayerInfoUpdate.PlayerInfo(
                 userProfile,
-                true,
+                npc.isListedInTab(),
                 0,
                 GameMode.SURVIVAL,
                 FormatterUtils.serializer.deserialize(npc.getDisplayTabName()),
                 null,
-                AI_TAB_LIST_ORDER
+                npc.getTabListOrder()
         );
     }
 
@@ -69,7 +67,7 @@ public class PacketUtils {
         WrapperPlayServerPlayerInfoUpdate.PlayerInfo entry = new WrapperPlayServerPlayerInfoUpdate.PlayerInfo(
                 new UserProfile(npc.getUUID(), npc.getName())
         );
-        entry.setListOrder(AI_TAB_LIST_ORDER);
+        entry.setListOrder(npc.getTabListOrder());
         return new WrapperPlayServerPlayerInfoUpdate(
                 WrapperPlayServerPlayerInfoUpdate.Action.UPDATE_LIST_ORDER,
                 entry

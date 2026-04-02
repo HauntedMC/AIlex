@@ -1,5 +1,6 @@
 package nl.hauntedmc.ailex.config;
 
+import nl.hauntedmc.ailex.npc.NPCProperties;
 import nl.hauntedmc.ailex.util.LoggerUtils;
 
 import org.bukkit.configuration.file.FileConfiguration;
@@ -59,5 +60,24 @@ public class ConfigHandler {
      */
     public FileConfiguration getConfig() {
         return plugin.getConfig();
+    }
+
+    /**
+     * Build default NPC properties from configuration.
+     * @return a new mutable {@link NPCProperties} instance populated from config defaults
+     */
+    public NPCProperties getDefaultNPCProperties() {
+        FileConfiguration config = getConfig();
+        return new NPCProperties(
+                config.getString("npc.defaults.entity.prefix", NPCProperties.DEFAULT_PREFIX),
+                config.getString("npc.defaults.entity.tabPrefix", NPCProperties.DEFAULT_TAB_PREFIX),
+                config.getInt("npc.defaults.entity.tabListOrder", NPCProperties.DEFAULT_TAB_LIST_ORDER),
+                config.getBoolean("npc.defaults.entity.damageable", NPCProperties.DEFAULT_DAMAGEABLE),
+                config.getBoolean("npc.defaults.entity.respawnOnDeath", NPCProperties.DEFAULT_RESPAWN_ON_DEATH),
+                config.getBoolean("npc.defaults.entity.chatEnabled", NPCProperties.DEFAULT_CHAT_ENABLED),
+                config.getBoolean("npc.defaults.entity.listedInTab", NPCProperties.DEFAULT_LISTED_IN_TAB),
+                config.getBoolean("npc.defaults.entity.alwaysUseNameHologram",
+                        NPCProperties.DEFAULT_ALWAYS_USE_NAME_HOLOGRAM)
+        );
     }
 }

@@ -2,6 +2,7 @@ package nl.hauntedmc.ailex.config;
 
 import nl.hauntedmc.ailex.AIlexPlugin;
 import nl.hauntedmc.ailex.npc.NPCData;
+import nl.hauntedmc.ailex.npc.NPCProperties;
 
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.Location;
@@ -37,9 +38,23 @@ public class DataHandler {
      */
     public static void saveNPC(NPCData npcData) {
         String path = "npcs." + npcData.getId();
-        dataConfig.set(path + ".name", npcData.getName());
         dataConfig.set(path + ".spawn-location", npcData.getSpawnLocation());
         dataConfig.set(path + ".class", npcData.getNpcClass());
+        dataConfig.set(path + ".name", npcData.getName());
+        dataConfig.set(path + ".entity.name", npcData.getName());
+
+        NPCProperties properties = npcData.getProperties() == null
+                ? NPCProperties.defaultValues()
+                : npcData.getProperties();
+        String propertiesPath = path + ".entity.properties";
+        dataConfig.set(propertiesPath + ".prefix", properties.getPrefix());
+        dataConfig.set(propertiesPath + ".tabPrefix", properties.getTabPrefix());
+        dataConfig.set(propertiesPath + ".tabListOrder", properties.getTabListOrder());
+        dataConfig.set(propertiesPath + ".damageable", properties.isDamageable());
+        dataConfig.set(propertiesPath + ".respawnOnDeath", properties.isRespawnOnDeath());
+        dataConfig.set(propertiesPath + ".chatEnabled", properties.isChatEnabled());
+        dataConfig.set(propertiesPath + ".listedInTab", properties.isListedInTab());
+        dataConfig.set(propertiesPath + ".alwaysUseNameHologram", properties.isAlwaysUseNameHologram());
         save();
     }
 
@@ -59,18 +74,42 @@ public class DataHandler {
      */
     public static Map<Integer, NPCData> loadNPCs() {
         Map<Integer, NPCData> npcDataMap = new HashMap<>();
+        NPCProperties defaultProperties = getDefaultProperties();
         if (dataConfig.contains("npcs")) {
             for (String key : dataConfig.getConfigurationSection("npcs").getKeys(false)) {
                 int id = Integer.parseInt(key);
-                String name = dataConfig.getString("npcs." + id + ".name");
-                Location location = dataConfig.getLocation("npcs." + id + ".spawn-location");
-                String npcClass = dataConfig.getString("npcs." + id + ".class");
+                String basePath = "npcs." + id;
+                String name = dataConfig.getString(basePath + ".entity.name", dataConfig.getString(basePath + ".name"));
+                Location location = dataConfig.getLocation(basePath + ".spawn-location");
+                String npcClass = dataConfig.getString(basePath + ".class");
+                NPCProperties properties = loadProperties(basePath + ".entity.properties", defaultProperties);
 
-                NPCData npcData = new NPCData(id, name, location, npcClass);
+                NPCData npcData = new NPCData(id, name, location, npcClass, properties);
                 npcDataMap.put(id, npcData);
             }
         }
         return npcDataMap;
+    }
+
+    private static NPCProperties getDefaultProperties() {
+        try {
+            return ConfigHandler.getInstance().getDefaultNPCProperties();
+        } catch (IllegalStateException exception) {
+            return NPCProperties.defaultValues();
+        }
+    }
+
+    private static NPCProperties loadProperties(String path, NPCProperties defaults) {
+        return new NPCProperties(
+                dataConfig.getString(path + ".prefix", defaults.getPrefix()),
+                dataConfig.getString(path + ".tabPrefix", defaults.getTabPrefix()),
+                dataConfig.getInt(path + ".tabListOrder", defaults.getTabListOrder()),
+                dataConfig.getBoolean(path + ".damageable", defaults.isDamageable()),
+                dataConfig.getBoolean(path + ".respawnOnDeath", defaults.isRespawnOnDeath()),
+                dataConfig.getBoolean(path + ".chatEnabled", defaults.isChatEnabled()),
+                dataConfig.getBoolean(path + ".listedInTab", defaults.isListedInTab()),
+                dataConfig.getBoolean(path + ".alwaysUseNameHologram", defaults.isAlwaysUseNameHologram())
+        );
     }
 
     /**

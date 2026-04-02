@@ -32,6 +32,7 @@ public abstract class NPC implements Kinematic {
     protected int id;
     protected UUID uuid;
     protected FakePlayer fakePlayer;
+    protected NPCProperties properties;
     protected MovementBehaviour movementBehaviour;
     protected Vector3d position;
     protected float orientation;
@@ -61,8 +62,9 @@ public abstract class NPC implements Kinematic {
         id = npcData.getId();
         uuid = UUID.randomUUID();
         name = npcData.getName();
-        displayTabName = "<green>● <grey>[Speler] " + name;
-        displayName = "<grey>[Speler] " + name;
+        properties = npcData.getProperties() == null ? NPCProperties.defaultValues() : npcData.getProperties().copy();
+        displayName = buildDisplayName(properties.getPrefix(), name);
+        displayTabName = buildDisplayTabName(properties.getTabPrefix(), properties.getPrefix(), name);
 
         // Set default movement behaviour to seek
         movementBehaviour = new SeekBehaviour();
@@ -78,6 +80,8 @@ public abstract class NPC implements Kinematic {
 
         // Spawn the fake player entity
         fakePlayer = new FakePlayer(displayName);
+        fakePlayer.setDamageable(properties.isDamageable());
+        fakePlayer.setAlwaysUseNameHologram(properties.isAlwaysUseNameHologram());
 
         // Set the state of the NPC to idle
         state = NPCState.IDLE;
@@ -237,7 +241,7 @@ public abstract class NPC implements Kinematic {
      * @return The data of the NPC
      */
     public NPCData getNPCData() {
-        return new NPCData(id, name, fakePlayer.getLocation(), getClass().getName());
+        return new NPCData(id, name, fakePlayer.getLocation(), getClass().getName(), properties.copy());
     }
 
     // --------------------------------------------------------------------------
@@ -330,6 +334,47 @@ public abstract class NPC implements Kinematic {
 
     public String getDisplayTabName() {
         return displayTabName;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public int getTabListOrder() {
+        return properties.getTabListOrder();
+    }
+
+    public boolean isRespawnOnDeath() {
+        return properties.isRespawnOnDeath();
+    }
+
+    public boolean isChatEnabled() {
+        return properties.isChatEnabled();
+    }
+
+    public boolean isListedInTab() {
+        return properties.isListedInTab();
+    }
+
+    private static String buildDisplayName(String prefix, String name) {
+        return joinParts(prefix, name);
+    }
+
+    private static String buildDisplayTabName(String tabPrefix, String prefix, String name) {
+        return joinParts(tabPrefix, prefix, name);
+    }
+
+    private static String joinParts(String... parts) {
+        StringBuilder output = new StringBuilder();
+        for (String part : parts) {
+            if (part != null && !part.isBlank()) {
+                if (output.length() > 0) {
+                    output.append(' ');
+                }
+                output.append(part);
+            }
+        }
+        return output.toString();
     }
 
 }

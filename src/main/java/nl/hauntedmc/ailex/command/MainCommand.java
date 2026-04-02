@@ -125,7 +125,13 @@ public class MainCommand implements BasicCommand {
                             String name = args[3];
                             Class<? extends NPC> npcClass = npcTypeMap.get(type);
                             if (npcClass != null) {
-                                NPCData npcData = new NPCData(id, name, player.getLocation(), npcClass.getName());
+                                NPCData npcData = new NPCData(
+                                        id,
+                                        name,
+                                        player.getLocation(),
+                                        npcClass.getName(),
+                                        ConfigHandler.getInstance().getDefaultNPCProperties()
+                                );
                                 try {
                                     plugin.getNPCHandler().createNPC(npcClass, npcData);
                                 }

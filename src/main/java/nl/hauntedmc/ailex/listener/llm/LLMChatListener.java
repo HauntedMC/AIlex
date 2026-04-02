@@ -9,6 +9,7 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import nl.hauntedmc.ailex.AIlexPlugin;
 import nl.hauntedmc.ailex.npc.NPC;
 import nl.hauntedmc.ailex.npc.NPCHandler;
+import nl.hauntedmc.ailex.util.FormatterUtils;
 import nl.hauntedmc.ailex.util.LoggerUtils;
 import nl.hauntedmc.ailex.ai.llm.ChatGPTClient;
 
@@ -17,8 +18,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.scheduler.BukkitRunnable;
-
-import java.util.ArrayList;
 
 /**
  * Listener for chat events.
@@ -58,18 +57,18 @@ public class LLMChatListener implements Listener {
             return;
         }
 
-        ArrayList<String> npcNames = new ArrayList<>();
-
-        for (NPC npc : npcHandler.getNPCRegistry().values()) {
-            npcNames.add(npc.getName());
-        }
-
         // Get the chat message from the component
         String chatMessage = LegacyComponentSerializer.legacySection().serialize(message);
 
         // If an NPC is mentioned in the message forward chat to AI
-        for (String npcName : npcNames) {
+        for (NPC npc : npcHandler.getNPCRegistry().values()) {
+            if (!npc.isChatEnabled()) {
+                continue;
+            }
+
+            String npcName = npc.getName();
             if (chatMessage.toLowerCase().contains(npcName.toLowerCase())) {
+                String npcDisplayName = npc.getDisplayName();
                 new BukkitRunnable() {
                     @Override
                     public void run() {
@@ -84,7 +83,7 @@ public class LLMChatListener implements Listener {
 
                             String response = chatGPTClient.getChatResponse(prompt);
 
-                            Component result = Component.text("[Speler] " + npcName + ": ", NamedTextColor.GRAY)
+                            Component result = FormatterUtils.serializer.deserialize(npcDisplayName + ": ")
                                     .append(Component.text(response, NamedTextColor.WHITE));
 
                             if (!response.isEmpty()) {
