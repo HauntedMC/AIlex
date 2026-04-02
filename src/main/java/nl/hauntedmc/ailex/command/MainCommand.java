@@ -63,6 +63,7 @@ public class MainCommand implements BasicCommand {
             if (args.length == 1) {
                 if (args[0].equalsIgnoreCase("reload")) {
                     ConfigHandler.getInstance().reload();
+                    plugin.reloadChatGPTClient();
                     LoggerUtils.logInfo("AIlex configuration reloaded.");
                     LoggerUtils.sendDebugMessage("AIlex configuration reloaded.");
                     return;

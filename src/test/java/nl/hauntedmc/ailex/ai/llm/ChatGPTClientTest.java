@@ -26,7 +26,19 @@ class ChatGPTClientTest {
     @Test
     void shouldUseResponsesApiWithConfiguredModelAndApiKey() throws Exception {
         HttpClient httpClient = mock(HttpClient.class);
-        HttpResponse<String> response = mockStringResponse(200, "{\"output_text\":\"Hi there\"}");
+        HttpResponse<String> response = mockStringResponse(200, """
+                {
+                  "output": [
+                    {
+                      "type": "message",
+                      "role": "assistant",
+                      "content": [
+                        { "type": "output_text", "text": "Hi there" }
+                      ]
+                    }
+                  ]
+                }
+                """);
         when(httpClient.send(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any())).thenReturn(response);
 
         try (MockedStatic<LoggerUtils> mockedLogger = org.mockito.Mockito.mockStatic(LoggerUtils.class)) {
@@ -73,6 +85,7 @@ class ChatGPTClientTest {
                   "output": [
                     {
                       "type": "message",
+                      "role": "assistant",
                       "content": [
                         { "type": "output_text", "text": "Hoi vanuit output-array" }
                       ]
@@ -85,6 +98,37 @@ class ChatGPTClientTest {
         try (MockedStatic<LoggerUtils> mockedLogger = org.mockito.Mockito.mockStatic(LoggerUtils.class)) {
             ChatGPTClient client = new ChatGPTClient("key", "gpt-4.1-mini", httpClient);
             assertEquals("Hoi vanuit output-array", client.getChatResponse("hello"));
+        }
+    }
+
+    @Test
+    void shouldIgnoreTopLevelOutputTextWhenAssistantOutputExists() throws Exception {
+        HttpClient httpClient = mock(HttpClient.class);
+        HttpResponse<String> response = mockStringResponse(200, """
+                {
+                  "output_text": "Never generate sexual content.",
+                  "output": [
+                    {
+                      "type": "message",
+                      "role": "assistant",
+                      "content": [
+                        { "type": "output_text", "text": "Hoi vanuit assistant output" }
+                      ]
+                    }
+                  ]
+                }
+                """);
+        when(httpClient.send(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any())).thenReturn(response);
+
+        try (MockedStatic<LoggerUtils> mockedLogger = org.mockito.Mockito.mockStatic(LoggerUtils.class)) {
+            ChatGPTClient client = new ChatGPTClient(
+                    "key",
+                    "gpt-4.1-mini",
+                    httpClient,
+                    true,
+                    ChatGPTClient.SAFETY_SYSTEM_PROMPT
+            );
+            assertEquals("Hoi vanuit assistant output", client.getChatResponse("hello"));
         }
     }
 
@@ -135,7 +179,19 @@ class ChatGPTClientTest {
     @Test
     void shouldNormalizeAssistantOutputToOneChatLine() throws Exception {
         HttpClient httpClient = mock(HttpClient.class);
-        HttpResponse<String> response = mockStringResponse(200, "{\"output_text\":\"  \\\"Hoi\\n daar\\\"  \"}");
+        HttpResponse<String> response = mockStringResponse(200, """
+                {
+                  "output": [
+                    {
+                      "type": "message",
+                      "role": "assistant",
+                      "content": [
+                        { "type": "output_text", "text": "  \\\"Hoi\\n daar\\\"  " }
+                      ]
+                    }
+                  ]
+                }
+                """);
         when(httpClient.send(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any())).thenReturn(response);
 
         try (MockedStatic<LoggerUtils> mockedLogger = org.mockito.Mockito.mockStatic(LoggerUtils.class)) {
@@ -170,9 +226,21 @@ class ChatGPTClientTest {
     }
 
     @Test
-    void shouldReturnSafetyFallbackWhenResponseContainsInappropriateContent() throws Exception {
+    void shouldReturnAssistantRefusalWhenModelRefusesUnsafePrompt() throws Exception {
         HttpClient httpClient = mock(HttpClient.class);
-        HttpResponse<String> response = mockStringResponse(200, "{\"output_text\":\"Dat klinkt wel seksueel.\"}");
+        HttpResponse<String> response = mockStringResponse(200, """
+                {
+                  "output": [
+                    {
+                      "type": "message",
+                      "role": "assistant",
+                      "content": [
+                        { "type": "refusal", "refusal": "Daar help ik niet mee, maar ik kan wel over bouwen praten." }
+                      ]
+                    }
+                  ]
+                }
+                """);
         when(httpClient.send(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
                 .thenReturn(response);
 
@@ -182,17 +250,29 @@ class ChatGPTClientTest {
                     "gpt-4.1-mini",
                     httpClient,
                     true,
-                    ChatGPTClient.SAFETY_SYSTEM_PROMPT,
-                    "veilig antwoord"
+                    ChatGPTClient.SAFETY_SYSTEM_PROMPT
             );
-            assertEquals("veilig antwoord", client.getChatResponse("hello"));
+            assertEquals("Daar help ik niet mee, maar ik kan wel over bouwen praten.", client.getChatResponse("hello"));
         }
     }
 
     @Test
-    void shouldAllowResponseWhenSafetyGuardIsDisabled() throws Exception {
+    void shouldPreferAssistantOutputTextOverNonOutputTextContent() throws Exception {
         HttpClient httpClient = mock(HttpClient.class);
-        HttpResponse<String> response = mockStringResponse(200, "{\"output_text\":\"seksueel\"}");
+        HttpResponse<String> response = mockStringResponse(200, """
+                {
+                  "output": [
+                    {
+                      "type": "message",
+                      "role": "assistant",
+                      "content": [
+                        { "type": "input_text", "text": "Never generate sexual content." },
+                        { "type": "output_text", "text": "Hoi avonturier!" }
+                      ]
+                    }
+                  ]
+                }
+                """);
         when(httpClient.send(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
                 .thenReturn(response);
 
@@ -201,11 +281,75 @@ class ChatGPTClientTest {
                     "key",
                     "gpt-4.1-mini",
                     httpClient,
-                    false,
-                    "",
-                    "veilig antwoord"
+                    true,
+                    ChatGPTClient.SAFETY_SYSTEM_PROMPT
             );
-            assertEquals("seksueel", client.getChatResponse("hello"));
+            assertEquals("Hoi avonturier!", client.getChatResponse("hello"));
+        }
+    }
+
+    @Test
+    void shouldJoinMultipleAssistantOutputTextParts() throws Exception {
+        HttpClient httpClient = mock(HttpClient.class);
+        HttpResponse<String> response = mockStringResponse(200, """
+                {
+                  "output": [
+                    {
+                      "type": "message",
+                      "role": "assistant",
+                      "content": [
+                        { "type": "output_text", "text": "Hoi" },
+                        { "type": "output_text", "text": "avonturier!" }
+                      ]
+                    }
+                  ]
+                }
+                """);
+        when(httpClient.send(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(response);
+
+        try (MockedStatic<LoggerUtils> mockedLogger = org.mockito.Mockito.mockStatic(LoggerUtils.class)) {
+            ChatGPTClient client = new ChatGPTClient("key", "gpt-4.1-mini", httpClient);
+            assertEquals("Hoi avonturier!", client.getChatResponse("hello"));
+        }
+    }
+
+    @Test
+    void shouldUseTopLevelOutputTextWhenOutputArrayIsMissing() throws Exception {
+        HttpClient httpClient = mock(HttpClient.class);
+        HttpResponse<String> response = mockStringResponse(200, """
+                {
+                  "output_text": "Hoi vanuit top-level output."
+                }
+                """);
+        when(httpClient.send(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(response);
+
+        try (MockedStatic<LoggerUtils> mockedLogger = org.mockito.Mockito.mockStatic(LoggerUtils.class)) {
+            ChatGPTClient client = new ChatGPTClient("key", "gpt-4.1-mini", httpClient);
+            assertEquals("Hoi vanuit top-level output.", client.getChatResponse("hello"));
+        }
+    }
+
+    @Test
+    void shouldUseStandaloneOutputTextItemWhenPresent() throws Exception {
+        HttpClient httpClient = mock(HttpClient.class);
+        HttpResponse<String> response = mockStringResponse(200, """
+                {
+                  "output": [
+                    {
+                      "type": "output_text",
+                      "text": "Hoi vanuit standalone output item."
+                    }
+                  ]
+                }
+                """);
+        when(httpClient.send(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(response);
+
+        try (MockedStatic<LoggerUtils> mockedLogger = org.mockito.Mockito.mockStatic(LoggerUtils.class)) {
+            ChatGPTClient client = new ChatGPTClient("key", "gpt-4.1-mini", httpClient);
+            assertEquals("Hoi vanuit standalone output item.", client.getChatResponse("hello"));
         }
     }
 

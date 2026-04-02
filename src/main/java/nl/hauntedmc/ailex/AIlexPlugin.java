@@ -151,6 +151,13 @@ public class AIlexPlugin extends JavaPlugin {
     }
 
     /**
+     * Recreate the OpenAI client after configuration changes.
+     */
+    public void reloadChatGPTClient() {
+        chatGPTClient = new ChatGPTClient(this);
+    }
+
+    /**
      * Get the AIlex plugin
      * Note: If possible pass this instance to other classes instead of using this method
      * @return The AIlex plugin

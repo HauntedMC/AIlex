@@ -8,8 +8,6 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Objects;
-import java.util.regex.Pattern;
-
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -28,7 +26,6 @@ public class ChatGPTClient {
 
     static final String OPENAI_RESPONSES_API_URL = "https://api.openai.com/v1/responses";
     static final String FALLBACK_RESPONSE = "Ik kan nu even niet reageren.";
-    static final String SAFETY_FALLBACK_RESPONSE = "Daar ga ik niet op in. Laten we het gezellig houden.";
     static final String SAFETY_SYSTEM_PROMPT = "You are a Minecraft chat NPC for a general audience including minors. "
             + "Never generate sexual, erotic, pornographic, fetish, explicit, or 18+ content. "
             + "Never produce grooming, exploitative, or suggestive content. "
@@ -38,18 +35,14 @@ public class ChatGPTClient {
     private static final int MAX_CHAT_RESPONSE_LENGTH = 300;
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(20);
-    private static final String SYSTEM_RESPONSE_INSTRUCTION = "Return exactly one short plain-text chat response. Do not use markdown, quotes, or speaker labels.";
-    private static final Pattern INAPPROPRIATE_CONTENT_PATTERN = Pattern.compile(
-            "(?i)(\\b(?:sex|seks|sexual|seksueel|porn|porno|nude|naakt|erotic|erotisch|fetish|nsfw|onlyfans|"
-                    + "rape|verkracht(?:ing)?)\\b|18\\s*\\+)"
-    );
+    private static final String SYSTEM_RESPONSE_INSTRUCTION = "Return exactly one short plain-text Minecraft chat response. "
+            + "If you refuse, keep it brief and safe. Do not use markdown, quotes, or speaker labels.";
 
     private final String apiKey;
     private final String model;
     private final HttpClient httpClient;
     private final boolean safetyEnabled;
     private final String safetySystemPrompt;
-    private final String safetyFallbackResponse;
 
     /**
      * Constructor for the ChatGPTClient.
@@ -67,25 +60,20 @@ public class ChatGPTClient {
                         .connectTimeout(CONNECT_TIMEOUT)
                         .build(),
                 config.getBoolean("openai.safety.enabled", true),
-                config.getString("openai.safety.system_prompt", SAFETY_SYSTEM_PROMPT),
-                config.getString("openai.safety.fallback_response", SAFETY_FALLBACK_RESPONSE)
+                config.getString("openai.safety.system_prompt", SAFETY_SYSTEM_PROMPT)
         );
     }
 
     ChatGPTClient(String apiKey, String model, HttpClient httpClient) {
-        this(apiKey, model, httpClient, true, SAFETY_SYSTEM_PROMPT, SAFETY_FALLBACK_RESPONSE);
+        this(apiKey, model, httpClient, true, SAFETY_SYSTEM_PROMPT);
     }
 
-    ChatGPTClient(String apiKey, String model, HttpClient httpClient, boolean safetyEnabled, String safetySystemPrompt,
-                  String safetyFallbackResponse) {
+    ChatGPTClient(String apiKey, String model, HttpClient httpClient, boolean safetyEnabled, String safetySystemPrompt) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.model = model == null ? "" : model.trim();
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
         this.safetyEnabled = safetyEnabled;
         this.safetySystemPrompt = safetySystemPrompt == null ? "" : safetySystemPrompt.trim();
-        this.safetyFallbackResponse = safetyFallbackResponse == null || safetyFallbackResponse.isBlank()
-                ? SAFETY_FALLBACK_RESPONSE
-                : safetyFallbackResponse.trim();
 
         LoggerUtils.logInfo("Initialized OpenAI client with model: " + (this.model.isEmpty() ? "<empty>" : this.model));
         if (!isConfigured()) {
@@ -142,13 +130,7 @@ public class ChatGPTClient {
                 return FALLBACK_RESPONSE;
             }
 
-            String normalizedResponse = normalizeResponse(parsedResponse);
-            if (violatesSafetyPolicy(normalizedResponse)) {
-                LoggerUtils.logWarning("OpenAI response rejected by local safety guard.");
-                return safetyFallbackResponse;
-            }
-
-            return normalizedResponse;
+            return normalizeResponse(parsedResponse);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             LoggerUtils.logError("OpenAI request interrupted: " + e.getMessage());
@@ -241,14 +223,14 @@ public class ChatGPTClient {
             return "";
         }
 
-        String topLevelOutputText = getString(root, "output_text");
-        if (!topLevelOutputText.isBlank()) {
-            return topLevelOutputText;
-        }
-
         String outputArrayText = extractFromOutputArray(root.getAsJsonArray("output"));
         if (!outputArrayText.isBlank()) {
             return outputArrayText;
+        }
+
+        String topLevelOutputText = getString(root, "output_text");
+        if (!topLevelOutputText.isBlank()) {
+            return topLevelOutputText;
         }
 
         return extractFromLegacyChoices(root.getAsJsonArray("choices"));
@@ -292,16 +274,26 @@ public class ChatGPTClient {
             return "";
         }
 
+        StringBuilder assistantText = new StringBuilder();
+        StringBuilder directOutputText = new StringBuilder();
         for (JsonElement outputItem : outputArray) {
             if (!outputItem.isJsonObject()) {
                 continue;
             }
 
             JsonObject outputObject = outputItem.getAsJsonObject();
+            String outputType = getString(outputObject, "type");
+            if ("output_text".equals(outputType)) {
+                appendText(directOutputText, getString(outputObject, "text"));
+                continue;
+            }
+            if (!"message".equals(outputType)) {
+                continue;
+            }
 
-            String directText = getString(outputObject, "text");
-            if (!directText.isBlank()) {
-                return directText;
+            String role = getString(outputObject, "role");
+            if (!role.isBlank() && !"assistant".equalsIgnoreCase(role)) {
+                continue;
             }
 
             JsonArray content = outputObject.getAsJsonArray("content");
@@ -315,14 +307,25 @@ public class ChatGPTClient {
                 }
 
                 JsonObject contentObject = contentItem.getAsJsonObject();
-                String text = getString(contentObject, "text");
-                if (!text.isBlank()) {
-                    return text;
+                String contentType = getString(contentObject, "type");
+                if ("output_text".equals(contentType) || contentType.isBlank()) {
+                    appendText(assistantText, getString(contentObject, "text"));
+                    continue;
+                }
+                if ("refusal".equals(contentType)) {
+                    String refusalText = getString(contentObject, "refusal");
+                    if (refusalText.isBlank()) {
+                        refusalText = getString(contentObject, "text");
+                    }
+                    appendText(assistantText, refusalText);
                 }
             }
         }
 
-        return "";
+        if (assistantText.length() > 0) {
+            return assistantText.toString();
+        }
+        return directOutputText.toString();
     }
 
     private String extractFromLegacyChoices(JsonArray choicesArray) {
@@ -392,6 +395,16 @@ public class ChatGPTClient {
         return text == null ? "" : text.trim();
     }
 
+    private void appendText(StringBuilder builder, String text) {
+        if (text == null || text.isBlank()) {
+            return;
+        }
+        if (builder.length() > 0) {
+            builder.append(' ');
+        }
+        builder.append(text.trim());
+    }
+
     private String normalizeResponse(String response) {
         String normalized = response.replace("\r\n", "\n").replace('\r', '\n').trim();
         if (normalized.startsWith("\"") && normalized.endsWith("\"") && normalized.length() > 1) {
@@ -412,10 +425,4 @@ public class ChatGPTClient {
         return normalized;
     }
 
-    private boolean violatesSafetyPolicy(String response) {
-        if (!safetyEnabled || response == null || response.isBlank()) {
-            return false;
-        }
-        return INAPPROPRIATE_CONTENT_PATTERN.matcher(response).find();
-    }
 }
