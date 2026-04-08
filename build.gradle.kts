@@ -30,14 +30,14 @@ dependencies {
     implementation("net.citizensnpcs:citizensapi:2.0.42-SNAPSHOT")
     implementation("net.citizensnpcs:citizens-main:2.0.42-SNAPSHOT")
     implementation("io.github.classgraph:classgraph:4.8.184")
-    compileOnly("com.github.retrooper:packetevents-spigot:2.11.2")
+    compileOnly("com.github.retrooper:packetevents-spigot:2.12.0")
 
     testImplementation(platform("org.junit:junit-bom:6.0.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("org.mockito:mockito-junit-jupiter:5.23.0")
     testImplementation("org.mockito:mockito-inline:5.2.0")
-    testImplementation("com.github.retrooper:packetevents-spigot:2.11.2")
+    testImplementation("com.github.retrooper:packetevents-spigot:2.12.0")
 }
 
 java {
