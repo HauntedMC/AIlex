@@ -3,7 +3,7 @@
 [![CI Lint](https://github.com/HauntedMC/AIlex/actions/workflows/ci-lint.yml/badge.svg?branch=main)](https://github.com/HauntedMC/AIlex/actions/workflows/ci-lint.yml)
 [![CI Tests and Coverage](https://github.com/HauntedMC/AIlex/actions/workflows/ci-tests-and-coverage.yml/badge.svg?branch=main)](https://github.com/HauntedMC/AIlex/actions/workflows/ci-tests-and-coverage.yml)
 [![Latest Release](https://img.shields.io/github/v/release/HauntedMC/AIlex?sort=semver)](https://github.com/HauntedMC/AIlex/releases/latest)
-[![Java 21](https://img.shields.io/badge/Java-21-007396?logo=openjdk&logoColor=white)](https://adoptium.net/)
+[![Java 25](https://img.shields.io/badge/Java-25-007396?logo=openjdk&logoColor=white)](https://adoptium.net/)
 [![License](https://img.shields.io/github/license/HauntedMC/AIlex)](LICENSE)
 
 AI-powered NPC framework for Paper servers, focused on movement behaviours, action pipelines, and optional LLM chat interactions.
@@ -22,8 +22,8 @@ AIlex is currently in a very early staged release. Core building blocks are avai
 
 ## Requirements
 
-- Java 21
-- Paper 1.21.11+
+- Java 25
+- Paper 26.1.2+
 - Citizens 2.0.41+ (`citizensapi`/`citizens-main`)
 - packetevents 2.11.2+
 
