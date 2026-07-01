@@ -32,7 +32,7 @@ dependencies {
     implementation("io.github.classgraph:classgraph:4.8.184")
     compileOnly("com.github.retrooper:packetevents-spigot:2.13.0")
 
-    testImplementation(platform("org.junit:junit-bom:6.1.0"))
+    testImplementation(platform("org.junit:junit-bom:6.1.1"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("org.mockito:mockito-junit-jupiter:5.23.0")
