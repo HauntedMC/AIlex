@@ -26,7 +26,6 @@ repositories {
 dependencies {
     paperweight.paperDevBundle("26.2.build.118-stable")
     implementation("net.kyori:adventure-api:5.2.0")
-    implementation("net.byteflux:libby-bukkit:1.3.2")
     implementation("net.citizensnpcs:citizensapi:2.0.43-SNAPSHOT")
     implementation("net.citizensnpcs:citizens-main:2.0.43-SNAPSHOT")
     implementation("io.github.classgraph:classgraph:4.8.192")
@@ -55,7 +54,7 @@ tasks.processResources {
     val props = mapOf("version" to project.version)
     inputs.properties(props)
     filteringCharset = "UTF-8"
-    filesMatching("paper-plugin.yml") {
+    filesMatching("plugin.yml") {
         expand(props)
     }
 }

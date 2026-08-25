@@ -15,10 +15,13 @@ import nl.hauntedmc.ailex.util.LoggerUtils;
 import nl.hauntedmc.ailex.ai.llm.ChatGPTClient;
 
 import org.bukkit.Bukkit;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.scheduler.BukkitRunnable;
+
+import java.util.concurrent.TimeUnit;
 
 /**
  * Listener for chat events.
@@ -26,8 +29,15 @@ import org.bukkit.scheduler.BukkitRunnable;
  */
 public class LLMChatListener implements Listener {
 
+    private static final String RATE_LIMIT_ENABLED_PATH = "openai.rate_limit.enabled";
+    private static final String RATE_LIMIT_MAX_RESPONSES_PATH = "openai.rate_limit.max_responses_per_player";
+    private static final String RATE_LIMIT_WINDOW_SECONDS_PATH = "openai.rate_limit.window_seconds";
+    private static final int DEFAULT_MAX_RESPONSES_PER_PLAYER = 10;
+    private static final long DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60L * 60L;
+
     private final ChatGPTClient chatGPTClient;
     private final AIlexPlugin plugin;
+    private final PlayerResponseRateLimiter responseRateLimiter;
     static final String PLACEHOLDER_PLAYER_NAME = "{player_name}";
     static final String PLACEHOLDER_PLAYER_DISPLAY_NAME = "{player_display_name}";
     static final String PLACEHOLDER_NPC_NAME = "{npc_name}";
@@ -41,6 +51,7 @@ public class LLMChatListener implements Listener {
     public LLMChatListener(AIlexPlugin plugin) {
         this.chatGPTClient = plugin.getChatGPTClient();
         this.plugin = plugin;
+        this.responseRateLimiter = new PlayerResponseRateLimiter(this::getResponseRateLimit, System::currentTimeMillis);
     }
 
     /**
@@ -74,6 +85,10 @@ public class LLMChatListener implements Listener {
 
             String npcName = npc.getName();
             if (chatMessage.toLowerCase().contains(npcName.toLowerCase())) {
+                if (!responseRateLimiter.tryAcquire(source.getUniqueId())) {
+                    return;
+                }
+
                 String npcDisplayName = npc.getDisplayName();
                 String sourceName = source.getName();
                 String systemPrompt = buildSystemPrompt(npc);
@@ -98,6 +113,37 @@ public class LLMChatListener implements Listener {
                 return;
             }
         }
+    }
+
+    private PlayerResponseRateLimiter.ResponseRateLimit getResponseRateLimit() {
+        FileConfiguration config = plugin.getConfig();
+        if (config == null) {
+            return defaultResponseRateLimit();
+        }
+
+        boolean enabled = config.getBoolean(RATE_LIMIT_ENABLED_PATH, true);
+        int maxResponses = Math.max(1, config.getInt(
+                RATE_LIMIT_MAX_RESPONSES_PATH,
+                DEFAULT_MAX_RESPONSES_PER_PLAYER
+        ));
+        long windowSeconds = Math.max(1L, config.getLong(
+                RATE_LIMIT_WINDOW_SECONDS_PATH,
+                DEFAULT_RATE_LIMIT_WINDOW_SECONDS
+        ));
+
+        return new PlayerResponseRateLimiter.ResponseRateLimit(
+                enabled,
+                maxResponses,
+                TimeUnit.SECONDS.toMillis(windowSeconds)
+        );
+    }
+
+    private PlayerResponseRateLimiter.ResponseRateLimit defaultResponseRateLimit() {
+        return new PlayerResponseRateLimiter.ResponseRateLimit(
+                true,
+                DEFAULT_MAX_RESPONSES_PER_PLAYER,
+                TimeUnit.SECONDS.toMillis(DEFAULT_RATE_LIMIT_WINDOW_SECONDS)
+        );
     }
 
     String buildSystemPrompt(NPC npc) {
