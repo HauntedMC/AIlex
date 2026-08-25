@@ -48,28 +48,28 @@ public class LLMChatListener implements Listener {
     private static final String RATE_LIMIT_ENABLED_PATH = "openai.rate_limit.enabled";
     private static final String RATE_LIMIT_MAX_RESPONSES_PATH = "openai.rate_limit.max_responses_per_player";
     private static final String RATE_LIMIT_WINDOW_SECONDS_PATH = "openai.rate_limit.window_seconds";
-    private static final int DEFAULT_MAX_RESPONSES_PER_PLAYER = 10;
+    private static final int DEFAULT_MAX_RESPONSES_PER_PLAYER = 20;
     private static final long DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60L * 60L;
     private static final String BASE_KNOWLEDGE_PATH = "openai.base_knowledge";
-    private static final int DEFAULT_BASE_KNOWLEDGE_MAX_CHARACTERS = 4200;
-    private static final int MAX_BASE_KNOWLEDGE_CHARACTERS = 15000;
+    private static final int DEFAULT_BASE_KNOWLEDGE_MAX_CHARACTERS = 8400;
+    private static final int MAX_BASE_KNOWLEDGE_CHARACTERS = 30000;
     private static final String CHAT_CONTEXT_PATH = "openai.chat_context";
     private static final String METADATA_PATH = CHAT_CONTEXT_PATH + ".metadata";
-    private static final int DEFAULT_CONTEXT_MESSAGE_MAX_CHARACTERS = 240;
-    private static final int DEFAULT_METADATA_MAX_CHARACTERS = 1800;
-    private static final int MAX_METADATA_CHARACTERS = 6000;
+    private static final int DEFAULT_CONTEXT_MESSAGE_MAX_CHARACTERS = 480;
+    private static final int DEFAULT_METADATA_MAX_CHARACTERS = 3600;
+    private static final int MAX_METADATA_CHARACTERS = 12000;
     private static final int DEFAULT_NEARBY_PLAYER_RADIUS = 48;
     private static final int DEFAULT_NEARBY_PLAYER_MAX_COUNT = 5;
-    private static final int DEFAULT_GENERAL_CHAT_MAX_MESSAGES = 150;
+    private static final int DEFAULT_GENERAL_CHAT_MAX_MESSAGES = 300;
     private static final long DEFAULT_GENERAL_CHAT_MAX_AGE_SECONDS = 4L * 60L * 60L;
-    private static final int DEFAULT_CONVERSATION_MAX_MESSAGES = 40;
+    private static final int DEFAULT_CONVERSATION_MAX_MESSAGES = 80;
     private static final long DEFAULT_CONVERSATION_MAX_AGE_SECONDS = 4L * 60L * 60L;
-    private static final int DEFAULT_GENERAL_CHAT_CONTEXT_MAX_CHARACTERS = 4500;
-    private static final int DEFAULT_CONVERSATION_CONTEXT_MAX_CHARACTERS = 3000;
-    private static final int DEFAULT_BOT_MEMORY_MAX_MESSAGES = 80;
+    private static final int DEFAULT_GENERAL_CHAT_CONTEXT_MAX_CHARACTERS = 9000;
+    private static final int DEFAULT_CONVERSATION_CONTEXT_MAX_CHARACTERS = 6000;
+    private static final int DEFAULT_BOT_MEMORY_MAX_MESSAGES = 160;
     private static final long DEFAULT_BOT_MEMORY_MAX_AGE_SECONDS = 6L * 60L * 60L;
-    private static final int DEFAULT_BOT_MEMORY_CONTEXT_MAX_CHARACTERS = 4800;
-    private static final int DEFAULT_TOTAL_CONTEXT_MAX_CHARACTERS = 20000;
+    private static final int DEFAULT_BOT_MEMORY_CONTEXT_MAX_CHARACTERS = 9600;
+    private static final int DEFAULT_TOTAL_CONTEXT_MAX_CHARACTERS = 40000;
     private static final String DEFAULT_MEMORY_INSTRUCTION = "Gebruik de chatcontext als historische informatie. "
             + "Bij vragen als wie/wat/wanneer iemand tegen jou zei, haal je het antwoord precies uit "
             + "'Recente berichten aan {npc_name}' of 'Recente serverchat'. Zeg alleen dat je het niet weet "
@@ -513,7 +513,7 @@ public class LLMChatListener implements Listener {
                 Math.clamp(
                         config.getInt(CHAT_CONTEXT_PATH + ".max_context_characters", DEFAULT_TOTAL_CONTEXT_MAX_CHARACTERS),
                         1,
-                        30000
+                        60000
                 )
         );
     }
@@ -530,7 +530,7 @@ public class LLMChatListener implements Listener {
                 config.getBoolean(path + ".enabled", true),
                 Math.max(1, config.getInt(path + ".max_messages", defaultMaxMessages)),
                 TimeUnit.SECONDS.toMillis(Math.max(1L, config.getLong(path + ".max_age_seconds", defaultMaxAgeSeconds))),
-                Math.clamp(config.getInt(path + ".max_context_characters", defaultMaxContextCharacters), 1, 15000)
+                Math.clamp(config.getInt(path + ".max_context_characters", defaultMaxContextCharacters), 1, 30000)
         );
     }
 

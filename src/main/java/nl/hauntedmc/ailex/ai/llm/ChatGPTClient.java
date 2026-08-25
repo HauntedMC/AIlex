@@ -32,7 +32,7 @@ public class ChatGPTClient {
             + "If asked for inappropriate content, refuse briefly and redirect to a safe topic. "
             + "Keep all replies age-appropriate and safe-for-work.";
 
-    private static final int MAX_CHAT_RESPONSE_LENGTH = 300;
+    private static final int MAX_CHAT_RESPONSE_LENGTH = 600;
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(20);
     private static final String SYSTEM_RESPONSE_INSTRUCTION = "Return exactly one short plain-text Minecraft chat response. "
