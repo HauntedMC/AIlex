@@ -7,6 +7,9 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import nl.hauntedmc.ailex.AIlexPlugin;
+import nl.hauntedmc.ailex.listener.llm.proactive.ProactiveChatService;
+import nl.hauntedmc.ailex.listener.llm.proactive.ProactiveChatSettings;
+import nl.hauntedmc.ailex.listener.llm.proactive.ProactiveChatTrigger;
 import nl.hauntedmc.ailex.npc.NPC;
 import nl.hauntedmc.ailex.npc.NPCHandler;
 import nl.hauntedmc.ailex.npc.NPCProperties;
@@ -26,8 +29,10 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.lang.management.ManagementFactory;
 import java.time.Duration;
@@ -87,6 +92,8 @@ public class LLMChatListener implements Listener {
     private final ChatRequestGate requestGate;
     private final ChatContextStore chatContextStore;
     private final KnowledgeRepository knowledgeRepository;
+    private final ProactiveChatService proactiveChatService;
+    private BukkitTask idleConversationTask;
     static final String PLACEHOLDER_PLAYER_NAME = "{player_name}";
     static final String PLACEHOLDER_PLAYER_DISPLAY_NAME = "{player_display_name}";
     static final String PLACEHOLDER_NPC_NAME = "{npc_name}";
@@ -103,6 +110,24 @@ public class LLMChatListener implements Listener {
         this.requestGate = new ChatRequestGate();
         this.chatContextStore = new ChatContextStore(System::currentTimeMillis);
         this.knowledgeRepository = new KnowledgeRepository(plugin);
+        this.proactiveChatService = new ProactiveChatService(() -> ProactiveChatSettings.from(plugin.getConfig()));
+    }
+
+    /**
+     * Starts the low-frequency idle conversation check after the plugin has enabled.
+     * Repeated calls are intentionally ignored so reload-related listener setup cannot duplicate it.
+     */
+    public void startProactiveConversationChecks() {
+        if (idleConversationTask != null) {
+            return;
+        }
+        idleConversationTask = Bukkit.getScheduler().runTaskTimer(plugin,
+                () -> proactiveChatService.checkForIdleConversation(
+                        new ArrayList<>(Bukkit.getOnlinePlayers()),
+                        this::submitProactiveResponse
+                ),
+                20L,
+                20L);
     }
 
     /**
@@ -126,6 +151,7 @@ public class LLMChatListener implements Listener {
      * @param message the chat message
      */
     void forwardChatToAI(Player source, Component message) {
+        proactiveChatService.recordPlayerMessage();
         NPCHandler npcHandler = plugin.getNPCHandler();
         if (npcHandler == null) {
             return;
@@ -189,21 +215,22 @@ public class LLMChatListener implements Listener {
                                 return;
                             }
                             String response = chatGPTClient.getChatResponse(systemPrompt, contextualPrompt);
-
+                            if (response == null || response.isBlank()) {
+                                return;
+                            }
                             Component result = FormatterUtils.serializer.deserialize(npcDisplayName + ": ")
                                     .append(Component.text(response, NamedTextColor.WHITE));
 
-                            if (!response.isEmpty()) {
-                                chatContextStore.recordConversation(
-                                        sourceId,
-                                        npcId,
-                                        npcName,
-                                        response,
-                                        contextSettings
-                                );
-                                chatContextStore.recordBotMemory(npcId, npcName, response, contextSettings);
-                                Bukkit.getScheduler().runTask(plugin, () -> deliverResponse(source, result));
-                            }
+                            chatContextStore.recordConversation(
+                                    sourceId,
+                                    npcId,
+                                    npcName,
+                                    response,
+                                    contextSettings
+                            );
+                            chatContextStore.recordBotMemory(npcId, npcName, response, contextSettings);
+                            proactiveChatService.recordBotResponse();
+                            Bukkit.getScheduler().runTask(plugin, () -> deliverResponse(source, result));
                         } catch (Exception e) {
                             LoggerUtils.logError(e.getMessage());
                         } finally {
@@ -220,6 +247,78 @@ public class LLMChatListener implements Listener {
         }
 
         chatContextStore.recordGeneralChat(source.getName(), chatMessage, contextSettings);
+        proactiveChatService.onChat(source, chatMessage, this::getOnlinePlayers, this::submitProactiveResponse);
+    }
+
+    /**
+     * Gives a newly joined player an occasional, deliberately restrained welcome.
+     * NPC player-info setup remains in {@code PlayerJoinListener}; this listener only owns AI behaviour.
+     *
+     * @param event the player join event
+     */
+    @EventHandler(ignoreCancelled = true)
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        proactiveChatService.onJoin(event.getPlayer(), this::submitProactiveResponse);
+    }
+
+    private java.util.Collection<? extends Player> getOnlinePlayers() {
+        return plugin.getServer().getOnlinePlayers();
+    }
+
+    private NPC findAvailableNpc() {
+        NPCHandler npcHandler = plugin.getNPCHandler();
+        if (npcHandler == null) {
+            return null;
+        }
+        return npcHandler.getNPCRegistry().values().stream()
+                .filter(NPC::isChatEnabled)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private boolean submitProactiveResponse(Player contextPlayer, ProactiveChatTrigger trigger) {
+        NPC npc = findAvailableNpc();
+        if (npc == null) {
+            return false;
+        }
+        UUID requestId = UUID.nameUUIDFromBytes(("ailex-proactive-" + npc.getId())
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        if (!requestGate.tryAcquire(requestId, getMaximumConcurrentRequests())) {
+            return false;
+        }
+        ChatContextStore.ContextSettings contextSettings = getChatContextSettings();
+        String npcName = npc.getName();
+        String npcDisplayName = npc.getDisplayName();
+        String systemPrompt = buildSystemPrompt(npc, trigger.context());
+        String userPrompt = "Proactieve aanleiding: \"" + trigger.context() + "\"\n" + trigger.instruction()
+                + " Antwoord als " + npcName + " in exact één korte, gewone chatregel, zonder speaker label.";
+        String contextualPrompt = appendContext(userPrompt, trigger.context(), contextPlayer, npc, contextSettings);
+
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                try {
+                    ChatGPTClient chatGPTClient = plugin.getChatGPTClient();
+                    if (chatGPTClient == null) {
+                        return;
+                    }
+                    String response = chatGPTClient.getChatResponse(systemPrompt, contextualPrompt);
+                    if (response == null || response.isBlank() || !trigger.accepts(response)) {
+                        return;
+                    }
+                    Component result = FormatterUtils.serializer.deserialize(npcDisplayName + ": ")
+                            .append(Component.text(response, NamedTextColor.WHITE));
+                    chatContextStore.recordBotMemory(npc.getId(), npcName, response, contextSettings);
+                    proactiveChatService.recordBotResponse();
+                    Bukkit.getScheduler().runTask(plugin, () -> deliverProactiveResponse(contextPlayer, result));
+                } catch (Exception e) {
+                    LoggerUtils.logError(e.getMessage());
+                } finally {
+                    requestGate.release(requestId);
+                }
+            }
+        }.runTaskAsynchronously(plugin);
+        return true;
     }
 
     private boolean isNpcMentioned(String chatMessage, String npcName) {
@@ -291,6 +390,23 @@ public class LLMChatListener implements Listener {
         FileConfiguration config = plugin.getConfig();
         String visibility = config == null ? "requester"
                 : config.getString(CHAT_RESPONSE_VISIBILITY_PATH, "requester");
+        deliverResponse(source, response, visibility);
+    }
+
+    private void deliverProactiveResponse(Player source, Component response) {
+        String visibility = proactiveChatService.responseVisibility();
+        if ("server".equalsIgnoreCase(visibility)) {
+            plugin.getServer().broadcast(response);
+            return;
+        }
+        if (!source.isOnline()) {
+            return;
+        }
+        deliverResponse(source, response, visibility);
+    }
+
+    private void deliverResponse(Player source, Component response, String visibility) {
+        FileConfiguration config = plugin.getConfig();
         String normalizedVisibility = visibility == null ? "requester" : visibility.toLowerCase(Locale.ROOT);
         switch (normalizedVisibility) {
             case "server" -> plugin.getServer().broadcast(response);

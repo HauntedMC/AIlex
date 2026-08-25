@@ -91,7 +91,9 @@ public class AIlexPlugin extends JavaPlugin {
      */
     private void registerListeners() {
         // Register here all listeners
-        getServer().getPluginManager().registerEvents(new LLMChatListener(this), this);
+        LLMChatListener chatListener = new LLMChatListener(this);
+        getServer().getPluginManager().registerEvents(chatListener, this);
+        chatListener.startProactiveConversationChecks();
         getServer().getPluginManager().registerEvents(new NPCDeathListener(this), this);
         getServer().getPluginManager().registerEvents(new NPCSpawnListener(this), this);
         getServer().getPluginManager().registerEvents(new PlayerJoinListener(this), this);
