@@ -2,6 +2,8 @@ package nl.hauntedmc.ailex.entity;
 
 import io.papermc.paper.entity.TeleportFlag;
 import io.papermc.paper.entity.LookAnchor;
+import io.papermc.paper.entity.RemovalReason;
+import io.papermc.paper.math.Angle;
 import io.papermc.paper.threadedregions.scheduler.EntityScheduler;
 import io.papermc.paper.datacomponent.DataComponentType;
 
@@ -13,6 +15,7 @@ import net.citizensnpcs.api.npc.NPCRegistry;
 import net.citizensnpcs.trait.SkinTrait;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.sound.Sound.Source;
 import net.kyori.adventure.util.TriState;
 
 import nl.hauntedmc.ailex.AIlexPlugin;
@@ -23,6 +26,7 @@ import org.bukkit.block.PistonMoveReaction;
 import org.bukkit.entity.*;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityRemoveEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.metadata.MetadataValue;
 import org.bukkit.permissions.Permission;
@@ -179,6 +183,16 @@ public class FakePlayer implements Entity {
     // Do not change the implementation of these methods
     // ------------------------------------------------------------------------------
     @Override
+    public @Nullable EntityRemoveEvent.Cause getRemoveEventCause() {
+        return npc.getEntity().getRemoveEventCause();
+    }
+
+    @Override
+    public @Nullable RemovalReason getRemovalReason() {
+        return npc.getEntity().getRemovalReason();
+    }
+
+    @Override
     public boolean isDead() {
         return npc.getEntity().isDead();
     }
@@ -331,6 +345,16 @@ public class FakePlayer implements Entity {
     @Override
     public @NotNull Sound getSwimHighSpeedSplashSound() {
         return npc.getEntity().getSwimHighSpeedSplashSound();
+    }
+
+    @Override
+    public @NotNull SoundCategory getSoundCategory() {
+        return npc.getEntity().getSoundCategory();
+    }
+
+    @Override
+    public @NotNull Source soundSource() {
+        return npc.getEntity().soundSource();
     }
 
     @Override
@@ -693,6 +717,11 @@ public class FakePlayer implements Entity {
     @Override
     public void setRotation(float v, float v1) {
         npc.getEntity().setRotation(v, v1);
+    }
+
+    @Override
+    public void setRotation(@NotNull Angle yaw, @NotNull Angle pitch) {
+        npc.getEntity().setRotation(yaw, pitch);
     }
 
     @Override

@@ -24,8 +24,8 @@ repositories {
 }
 
 dependencies {
-    paperweight.paperDevBundle("26.1.2.build.64-stable")
-    implementation("net.kyori:adventure-api:4.26.1")
+    paperweight.paperDevBundle("26.2.build.118-stable")
+    implementation("net.kyori:adventure-api:5.2.0")
     implementation("net.byteflux:libby-bukkit:1.3.2")
     implementation("net.citizensnpcs:citizensapi:2.0.43-SNAPSHOT")
     implementation("net.citizensnpcs:citizens-main:2.0.43-SNAPSHOT")
