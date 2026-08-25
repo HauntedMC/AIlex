@@ -134,7 +134,7 @@ public class LLMChatListener implements Listener {
      * Handle the chat event and forward player messages to AI when an NPC is mentioned.
      * @param event the chat event
      */
-    @EventHandler
+    @EventHandler(ignoreCancelled = true)
     public void onChat(AsyncChatEvent event) {
         Player source = event.getPlayer();
         Component message = event.message();

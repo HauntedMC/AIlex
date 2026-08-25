@@ -21,7 +21,7 @@ openai:
   # Carefully limited, opt-in behaviour for bots that can contribute without being named.
   # All proactive replies share this cooldown and use the normal concurrent-request cap.
   proactive_chat:
-    enabled: trueis
+    enabled: true
     # server (recommended), nearby, or requester. Proactive replies are intended to feel like public chat.
     response_visibility: "server"
     cooldown_seconds: 120
