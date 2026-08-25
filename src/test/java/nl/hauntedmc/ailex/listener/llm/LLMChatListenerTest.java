@@ -6,7 +6,13 @@ import nl.hauntedmc.ailex.AIlexPlugin;
 import nl.hauntedmc.ailex.ai.llm.ChatGPTClient;
 import nl.hauntedmc.ailex.npc.NPC;
 import nl.hauntedmc.ailex.npc.NPCHandler;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -115,6 +121,81 @@ class LLMChatListenerTest {
                 nl.hauntedmc.ailex.npc.NPCProperties.DEFAULT_SYSTEM_PROMPT,
                 listener.buildSystemPrompt(npc)
         );
+    }
+
+    @Test
+    void buildSystemPromptShouldAppendConfiguredBaseKnowledge() {
+        NPC npc = mock(NPC.class);
+        when(npc.getSystemPrompt()).thenReturn("NPC persona");
+        AIlexPlugin plugin = mockPluginWithNpcRegistry(new HashMap<>());
+        YamlConfiguration config = new YamlConfiguration();
+        config.set("openai.base_knowledge.enabled", true);
+        config.set("openai.base_knowledge.max_characters", 12);
+        config.set("openai.base_knowledge.prompt", "HauntedMC heeft Survival.");
+        config.set("openai.chat_context.memory_instruction", "");
+        when(plugin.getConfig()).thenReturn(config);
+
+        String prompt = new LLMChatListener(plugin).buildSystemPrompt(npc);
+
+        assertEquals("NPC persona\n\n[Betrouwbare HauntedMC-basiskennis]\nHauntedMC he", prompt);
+    }
+
+    @Test
+    void buildMetadataShouldIncludeConfiguredHeldItemOnly() {
+        AIlexPlugin plugin = mockPluginWithNpcRegistry(new HashMap<>());
+        YamlConfiguration config = metadataConfigWithAllValuesDisabled();
+        config.set("openai.chat_context.metadata.player.include_held_item", true);
+        when(plugin.getConfig()).thenReturn(config);
+
+        Player player = mock(Player.class);
+        World world = mock(World.class);
+        PlayerInventory inventory = mock(PlayerInventory.class);
+        when(player.getWorld()).thenReturn(world);
+        when(player.getLocation()).thenReturn(new Location(world, 0, 64, 0));
+        when(player.getInventory()).thenReturn(inventory);
+        ItemStack heldItem = mock(ItemStack.class);
+        when(heldItem.getType()).thenReturn(Material.DIAMOND);
+        when(heldItem.getAmount()).thenReturn(2);
+        when(inventory.getItemInMainHand()).thenReturn(heldItem);
+
+        assertEquals(
+                "player_main_hand=minecraft:diamondx2",
+                new LLMChatListener(plugin).buildMetadata(player, mock(NPC.class))
+        );
+    }
+
+    private static YamlConfiguration metadataConfigWithAllValuesDisabled() {
+        YamlConfiguration config = new YamlConfiguration();
+        config.set("openai.chat_context.metadata.enabled", true);
+        config.set("openai.chat_context.metadata.include_player_world", false);
+        config.set("openai.chat_context.metadata.include_player_coordinates", false);
+        config.set("openai.chat_context.metadata.include_player_game_mode", false);
+        config.set("openai.chat_context.metadata.include_player_health", false);
+        config.set("openai.chat_context.metadata.include_player_food_level", false);
+        config.set("openai.chat_context.metadata.include_world_time", false);
+        config.set("openai.chat_context.metadata.include_weather", false);
+        config.set("openai.chat_context.metadata.include_npc_world", false);
+        config.set("openai.chat_context.metadata.include_npc_coordinates", false);
+        config.set("openai.chat_context.metadata.player.include_biome", false);
+        config.set("openai.chat_context.metadata.player.include_facing", false);
+        config.set("openai.chat_context.metadata.player.include_experience", false);
+        config.set("openai.chat_context.metadata.player.include_held_item", false);
+        config.set("openai.chat_context.metadata.player.include_armor", false);
+        config.set("openai.chat_context.metadata.player.include_ping", false);
+        config.set("openai.chat_context.metadata.player.include_playtime", false);
+        config.set("openai.chat_context.metadata.world.include_difficulty", false);
+        config.set("openai.chat_context.metadata.world.include_environment", false);
+        config.set("openai.chat_context.metadata.world.include_light_level", false);
+        config.set("openai.chat_context.metadata.server.include_name", false);
+        config.set("openai.chat_context.metadata.server.include_online_player_count", false);
+        config.set("openai.chat_context.metadata.server.include_version", false);
+        config.set("openai.chat_context.metadata.server.include_performance", false);
+        config.set("openai.chat_context.metadata.server.include_uptime", false);
+        config.set("openai.chat_context.metadata.nearby_players.enabled", false);
+        config.set("openai.chat_context.metadata.bot.include_id", false);
+        config.set("openai.chat_context.metadata.bot.include_movement_behaviour", false);
+        config.set("openai.chat_context.metadata.bot.include_current_action", false);
+        return config;
     }
 
     private static AIlexPlugin mockPluginWithNpcRegistry(HashMap<Integer, NPC> registry) {

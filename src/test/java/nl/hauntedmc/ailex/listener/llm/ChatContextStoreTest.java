@@ -47,6 +47,21 @@ class ChatContextStoreTest {
     }
 
     @Test
+    void shouldKeepSharedBotMemoryAvailableToEveryPlayer() {
+        ChatContextStore store = new ChatContextStore(() -> 0L);
+        ChatContextStore.ContextSettings settings = settings(5, 5, 1_000L);
+
+        store.recordBotMemory(1, "PlayerX", "hi Alfred you okay", settings);
+        store.recordBotMemory(1, "Alfred", "Ja hoor!", settings);
+
+        String context = store.buildContext(UUID.randomUUID(), 1, "Alfred", settings);
+
+        assertTrue(context.contains("Recente berichten aan Alfred"));
+        assertTrue(context.contains("PlayerX: hi Alfred you okay"));
+        assertTrue(context.contains("Alfred: Ja hoor!"));
+    }
+
+    @Test
     void shouldRemoveExpiredChatAndCompactLongMessages() {
         AtomicLong now = new AtomicLong(0L);
         ChatContextStore store = new ChatContextStore(now::get);
@@ -81,8 +96,10 @@ class ChatContextStoreTest {
                 maxMessageCharacters,
                 true,
                 "HH:mm:ss",
-                new ChatContextStore.HistorySettings(true, generalMaxMessages, maxAgeMillis),
-                new ChatContextStore.HistorySettings(true, conversationMaxMessages, maxAgeMillis)
+                new ChatContextStore.HistorySettings(true, generalMaxMessages, maxAgeMillis, 1_000),
+                new ChatContextStore.HistorySettings(true, conversationMaxMessages, maxAgeMillis, 1_000),
+                new ChatContextStore.HistorySettings(true, 10, maxAgeMillis, 1_000),
+                3_000
         );
     }
 }

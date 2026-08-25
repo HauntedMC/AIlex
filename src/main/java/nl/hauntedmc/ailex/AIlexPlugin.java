@@ -13,6 +13,7 @@ import nl.hauntedmc.ailex.util.LoggerUtils;
 import nl.hauntedmc.ailex.ai.llm.ChatGPTClient;
 
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.command.PluginCommand;
 
 /**
  * Main class of the AIlex plugin
@@ -74,7 +75,14 @@ public class AIlexPlugin extends JavaPlugin {
      * Here you must register new commands
      */
     private void registerCommands() {
-        registerCommand("ailex", "Main command for AIlex", new MainCommand(this));
+        PluginCommand ailexCommand = getCommand("ailex");
+        if (ailexCommand == null) {
+            throw new IllegalStateException("The ailex command is missing from plugin.yml");
+        }
+
+        MainCommand mainCommand = new MainCommand(this);
+        ailexCommand.setExecutor(mainCommand);
+        ailexCommand.setTabCompleter(mainCommand);
     }
 
     /**

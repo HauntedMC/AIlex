@@ -55,7 +55,7 @@ public class ChatGPTClient {
     ChatGPTClient(FileConfiguration config) {
         this(
                 config.getString("openai.api_key", ""),
-                config.getString("openai.model", "gpt-4.1-mini"),
+                config.getString("openai.model", "gpt-5.4-mini"),
                 HttpClient.newBuilder()
                         .connectTimeout(CONNECT_TIMEOUT)
                         .build(),

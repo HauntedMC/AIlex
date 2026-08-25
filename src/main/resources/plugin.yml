@@ -5,3 +5,7 @@ description: AI-powered Minecraft NPC framework
 author: HauntedMC
 api-version: '26.2'
 depend: [Citizens, packetevents]
+commands:
+  ailex:
+    description: Main command for AIlex
+    usage: /ailex <subcommand>

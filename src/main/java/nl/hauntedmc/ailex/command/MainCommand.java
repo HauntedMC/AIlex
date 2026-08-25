@@ -1,8 +1,5 @@
 package nl.hauntedmc.ailex.command;
 
-import io.papermc.paper.command.brigadier.BasicCommand;
-import io.papermc.paper.command.brigadier.CommandSourceStack;
-
 import net.kyori.adventure.text.Component;
 
 import nl.hauntedmc.ailex.AIlexPlugin;
@@ -15,6 +12,10 @@ import nl.hauntedmc.ailex.npc.NPCData;
 import nl.hauntedmc.ailex.util.LoggerUtils;
 import nl.hauntedmc.ailex.util.ReflectionUtils;
 
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 
 import org.jetbrains.annotations.NotNull;
@@ -35,7 +36,7 @@ import java.util.stream.Collectors;
  * - currentaction: gets the current action of an existing AIlex NPC
  * - cancelaction: cancels the current action of an existing AIlex NPC
  */
-public class MainCommand implements BasicCommand {
+public class MainCommand implements CommandExecutor, TabCompleter {
 
     private final AIlexPlugin plugin;
     private final Map<String, Class<? extends MovementBehaviour>> behaviourMap;
@@ -54,13 +55,18 @@ public class MainCommand implements BasicCommand {
     }
 
     /**
-     * Executes the command with the given commandSourceStack and arguments.
-     * @param commandSourceStack the commandSourceStack of the command
-     * @param args the arguments of the command ignoring repeated spaces
+     * Executes the command with the given sender and arguments.
+     *
+     * @param sender the command sender
+     * @param command the command being executed
+     * @param label the command label used by the sender
+     * @param args the supplied command arguments
+     * @return whether the command was handled
      */
     @Override
-    public void execute(@NotNull CommandSourceStack commandSourceStack, @NotNull String[] args) {
-        if (commandSourceStack.getSender() instanceof Player player) {
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
+                             @NotNull String[] args) {
+        if (sender instanceof Player player) {
 
             if (args.length == 1) {
                 if (args[0].equalsIgnoreCase("reload")) {
@@ -68,7 +74,7 @@ public class MainCommand implements BasicCommand {
                     plugin.reloadChatGPTClient();
                     LoggerUtils.logInfo("AIlex configuration reloaded.");
                     sendCommandMessage(player, "AIlex configuration reloaded.");
-                    return;
+                    return true;
                 }
             }
 
@@ -79,7 +85,7 @@ public class MainCommand implements BasicCommand {
                     id = Integer.parseInt(args[1]);
                 } catch (NumberFormatException e) {
                     sendCommandMessage(player, "Invalid ID.");
-                    return;
+                    return true;
                 }
 
                 switch (args[0].toLowerCase()) {
@@ -107,7 +113,7 @@ public class MainCommand implements BasicCommand {
                         } else {
                             sendCommandMessage(player, "Usage: /ailex action <id> <move>");
                         }
-                        return;
+                        return true;
 
                     case "cancelaction":
                         if (plugin.getNPCHandler().getNPCRegistry().containsKey(id)) {
@@ -122,7 +128,7 @@ public class MainCommand implements BasicCommand {
                         } else {
                             sendCommandMessage(player, "NPC " + id + " does not exist.");
                         }
-                        return;
+                        return true;
 
                     case "create":
                         if (args.length == 4) {
@@ -151,7 +157,7 @@ public class MainCommand implements BasicCommand {
                         } else {
                             sendCommandMessage(player, "Usage: /ailex create <id> <type> <name>");
                         }
-                        return;
+                        return true;
 
                     case "currentaction":
                         if (plugin.getNPCHandler().getNPCRegistry().containsKey(id)) {
@@ -165,7 +171,7 @@ public class MainCommand implements BasicCommand {
                         } else {
                             sendCommandMessage(player, "NPC " + id + " does not exist.");
                         }
-                        return;
+                        return true;
 
                     case "remove":
                         try {
@@ -175,7 +181,7 @@ public class MainCommand implements BasicCommand {
                         catch (IllegalArgumentException e) {
                             sendCommandMessage(player, "Failed to remove NPC: " + e.getMessage());
                         }
-                        return;
+                        return true;
 
                     case "save":
                         try {
@@ -185,7 +191,7 @@ public class MainCommand implements BasicCommand {
                         catch (IllegalArgumentException e) {
                             sendCommandMessage(player, "Failed to save NPC: " + e.getMessage());
                         }
-                        return;
+                        return true;
 
                     case "set":
                         if (args.length >= 4) {
@@ -217,7 +223,7 @@ public class MainCommand implements BasicCommand {
                         } else {
                             sendCommandMessage(player, "Usage: /ailex set <id> <movebehaviour> <>");
                         }
-                        return;
+                        return true;
 
                     default:
                         sendCommandMessage(player, "Unknown command.");
@@ -225,7 +231,11 @@ public class MainCommand implements BasicCommand {
             } else {
                 sendCommandMessage(player, "Usage: /ailex <subcommand>");
             }
+        } else {
+            sender.sendMessage(Component.text("[AIlex] This command can only be used by a player."));
         }
+
+        return true;
     }
 
     private void sendCommandMessage(Player player, String message) {
@@ -235,12 +245,15 @@ public class MainCommand implements BasicCommand {
     /**
      * Suggests possible completions for the command based on the arguments provided.
      * TODO: Also get smart tips
-     * @param commandSourceStack the commandSourceStack of the command
+     * @param sender the command sender
+     * @param command the command being completed
+     * @param alias the command label used by the sender
      * @param args the arguments of the command including repeated spaces
      * @return a collection of possible completions for the command
      */
     @Override
-    public @NotNull Collection<String> suggest(@NotNull CommandSourceStack commandSourceStack, @NotNull String[] args) {
+    public @NotNull List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
+                                                @NotNull String alias, @NotNull String[] args) {
         final List<String> subcommands = Arrays.asList( "action",
                                                         "cancelaction",
                                                         "create",

@@ -1,9 +1,9 @@
 package nl.hauntedmc.ailex.command;
 
-import io.papermc.paper.command.brigadier.CommandSourceStack;
 import nl.hauntedmc.ailex.AIlexPlugin;
 import nl.hauntedmc.ailex.npc.NPCHandler;
 import nl.hauntedmc.ailex.testutil.ConfigTestSupport;
+import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.junit.jupiter.api.AfterEach;
@@ -44,9 +44,9 @@ class MainCommandTest {
         when(npcHandler.getNPCRegistry()).thenReturn(new HashMap<>());
 
         MainCommand command = new MainCommand(plugin);
-        CommandSourceStack source = mock(CommandSourceStack.class);
+        CommandSender source = mock(CommandSender.class);
 
-        Collection<String> suggestions = command.suggest(source, new String[]{});
+        Collection<String> suggestions = tabComplete(command, source, new String[]{});
 
         assertTrue(suggestions.contains("create"));
         assertTrue(suggestions.contains("action"));
@@ -64,9 +64,9 @@ class MainCommandTest {
         when(npcHandler.getNPCRegistry()).thenReturn(registry);
 
         MainCommand command = new MainCommand(plugin);
-        CommandSourceStack source = mock(CommandSourceStack.class);
+        CommandSender source = mock(CommandSender.class);
 
-        Collection<String> suggestions = command.suggest(source, new String[]{"action"});
+        Collection<String> suggestions = tabComplete(command, source, new String[]{"action"});
 
         assertTrue(suggestions.contains("3"));
         assertTrue(suggestions.contains("7"));
@@ -80,9 +80,9 @@ class MainCommandTest {
         when(npcHandler.getNPCRegistry()).thenReturn(new HashMap<>());
 
         MainCommand command = new MainCommand(plugin);
-        CommandSourceStack source = mock(CommandSourceStack.class);
+        CommandSender source = mock(CommandSender.class);
 
-        Collection<String> suggestions = command.suggest(source, new String[]{"action", "1", ""});
+        Collection<String> suggestions = tabComplete(command, source, new String[]{"action", "1", ""});
 
         assertTrue(suggestions.contains("movehere"));
         assertTrue(suggestions.contains("followplayer"));
@@ -100,10 +100,10 @@ class MainCommandTest {
         when(npcHandler.getNPCRegistry()).thenReturn(registry);
 
         MainCommand command = new MainCommand(plugin);
-        CommandSourceStack source = mock(CommandSourceStack.class);
+        CommandSender source = mock(CommandSender.class);
 
-        Collection<String> settingSuggestions = command.suggest(source, new String[]{"set", "1", ""});
-        Collection<String> behaviourSuggestions = command.suggest(source, new String[]{"set", "1", "movebehaviour", ""});
+        Collection<String> settingSuggestions = tabComplete(command, source, new String[]{"set", "1", ""});
+        Collection<String> behaviourSuggestions = tabComplete(command, source, new String[]{"set", "1", "movebehaviour", ""});
 
         assertTrue(settingSuggestions.contains("movebehaviour"));
         assertTrue(behaviourSuggestions.contains("seek"));
@@ -120,9 +120,9 @@ class MainCommandTest {
         when(npcHandler.getNPCRegistry()).thenReturn(registry);
 
         MainCommand command = new MainCommand(plugin);
-        CommandSourceStack source = mock(CommandSourceStack.class);
+        CommandSender source = mock(CommandSender.class);
 
-        Collection<String> suggestions = command.suggest(source, new String[]{"create", "1", ""});
+        Collection<String> suggestions = tabComplete(command, source, new String[]{"create", "1", ""});
         assertTrue(suggestions.contains("ailex_npc"));
     }
 
@@ -137,9 +137,9 @@ class MainCommandTest {
         when(npcHandler.getNPCRegistry()).thenReturn(registry);
 
         MainCommand command = new MainCommand(plugin);
-        CommandSourceStack source = mock(CommandSourceStack.class);
+        CommandSender source = mock(CommandSender.class);
 
-        Collection<String> suggestions = command.suggest(source, new String[]{"action", ""});
+        Collection<String> suggestions = tabComplete(command, source, new String[]{"action", ""});
 
         assertTrue(suggestions.contains("3"));
         assertTrue(suggestions.contains("7"));
@@ -154,24 +154,25 @@ class MainCommandTest {
         when(npcHandler.getNPCRegistry()).thenReturn(new HashMap<>());
 
         MainCommand command = new MainCommand(plugin);
-        CommandSourceStack source = mock(CommandSourceStack.class);
+        CommandSender source = mock(CommandSender.class);
 
-        Collection<String> suggestions = command.suggest(source, new String[]{"unknown", "x", "y"});
+        Collection<String> suggestions = tabComplete(command, source, new String[]{"unknown", "x", "y"});
         assertFalse(suggestions.iterator().hasNext());
     }
 
     @Test
-    void executeShouldNoOpForNonPlayerSender() {
+    void executeShouldExplainWhenSenderIsNotAPlayer() {
         AIlexPlugin plugin = mock(AIlexPlugin.class);
         NPCHandler npcHandler = mock(NPCHandler.class);
         when(plugin.getNPCHandler()).thenReturn(npcHandler);
         when(npcHandler.getNPCRegistry()).thenReturn(new HashMap<>());
 
         MainCommand command = new MainCommand(plugin);
-        CommandSourceStack source = mock(CommandSourceStack.class);
-        when(source.getSender()).thenReturn(mock(CommandSender.class));
+        CommandSender source = mock(CommandSender.class);
 
-        command.execute(source, new String[]{"reload"});
+        command.onCommand(source, mock(Command.class), "ailex", new String[]{"reload"});
+
+        verify(source).sendMessage(any(net.kyori.adventure.text.Component.class));
     }
 
     @Test
@@ -179,13 +180,16 @@ class MainCommandTest {
         AIlexPlugin plugin = mock(AIlexPlugin.class);
         NPCHandler npcHandler = mock(NPCHandler.class);
         Player player = mock(Player.class);
-        CommandSourceStack source = mock(CommandSourceStack.class);
+        CommandSender source = player;
         when(plugin.getNPCHandler()).thenReturn(npcHandler);
         when(npcHandler.getNPCRegistry()).thenReturn(new HashMap<>());
-        when(source.getSender()).thenReturn(player);
 
-        new MainCommand(plugin).execute(source, new String[]{});
+        new MainCommand(plugin).onCommand(source, mock(Command.class), "ailex", new String[]{});
 
         verify(player).sendMessage(any(net.kyori.adventure.text.Component.class));
+    }
+
+    private Collection<String> tabComplete(MainCommand command, CommandSender sender, String[] args) {
+        return command.onTabComplete(sender, mock(Command.class), "ailex", args);
     }
 }
