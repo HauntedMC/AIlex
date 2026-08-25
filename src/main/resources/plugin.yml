@@ -9,3 +9,8 @@ commands:
   ailex:
     description: Main command for AIlex
     usage: /ailex <subcommand>
+    permission: ailex.admin
+permissions:
+  ailex.admin:
+    description: Allows management of AIlex NPCs and configuration reloads.
+    default: op

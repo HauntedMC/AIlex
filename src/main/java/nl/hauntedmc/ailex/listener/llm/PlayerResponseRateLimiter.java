@@ -55,6 +55,35 @@ final class PlayerResponseRateLimiter {
         }
     }
 
+    /**
+     * Returns the earliest time at which a player may trigger another response.
+     *
+     * @param playerId the player to inspect
+     * @return remaining wait time in milliseconds, or zero when no wait applies
+     */
+    long retryAfterMillis(UUID playerId) {
+        ResponseRateLimit limit = limitSupplier.get();
+        if (!limit.enabled() || playerId == null) {
+            return 0L;
+        }
+
+        long now = currentTimeMillis.getAsLong();
+        long oldestAllowed = now - limit.windowMillis();
+        removeExpiredBuckets(now, oldestAllowed);
+        Deque<Long> timestamps = responseTimestamps.get(playerId);
+        if (timestamps == null) {
+            return 0L;
+        }
+
+        synchronized (timestamps) {
+            removeExpiredTimestamps(timestamps, oldestAllowed);
+            if (timestamps.size() < limit.maxResponses() || timestamps.isEmpty()) {
+                return 0L;
+            }
+            return Math.max(0L, timestamps.peekFirst() + limit.windowMillis() - now);
+        }
+    }
+
     private void removeExpiredBuckets(long now, long oldestAllowed) {
         long previousCleanup = lastCleanupMillis.get();
         if (previousCleanup != Long.MIN_VALUE && now - previousCleanup < CLEANUP_INTERVAL_MILLIS) {

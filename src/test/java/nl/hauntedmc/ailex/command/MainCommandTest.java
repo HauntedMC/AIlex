@@ -16,6 +16,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.mock;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -187,6 +188,18 @@ class MainCommandTest {
         new MainCommand(plugin).onCommand(source, mock(Command.class), "ailex", new String[]{});
 
         verify(player).sendMessage(any(net.kyori.adventure.text.Component.class));
+    }
+
+    @Test
+    void executeShouldRejectPlayerWithoutAdminPermission() {
+        AIlexPlugin plugin = mock(AIlexPlugin.class);
+        Player player = mock(Player.class);
+        when(player.hasPermission("ailex.admin")).thenReturn(false);
+
+        new MainCommand(plugin).onCommand(player, mock(Command.class), "ailex", new String[]{"reload"});
+
+        verify(player).sendMessage(any(net.kyori.adventure.text.Component.class));
+        verify(plugin, never()).reloadChatGPTClient();
     }
 
     private Collection<String> tabComplete(MainCommand command, CommandSender sender, String[] args) {

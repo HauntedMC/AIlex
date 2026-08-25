@@ -33,8 +33,10 @@ public class ChatGPTClient {
             + "Keep all replies age-appropriate and safe-for-work.";
 
     private static final int MAX_CHAT_RESPONSE_LENGTH = 600;
+    private static final int DEFAULT_MAX_OUTPUT_TOKENS = 120;
+    private static final String DEFAULT_REASONING_EFFORT = "low";
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(20);
+    private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(20);
     private static final String SYSTEM_RESPONSE_INSTRUCTION = "Return exactly one short plain-text Minecraft chat response. "
             + "If you refuse, keep it brief and safe. Do not use markdown, quotes, or speaker labels.";
 
@@ -43,6 +45,10 @@ public class ChatGPTClient {
     private final HttpClient httpClient;
     private final boolean safetyEnabled;
     private final String safetySystemPrompt;
+    private final int maxOutputTokens;
+    private final String reasoningEffort;
+    private final boolean storeResponses;
+    private final Duration requestTimeout;
 
     /**
      * Constructor for the ChatGPTClient.
@@ -60,7 +66,11 @@ public class ChatGPTClient {
                         .connectTimeout(CONNECT_TIMEOUT)
                         .build(),
                 config.getBoolean("openai.safety.enabled", true),
-                config.getString("openai.safety.system_prompt", SAFETY_SYSTEM_PROMPT)
+                config.getString("openai.safety.system_prompt", SAFETY_SYSTEM_PROMPT),
+                Math.clamp(config.getInt("openai.max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS), 16, 600),
+                config.getString("openai.reasoning_effort", DEFAULT_REASONING_EFFORT),
+                config.getBoolean("openai.store_responses", false),
+                Duration.ofSeconds(Math.clamp(config.getInt("openai.request_timeout_seconds", 20), 3, 60))
         );
     }
 
@@ -69,11 +79,45 @@ public class ChatGPTClient {
     }
 
     ChatGPTClient(String apiKey, String model, HttpClient httpClient, boolean safetyEnabled, String safetySystemPrompt) {
+        this(apiKey, model, httpClient, safetyEnabled, safetySystemPrompt,
+                DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_REASONING_EFFORT, false, DEFAULT_REQUEST_TIMEOUT);
+    }
+
+    ChatGPTClient(
+            String apiKey,
+            String model,
+            HttpClient httpClient,
+            boolean safetyEnabled,
+            String safetySystemPrompt,
+            int maxOutputTokens,
+            String reasoningEffort,
+            boolean storeResponses
+    ) {
+        this(apiKey, model, httpClient, safetyEnabled, safetySystemPrompt,
+                maxOutputTokens, reasoningEffort, storeResponses, DEFAULT_REQUEST_TIMEOUT);
+    }
+
+    ChatGPTClient(
+            String apiKey,
+            String model,
+            HttpClient httpClient,
+            boolean safetyEnabled,
+            String safetySystemPrompt,
+            int maxOutputTokens,
+            String reasoningEffort,
+            boolean storeResponses,
+            Duration requestTimeout
+    ) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.model = model == null ? "" : model.trim();
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
         this.safetyEnabled = safetyEnabled;
         this.safetySystemPrompt = safetySystemPrompt == null ? "" : safetySystemPrompt.trim();
+        this.maxOutputTokens = Math.clamp(maxOutputTokens, 16, 600);
+        this.reasoningEffort = sanitizeReasoningEffort(reasoningEffort);
+        this.storeResponses = storeResponses;
+        this.requestTimeout = requestTimeout == null || requestTimeout.isNegative() || requestTimeout.isZero()
+                ? DEFAULT_REQUEST_TIMEOUT : requestTimeout;
 
         LoggerUtils.logInfo("Initialized OpenAI client with model: " + (this.model.isEmpty() ? "<empty>" : this.model));
         if (!isConfigured()) {
@@ -153,12 +197,12 @@ public class ChatGPTClient {
      * @param prompt - the prompt to send to the API
      * @return the HttpRequest
      */
-    private HttpRequest createHttpRequest(String systemPrompt, String prompt) {
+    HttpRequest createHttpRequest(String systemPrompt, String prompt) {
         String inputJson = createRequestBody(systemPrompt, prompt);
 
         return HttpRequest.newBuilder()
                 .uri(URI.create(OPENAI_RESPONSES_API_URL))
-                .timeout(REQUEST_TIMEOUT)
+                .timeout(requestTimeout)
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + apiKey)
                 .header("Accept", "application/json")
@@ -184,6 +228,13 @@ public class ChatGPTClient {
     String createRequestBody(String systemPrompt, String prompt) {
         JsonObject payload = new JsonObject();
         payload.addProperty("model", model);
+        payload.addProperty("max_output_tokens", maxOutputTokens);
+        payload.addProperty("store", storeResponses);
+        if (!reasoningEffort.isEmpty()) {
+            JsonObject reasoning = new JsonObject();
+            reasoning.addProperty("effort", reasoningEffort);
+            payload.add("reasoning", reasoning);
+        }
 
         JsonArray input = new JsonArray();
         if (safetyEnabled && !safetySystemPrompt.isBlank()) {
@@ -197,6 +248,17 @@ public class ChatGPTClient {
         payload.add("input", input);
 
         return payload.toString();
+    }
+
+    private String sanitizeReasoningEffort(String effort) {
+        if (effort == null) {
+            return "";
+        }
+        String normalizedEffort = effort.trim().toLowerCase(java.util.Locale.ROOT);
+        return switch (normalizedEffort) {
+            case "none", "low", "medium", "high", "xhigh" -> normalizedEffort;
+            default -> "";
+        };
     }
 
     private JsonObject createInputMessage(String role, String text) {

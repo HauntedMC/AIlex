@@ -32,6 +32,7 @@ public class AIlexPlugin extends JavaPlugin {
     public void onEnable() {
         // Save the default config
         saveDefaultConfig();
+        saveResource("knowledge/README.md", false);
 
         // Initialize different parts of the plugin
         ConfigHandler.init(this);

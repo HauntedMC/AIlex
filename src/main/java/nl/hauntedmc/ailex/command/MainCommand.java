@@ -38,6 +38,7 @@ import java.util.stream.Collectors;
  */
 public class MainCommand implements CommandExecutor, TabCompleter {
 
+    private static final String ADMIN_PERMISSION = "ailex.admin";
     private final AIlexPlugin plugin;
     private final Map<String, Class<? extends MovementBehaviour>> behaviourMap;
     private final Map<String, Class<? extends Actionable>> actionMap;
@@ -67,6 +68,10 @@ public class MainCommand implements CommandExecutor, TabCompleter {
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
                              @NotNull String[] args) {
         if (sender instanceof Player player) {
+            if (!player.hasPermission(ADMIN_PERMISSION)) {
+                sendCommandMessage(player, "You do not have permission to manage AIlex.");
+                return true;
+            }
 
             if (args.length == 1) {
                 if (args[0].equalsIgnoreCase("reload")) {

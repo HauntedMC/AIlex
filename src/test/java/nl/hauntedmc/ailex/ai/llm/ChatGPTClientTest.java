@@ -13,8 +13,12 @@ import org.mockito.MockedStatic;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
+
+import org.bukkit.configuration.file.YamlConfiguration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -222,6 +226,27 @@ class ChatGPTClientTest {
                     input.get(3).getAsJsonObject().getAsJsonArray("content").get(0).getAsJsonObject().get("text")
                             .getAsString()
             );
+        }
+    }
+
+    @Test
+    void shouldApplyConfiguredCostAndPrivacyControlsToTheRequest() {
+        YamlConfiguration config = new YamlConfiguration();
+        config.set("openai.api_key", "key");
+        config.set("openai.model", "gpt-5.4-mini");
+        config.set("openai.max_output_tokens", 96);
+        config.set("openai.reasoning_effort", "low");
+        config.set("openai.store_responses", false);
+        config.set("openai.request_timeout_seconds", 9);
+
+        try (MockedStatic<LoggerUtils> mockedLogger = org.mockito.Mockito.mockStatic(LoggerUtils.class)) {
+            ChatGPTClient client = new ChatGPTClient(config);
+            JsonObject payload = JsonParser.parseString(client.createRequestBody("hello")).getAsJsonObject();
+
+            assertEquals(96, payload.get("max_output_tokens").getAsInt());
+            assertFalse(payload.get("store").getAsBoolean());
+            assertEquals("low", payload.getAsJsonObject("reasoning").get("effort").getAsString());
+            assertEquals(Duration.ofSeconds(9), client.createHttpRequest("", "hello").timeout().orElseThrow());
         }
     }
 

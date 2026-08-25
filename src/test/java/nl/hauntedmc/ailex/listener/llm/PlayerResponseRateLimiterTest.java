@@ -6,6 +6,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PlayerResponseRateLimiterTest {
@@ -64,5 +65,20 @@ class PlayerResponseRateLimiterTest {
 
         assertTrue(limiter.tryAcquire(playerId));
         assertTrue(limiter.tryAcquire(playerId));
+    }
+
+    @Test
+    void shouldReportHowLongThePlayerMustWaitAfterReachingTheLimit() {
+        AtomicLong now = new AtomicLong(100L);
+        PlayerResponseRateLimiter limiter = new PlayerResponseRateLimiter(
+                () -> new PlayerResponseRateLimiter.ResponseRateLimit(true, 1, 1_000L),
+                now::get
+        );
+        UUID playerId = UUID.randomUUID();
+
+        assertTrue(limiter.tryAcquire(playerId));
+        now.set(400L);
+
+        assertEquals(700L, limiter.retryAfterMillis(playerId));
     }
 }

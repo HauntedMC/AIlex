@@ -81,6 +81,25 @@ class ChatContextStoreTest {
         assertTrue(context.contains("Alex: one two t…"));
     }
 
+    @Test
+    void shouldPreferRelevantHistoryOverUnrelatedRecentMessages() {
+        AtomicLong now = new AtomicLong(0L);
+        ChatContextStore store = new ChatContextStore(now::get);
+        ChatContextStore.ContextSettings settings = settings(10, 10, 1_000L);
+
+        store.recordGeneralChat("Alex", "Use /plot claim to get a Creative plot.", settings);
+        now.incrementAndGet();
+        store.recordGeneralChat("Bea", "I am mining stone now.", settings);
+        now.incrementAndGet();
+        store.recordGeneralChat("Chris", "Nice weather today.", settings);
+
+        String context = store.buildContext(
+                UUID.randomUUID(), 1, "Bot", "How does /plot claim work?", settings
+        );
+
+        assertTrue(context.contains("Use /plot claim"));
+    }
+
     private static ChatContextStore.ContextSettings settings(int generalMaxMessages, int conversationMaxMessages, long maxAgeMillis) {
         return settings(generalMaxMessages, conversationMaxMessages, maxAgeMillis, 240);
     }
