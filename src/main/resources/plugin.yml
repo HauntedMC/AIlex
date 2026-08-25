@@ -5,5 +5,3 @@ description: AI-powered Minecraft NPC framework
 author: HauntedMC
 api-version: '26.2'
 depend: [Citizens, packetevents]
-libraries:
-  - io.github.classgraph:classgraph:4.8.192

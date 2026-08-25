@@ -1,12 +1,5 @@
 package nl.hauntedmc.ailex;
 
-import io.papermc.paper.command.brigadier.Commands;
-import io.papermc.paper.plugin.lifecycle.event.LifecycleEventManager;
-import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
-
-import com.github.retrooper.packetevents.PacketEvents;
-import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
-
 import nl.hauntedmc.ailex.command.MainCommand;
 import nl.hauntedmc.ailex.config.ConfigHandler;
 import nl.hauntedmc.ailex.config.DataHandler;
@@ -19,10 +12,7 @@ import nl.hauntedmc.ailex.npc.NPCHandler;
 import nl.hauntedmc.ailex.util.LoggerUtils;
 import nl.hauntedmc.ailex.ai.llm.ChatGPTClient;
 
-import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
-
-import org.jetbrains.annotations.NotNull;
 
 /**
  * Main class of the AIlex plugin
@@ -32,20 +22,6 @@ public class AIlexPlugin extends JavaPlugin {
 
     private NPCHandler npcHandler;
     private ChatGPTClient chatGPTClient;
-    @NotNull private LifecycleEventManager<Plugin> manager = this.getLifecycleManager();
-
-    /**
-     * Called when the plugin is loaded
-     * Warning: No heavy operations should be done here, see onEnable for that
-     */
-    @Override
-    public void onLoad() {
-        PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
-        PacketEvents.getAPI().getSettings().reEncodeByDefault(false)
-                .checkForUpdates(true);
-        PacketEvents.getAPI().load();
-    }
-
 
     /**
      * Called when the plugin is enabled
@@ -65,9 +41,6 @@ public class AIlexPlugin extends JavaPlugin {
         // Register all commands and listeners
         registerCommands();
         registerListeners();
-
-        // Initialize PacketEvents
-        PacketEvents.getAPI().init();
 
         // Delay NPC loading one tick so all dependent plugins have fully enabled.
         getServer().getScheduler().runTask(this, () -> {
@@ -93,9 +66,6 @@ public class AIlexPlugin extends JavaPlugin {
             npcHandler.clearNPCRegistry();
         }
 
-        // Terminate PacketEvents
-        PacketEvents.getAPI().terminate();
-
         LoggerUtils.logInfo("AIlex has been disabled");
     }
 
@@ -104,12 +74,7 @@ public class AIlexPlugin extends JavaPlugin {
      * Here you must register new commands
      */
     private void registerCommands() {
-        manager.registerEventHandler(LifecycleEvents.COMMANDS, event -> {
-            final Commands commands = event.registrar();
-
-            // Register here all commands that are part of the plugin
-            commands.register("ailex", "Main command for AIlex", new MainCommand(this));
-        });
+        registerCommand("ailex", "Main command for AIlex", new MainCommand(this));
     }
 
     /**

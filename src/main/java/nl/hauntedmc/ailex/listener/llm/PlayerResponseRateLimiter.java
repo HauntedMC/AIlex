@@ -4,6 +4,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
@@ -13,9 +14,12 @@ import java.util.function.Supplier;
  */
 final class PlayerResponseRateLimiter {
 
+    private static final long CLEANUP_INTERVAL_MILLIS = 60_000L;
+
     private final Map<UUID, Deque<Long>> responseTimestamps = new ConcurrentHashMap<>();
     private final Supplier<ResponseRateLimit> limitSupplier;
     private final LongSupplier currentTimeMillis;
+    private final AtomicLong lastCleanupMillis = new AtomicLong(Long.MIN_VALUE);
 
     PlayerResponseRateLimiter(Supplier<ResponseRateLimit> limitSupplier, LongSupplier currentTimeMillis) {
         this.limitSupplier = limitSupplier;
@@ -36,12 +40,11 @@ final class PlayerResponseRateLimiter {
 
         long now = currentTimeMillis.getAsLong();
         long oldestAllowed = now - limit.windowMillis();
+        removeExpiredBuckets(now, oldestAllowed);
         Deque<Long> timestamps = responseTimestamps.computeIfAbsent(playerId, ignored -> new ArrayDeque<>());
 
         synchronized (timestamps) {
-            while (!timestamps.isEmpty() && timestamps.peekFirst() <= oldestAllowed) {
-                timestamps.removeFirst();
-            }
+            removeExpiredTimestamps(timestamps, oldestAllowed);
 
             if (timestamps.size() >= limit.maxResponses()) {
                 return false;
@@ -49,6 +52,31 @@ final class PlayerResponseRateLimiter {
 
             timestamps.addLast(now);
             return true;
+        }
+    }
+
+    private void removeExpiredBuckets(long now, long oldestAllowed) {
+        long previousCleanup = lastCleanupMillis.get();
+        if (previousCleanup != Long.MIN_VALUE && now - previousCleanup < CLEANUP_INTERVAL_MILLIS) {
+            return;
+        }
+        if (!lastCleanupMillis.compareAndSet(previousCleanup, now)) {
+            return;
+        }
+
+        responseTimestamps.forEach((playerId, timestamps) -> {
+            synchronized (timestamps) {
+                removeExpiredTimestamps(timestamps, oldestAllowed);
+                if (timestamps.isEmpty()) {
+                    responseTimestamps.remove(playerId, timestamps);
+                }
+            }
+        });
+    }
+
+    private void removeExpiredTimestamps(Deque<Long> timestamps, long oldestAllowed) {
+        while (!timestamps.isEmpty() && timestamps.peekFirst() <= oldestAllowed) {
+            timestamps.removeFirst();
         }
     }
 

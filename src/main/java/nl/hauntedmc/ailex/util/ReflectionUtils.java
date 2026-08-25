@@ -1,136 +1,87 @@
 package nl.hauntedmc.ailex.util;
 
-import nl.hauntedmc.ailex.ai.action.ActionContext;
 import nl.hauntedmc.ailex.ai.action.Actionable;
+import nl.hauntedmc.ailex.ai.action.move.FleePlayerAction;
+import nl.hauntedmc.ailex.ai.action.move.FollowPlayerAction;
+import nl.hauntedmc.ailex.ai.action.move.MirrorPlayerAction;
+import nl.hauntedmc.ailex.ai.action.move.MoveHereAction;
+import nl.hauntedmc.ailex.ai.action.move.WanderAction;
+import nl.hauntedmc.ailex.ai.movement.behaviour.AlignBehaviour;
+import nl.hauntedmc.ailex.ai.movement.behaviour.ArriveBehaviour;
+import nl.hauntedmc.ailex.ai.movement.behaviour.EvadeBehaviour;
+import nl.hauntedmc.ailex.ai.movement.behaviour.FaceBehaviour;
+import nl.hauntedmc.ailex.ai.movement.behaviour.FleeBehaviour;
+import nl.hauntedmc.ailex.ai.movement.behaviour.LookVelocityBehaviour;
 import nl.hauntedmc.ailex.ai.movement.behaviour.MovementBehaviour;
+import nl.hauntedmc.ailex.ai.movement.behaviour.PursueBehaviour;
+import nl.hauntedmc.ailex.ai.movement.behaviour.SeekBehaviour;
+import nl.hauntedmc.ailex.ai.movement.behaviour.WanderBehaviour;
 import nl.hauntedmc.ailex.npc.NPC;
+import nl.hauntedmc.ailex.npc.impl.AilexNPC;
 
-import io.github.classgraph.ClassGraph;
-import io.github.classgraph.ScanResult;
-import nl.hauntedmc.ailex.npc.NPCData;
-
-import java.lang.reflect.Modifier;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Utility class for reflection operations
+ * Registry of the built-in AIlex types used by commands and persisted NPC data.
+ *
+ * <p>The registry intentionally uses direct class references rather than classpath scanning.
+ * Scanning plugin classes during a hot reload can discover classes from an old plugin
+ * classloader, which makes otherwise identical classes fail casts at runtime.</p>
  */
-public class ReflectionUtils {
+public final class ReflectionUtils {
 
-    /**
-     * Map of all registered movement behaviours
-     * Key: friendly name of the behaviour
-     * Value: class of the behaviour
-     */
-    private static final Map<String, Class<? extends MovementBehaviour>> behaviourMap = new HashMap<>();
-    private static final Map<String, Class<? extends Actionable>> actionMap = new HashMap<>();
-    private static final Map<String, Class<? extends NPC>> npcTypeMap = new HashMap<>();
+    private static final Map<String, Class<? extends MovementBehaviour>> BEHAVIOUR_MAP = new LinkedHashMap<>();
+    private static final Map<String, Class<? extends Actionable>> ACTION_MAP = new LinkedHashMap<>();
+    private static final Map<String, Class<? extends NPC>> NPC_TYPE_MAP = new LinkedHashMap<>();
 
-    /*
-     * Static initializer blocks to scan for all subclasses and implementations register them
-     * This block is executed when the class is loaded by the JVM
-     * This is done to ensure that all behaviours are registered before they are used
-     * This is a form of lazy initialization. This block is executed only once
-     */
     static {
-        try (ScanResult scanResult = new ClassGraph()
-                .acceptPackages("nl.hauntedmc.ailex.ai.movement.behaviour")
-                .scan()) {
-            scanResult.getClassesImplementing(MovementBehaviour.class.getName())
-                    .loadClasses(MovementBehaviour.class)
-                    .forEach(cls -> {
-                        try {
-                            MovementBehaviour behaviourInstance = cls.getDeclaredConstructor().newInstance();
-                            registerBehaviour(behaviourInstance);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    });
-        }
+        BEHAVIOUR_MAP.put("align", AlignBehaviour.class);
+        BEHAVIOUR_MAP.put("arrive", ArriveBehaviour.class);
+        BEHAVIOUR_MAP.put("evade", EvadeBehaviour.class);
+        BEHAVIOUR_MAP.put("face", FaceBehaviour.class);
+        BEHAVIOUR_MAP.put("flee", FleeBehaviour.class);
+        BEHAVIOUR_MAP.put("lookvelocity", LookVelocityBehaviour.class);
+        BEHAVIOUR_MAP.put("pursue", PursueBehaviour.class);
+        BEHAVIOUR_MAP.put("seek", SeekBehaviour.class);
+        BEHAVIOUR_MAP.put("wander", WanderBehaviour.class);
+
+        ACTION_MAP.put("fleeplayer", FleePlayerAction.class);
+        ACTION_MAP.put("followplayer", FollowPlayerAction.class);
+        ACTION_MAP.put("mirrorplayer", MirrorPlayerAction.class);
+        ACTION_MAP.put("movehere", MoveHereAction.class);
+        ACTION_MAP.put("wander", WanderAction.class);
+
+        NPC_TYPE_MAP.put("ailex_npc", AilexNPC.class);
     }
 
-    static {
-        try (ScanResult scanResult = new ClassGraph()
-                .acceptPackages("nl.hauntedmc.ailex.ai.action")
-                .scan()) {
-            scanResult.getClassesImplementing(Actionable.class.getName())
-                    .loadClasses(Actionable.class)
-                    .forEach(cls -> {
-                        try {
-                            if (!Modifier.isAbstract(cls.getModifiers())) {
-                                Actionable actionInstance = cls.getDeclaredConstructor(ActionContext.class).newInstance(new ActionContext.Builder().build());
-                                registerAction(actionInstance);
-                            }
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    });
-        }
-    }
-
-    static {
-        try (ScanResult scanResult = new ClassGraph()
-                .acceptPackages("nl.hauntedmc.ailex.npc.impl", "nl.hauntedmc.ailex.npc")
-                .scan()) {
-            scanResult.getSubclasses(NPC.class.getName())
-                    .loadClasses(NPC.class)
-                    .forEach(cls -> {
-                        try {
-                            NPC npcInstance = cls.getDeclaredConstructor(NPCData.class).newInstance(new NPCData(0,null, null, cls.getName()));
-                            registerNPCType(npcInstance);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    });
-        }
+    private ReflectionUtils() {
     }
 
     /**
-     * Registers a movement behaviour in the map
-     * @param behaviour the behaviour to register
-     */
-    private static void registerBehaviour(MovementBehaviour behaviour) {
-        behaviourMap.put(behaviour.getFriendlyName(), behaviour.getClass());
-    }
-
-    /**
-     * Gets the map of all registered movement behaviours
-     * @return the map of all registered movement behaviours
+     * Gets the registered movement behaviours keyed by their command name.
+     *
+     * @return the movement behaviour registry
      */
     public static Map<String, Class<? extends MovementBehaviour>> getBehaviourMap() {
-        return behaviourMap;
+        return BEHAVIOUR_MAP;
     }
 
     /**
-     * Registers a movement behaviour in the map
-     * @param actionable the behaviour to register
-     */
-    private static void registerAction(Actionable actionable) {
-        actionMap.put(actionable.getFriendlyName(), actionable.getClass());
-    }
-
-    /**
-     * Gets the map of all registered movement behaviours
-     * @return the map of all registered movement behaviours
+     * Gets the registered actions keyed by their command name.
+     *
+     * @return the action registry
      */
     public static Map<String, Class<? extends Actionable>> getActionMap() {
-        return actionMap;
+        return ACTION_MAP;
     }
 
     /**
-     * Registers a NPC type in the map
-     * @param npc the NPC to register
-     */
-    private static void registerNPCType(NPC npc) {
-        npcTypeMap.put(npc.getFriendlyName(), npc.getClass());
-    }
-
-    /**
-     * Gets the map of all registered NPC types
-     * @return the map of all registered NPC types
+     * Gets the registered NPC types keyed by their command name.
+     *
+     * @return the NPC type registry
      */
     public static Map<String, Class<? extends NPC>> getNPCTypeMap() {
-        return npcTypeMap;
+        return NPC_TYPE_MAP;
     }
 }

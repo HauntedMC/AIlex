@@ -8,6 +8,30 @@ openai:
     enabled: true
     max_responses_per_player: 10
     window_seconds: 3600
+  chat_context:
+    enabled: true
+    max_message_characters: 240
+    include_timestamps: true
+    timestamp_format: "HH:mm:ss"
+    general_chat:
+      enabled: true
+      max_messages: 50
+      max_age_seconds: 3600
+    conversation:
+      enabled: true
+      max_messages: 20
+      max_age_seconds: 7200
+    metadata:
+      enabled: true
+      include_player_world: true
+      include_player_coordinates: true
+      include_player_game_mode: true
+      include_player_health: true
+      include_player_food_level: true
+      include_world_time: true
+      include_weather: true
+      include_npc_world: true
+      include_npc_coordinates: true
 npc:
   defaults:
     entity:

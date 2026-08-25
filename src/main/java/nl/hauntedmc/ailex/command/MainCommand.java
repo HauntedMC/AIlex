@@ -3,6 +3,8 @@ package nl.hauntedmc.ailex.command;
 import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 
+import net.kyori.adventure.text.Component;
+
 import nl.hauntedmc.ailex.AIlexPlugin;
 import nl.hauntedmc.ailex.ai.action.ActionContext;
 import nl.hauntedmc.ailex.ai.action.Actionable;
@@ -65,7 +67,7 @@ public class MainCommand implements BasicCommand {
                     ConfigHandler.getInstance().reload();
                     plugin.reloadChatGPTClient();
                     LoggerUtils.logInfo("AIlex configuration reloaded.");
-                    LoggerUtils.sendDebugMessage("AIlex configuration reloaded.");
+                    sendCommandMessage(player, "AIlex configuration reloaded.");
                     return;
                 }
             }
@@ -76,7 +78,7 @@ public class MainCommand implements BasicCommand {
                 try {
                     id = Integer.parseInt(args[1]);
                 } catch (NumberFormatException e) {
-                    LoggerUtils.sendDebugMessage("Invalid ID.");
+                    sendCommandMessage(player, "Invalid ID.");
                     return;
                 }
 
@@ -91,18 +93,19 @@ public class MainCommand implements BasicCommand {
                                         ActionContext actionContext = new ActionContext.Builder().setTargetEntity(player).setTargetLocation(player.getLocation()).setPriority(1).build();
                                         Actionable action = actionClass.getDeclaredConstructor(ActionContext.class).newInstance(actionContext);
                                         plugin.getNPCHandler().getNPCRegistry().get(id).queueAction(action);
-                                        LoggerUtils.sendDebugMessage("NPC " + id + " is doing action " + action.getFriendlyName() + " with context " + action.getActionContext().toString());
+                                        sendCommandMessage(player, "NPC " + id + " is doing action "
+                                                + action.getFriendlyName() + ".");
                                     } catch (Exception e) {
-                                        LoggerUtils.sendDebugMessage("Failed to set behaviour: " + e.getMessage());
+                                        sendCommandMessage(player, "Failed to start action: " + e.getMessage());
                                     }
                                 } else {
-                                    LoggerUtils.sendDebugMessage("Unknown action.");
+                                    sendCommandMessage(player, "Unknown action.");
                                 }
                             } else {
-                                LoggerUtils.sendDebugMessage("NPC " + id + " does not exist.");
+                                sendCommandMessage(player, "NPC " + id + " does not exist.");
                             }
                         } else {
-                            LoggerUtils.sendDebugMessage("Usage: /ailex action <id> <move>");
+                            sendCommandMessage(player, "Usage: /ailex action <id> <move>");
                         }
                         return;
 
@@ -110,13 +113,14 @@ public class MainCommand implements BasicCommand {
                         if (plugin.getNPCHandler().getNPCRegistry().containsKey(id)) {
                             Actionable currentAction = plugin.getNPCHandler().getNPCRegistry().get(id).getCurrentAction();
                             if (currentAction != null) {
-                                LoggerUtils.sendDebugMessage("NPC " + id + " canceled action: " + currentAction.getFriendlyName());
+                                sendCommandMessage(player, "NPC " + id + " canceled action: "
+                                        + currentAction.getFriendlyName());
                                 plugin.getNPCHandler().getNPCRegistry().get(id).cancelCurrentAction();
                             } else {
-                                LoggerUtils.sendDebugMessage("NPC " + id + " is currently idle.");
+                                sendCommandMessage(player, "NPC " + id + " is currently idle.");
                             }
                         } else {
-                            LoggerUtils.sendDebugMessage("NPC " + id + " does not exist.");
+                            sendCommandMessage(player, "NPC " + id + " does not exist.");
                         }
                         return;
 
@@ -135,16 +139,17 @@ public class MainCommand implements BasicCommand {
                                 );
                                 try {
                                     plugin.getNPCHandler().createNPC(npcClass, npcData);
+                                    sendCommandMessage(player, "NPC " + id + " of type " + type
+                                            + " created at your location.");
                                 }
                                 catch (IllegalArgumentException e) {
-                                    LoggerUtils.sendDebugMessage("Failed to create NPC: " + e.getMessage());
+                                    sendCommandMessage(player, "Failed to create NPC: " + e.getMessage());
                                 }
-                                LoggerUtils.sendDebugMessage("NPC " + id + " of type " + type + " created at your location.");
                             } else {
-                                LoggerUtils.sendDebugMessage("Unknown NPC type.");
+                                sendCommandMessage(player, "Unknown NPC type.");
                             }
                         } else {
-                            LoggerUtils.sendDebugMessage("Usage: /ailex create <id> <type> <name>");
+                            sendCommandMessage(player, "Usage: /ailex create <id> <type> <name>");
                         }
                         return;
 
@@ -152,32 +157,33 @@ public class MainCommand implements BasicCommand {
                         if (plugin.getNPCHandler().getNPCRegistry().containsKey(id)) {
                             Actionable currentAction = plugin.getNPCHandler().getNPCRegistry().get(id).getCurrentAction();
                             if (currentAction != null) {
-                                LoggerUtils.sendDebugMessage("NPC " + id + " is executing action: " + currentAction.getFriendlyName() + " with context " + currentAction.getActionContext().toString());
+                                sendCommandMessage(player, "NPC " + id + " is executing action: "
+                                        + currentAction.getFriendlyName() + ".");
                             } else {
-                                LoggerUtils.sendDebugMessage("NPC " + id + " is currently idle.");
+                                sendCommandMessage(player, "NPC " + id + " is currently idle.");
                             }
                         } else {
-                            LoggerUtils.sendDebugMessage("NPC " + id + " does not exist.");
+                            sendCommandMessage(player, "NPC " + id + " does not exist.");
                         }
                         return;
 
                     case "remove":
                         try {
                             plugin.getNPCHandler().removeNPC(id);
-                            LoggerUtils.sendDebugMessage("NPC " + id + " has been removed.");
+                            sendCommandMessage(player, "NPC " + id + " has been removed.");
                         }
                         catch (IllegalArgumentException e) {
-                            LoggerUtils.sendDebugMessage("Failed to remove NPC: " + e.getMessage());
+                            sendCommandMessage(player, "Failed to remove NPC: " + e.getMessage());
                         }
                         return;
 
                     case "save":
                         try {
                             plugin.getNPCHandler().saveNPC(id);
-                            LoggerUtils.sendDebugMessage("NPC " + id + " has been saved.");
+                            sendCommandMessage(player, "NPC " + id + " has been saved.");
                         }
                         catch (IllegalArgumentException e) {
-                            LoggerUtils.sendDebugMessage("Failed to save NPC: " + e.getMessage());
+                            sendCommandMessage(player, "Failed to save NPC: " + e.getMessage());
                         }
                         return;
 
@@ -193,32 +199,37 @@ public class MainCommand implements BasicCommand {
                                             try {
                                                 MovementBehaviour behaviour = behaviourClass.getDeclaredConstructor().newInstance();
                                                 plugin.getNPCHandler().getNPCRegistry().get(id).setMovementBehaviour(behaviour);
-                                                LoggerUtils.sendDebugMessage("Set movement behaviour of NPC " + id + " to " + option + ".");
+                                                sendCommandMessage(player, "Set movement behaviour of NPC " + id
+                                                        + " to " + option + ".");
                                             } catch (Exception e) {
-                                                LoggerUtils.sendDebugMessage("Failed to set behaviour: " + e.getMessage());
+                                                sendCommandMessage(player, "Failed to set behaviour: " + e.getMessage());
                                             }
                                         } else {
-                                            LoggerUtils.sendDebugMessage("Unknown behaviour.");
+                                            sendCommandMessage(player, "Unknown behaviour.");
                                         }
                                         break;
                                     default:
-                                        LoggerUtils.sendDebugMessage("Unknown setting.");
+                                        sendCommandMessage(player, "Unknown setting.");
                                 }
                             } else {
-                                LoggerUtils.sendDebugMessage("NPC " + id + " does not exist.");
+                                sendCommandMessage(player, "NPC " + id + " does not exist.");
                             }
                         } else {
-                            LoggerUtils.sendDebugMessage("Usage: /ailex set <id> <movebehaviour> <>");
+                            sendCommandMessage(player, "Usage: /ailex set <id> <movebehaviour> <>");
                         }
                         return;
 
                     default:
-                        LoggerUtils.sendDebugMessage("Unknown command.");
+                        sendCommandMessage(player, "Unknown command.");
                 }
             } else {
-                LoggerUtils.sendDebugMessage("Usage: /ailex <subcommand>");
+                sendCommandMessage(player, "Usage: /ailex <subcommand>");
             }
         }
+    }
+
+    private void sendCommandMessage(Player player, String message) {
+        player.sendMessage(Component.text("[AIlex] " + message));
     }
 
     /**

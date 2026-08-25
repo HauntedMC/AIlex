@@ -5,6 +5,7 @@ import nl.hauntedmc.ailex.AIlexPlugin;
 import nl.hauntedmc.ailex.npc.NPCHandler;
 import nl.hauntedmc.ailex.testutil.ConfigTestSupport;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,8 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class MainCommandTest {
@@ -169,5 +172,20 @@ class MainCommandTest {
         when(source.getSender()).thenReturn(mock(CommandSender.class));
 
         command.execute(source, new String[]{"reload"});
+    }
+
+    @Test
+    void executeShouldSendUsageDirectlyToThePlayer() {
+        AIlexPlugin plugin = mock(AIlexPlugin.class);
+        NPCHandler npcHandler = mock(NPCHandler.class);
+        Player player = mock(Player.class);
+        CommandSourceStack source = mock(CommandSourceStack.class);
+        when(plugin.getNPCHandler()).thenReturn(npcHandler);
+        when(npcHandler.getNPCRegistry()).thenReturn(new HashMap<>());
+        when(source.getSender()).thenReturn(player);
+
+        new MainCommand(plugin).execute(source, new String[]{});
+
+        verify(player).sendMessage(any(net.kyori.adventure.text.Component.class));
     }
 }

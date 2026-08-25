@@ -28,7 +28,6 @@ dependencies {
     implementation("net.kyori:adventure-api:5.2.0")
     implementation("net.citizensnpcs:citizensapi:2.0.43-SNAPSHOT")
     implementation("net.citizensnpcs:citizens-main:2.0.43-SNAPSHOT")
-    implementation("io.github.classgraph:classgraph:4.8.192")
     compileOnly("com.github.retrooper:packetevents-spigot:2.13.0")
 
     testImplementation(platform("org.junit:junit-bom:6.1.3"))
