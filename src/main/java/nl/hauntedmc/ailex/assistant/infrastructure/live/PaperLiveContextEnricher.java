@@ -1,6 +1,7 @@
 package nl.hauntedmc.ailex.assistant.infrastructure.live;
 
 import nl.hauntedmc.ailex.AIlexPlugin;
+import nl.hauntedmc.ailex.assistant.application.context.RequiredContextPlanner;
 import nl.hauntedmc.ailex.npc.NPC;
 
 import org.bukkit.Bukkit;
@@ -20,12 +21,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
  * Collects rich, player-helpful Paper state without exposing network addresses, plugin/config internals or private
- * information about other players. Collection happens on the server thread and remains query-selective for expensive
- * inventory/nearby/target scans. Trusted HauntedMC feature providers can append additional safe state.
+ * information about other players. Collection happens on the server thread and only reads source families selected by
+ * the deterministic context planner. Trusted HauntedMC feature providers can append additional safe requester state.
  */
 public final class PaperLiveContextEnricher {
 
@@ -35,55 +37,99 @@ public final class PaperLiveContextEnricher {
     private PaperLiveContextEnricher() {
     }
 
+    /** Compatibility helper used by focused tests; production uses the planner-driven overload below. */
     public static String collect(Player player, NPC npc, String message) {
         if (player == null || message == null || message.isBlank()) {
             return "";
         }
         String text = message.toLowerCase(Locale.ROOT);
-        if (!looksLikeLiveQuestion(text)) {
-            return collectIntegrations(player, message);
+        java.util.EnumSet<RequiredContextPlanner.LiveSource> requested =
+                java.util.EnumSet.noneOf(RequiredContextPlanner.LiveSource.class);
+        if (requesterSignal(text)) {
+            requested.add(RequiredContextPlanner.LiveSource.REQUESTER);
         }
-        List<String> metadata = new ArrayList<>();
-
-        appendRequesterCore(metadata, player);
-        appendWorldCore(metadata, player);
-
         if (inventorySignal(text)) {
-            appendInventory(metadata, player);
+            requested.add(RequiredContextPlanner.LiveSource.INVENTORY);
+        }
+        if (worldSignal(text)) {
+            requested.add(RequiredContextPlanner.LiveSource.WORLD);
         }
         if (targetSignal(text)) {
-            appendTarget(metadata, player);
+            requested.add(RequiredContextPlanner.LiveSource.TARGET);
         }
         if (serverSignal(text)) {
-            appendServer(metadata);
+            requested.add(RequiredContextPlanner.LiveSource.SERVER);
         }
         if (nearbySignal(text)) {
-            appendNearbyEntities(metadata, player);
+            requested.add(RequiredContextPlanner.LiveSource.NEARBY);
         }
         if (npcSignal(text)) {
+            requested.add(RequiredContextPlanner.LiveSource.NPC);
+        }
+        if (requested.isEmpty()) {
+            requested.add(RequiredContextPlanner.LiveSource.REQUESTER);
+        }
+        return collect(player, npc, message, requested);
+    }
+
+    /** Captures only planner-selected live source families. */
+    public static String collect(
+            Player player,
+            NPC npc,
+            String message,
+            Set<RequiredContextPlanner.LiveSource> requested
+    ) {
+        if (player == null || requested == null || requested.isEmpty()) {
+            return "";
+        }
+        String text = message == null ? "" : message.toLowerCase(Locale.ROOT);
+        List<String> metadata = new ArrayList<>();
+
+        if (requested.contains(RequiredContextPlanner.LiveSource.REQUESTER)) {
+            appendRequesterCore(metadata, player);
+            if (containsAny(text, "playtime", "speeltijd", "played", "gespeeld")) {
+                long playedTicks = player.getStatistic(Statistic.PLAY_ONE_MINUTE);
+                metadata.add("player_playtime=" + formatDuration(Duration.ofSeconds(playedTicks / 20L)));
+            }
+            appendIntegrations(metadata, player, message);
+        }
+        if (requested.contains(RequiredContextPlanner.LiveSource.INVENTORY)) {
+            appendInventory(metadata, player);
+        }
+        if (requested.contains(RequiredContextPlanner.LiveSource.WORLD)) {
+            appendWorldCore(metadata, player);
+        }
+        if (requested.contains(RequiredContextPlanner.LiveSource.TARGET)) {
+            appendTarget(metadata, player);
+        }
+        if (requested.contains(RequiredContextPlanner.LiveSource.SERVER)) {
+            appendServer(metadata);
+        }
+        if (requested.contains(RequiredContextPlanner.LiveSource.NEARBY)) {
+            appendNearbyEntities(metadata, player);
+        }
+        if (requested.contains(RequiredContextPlanner.LiveSource.NPC)) {
             appendNpc(metadata, npc, player);
         }
-        if (containsAny(text, "playtime", "speeltijd", "played", "gespeeld")) {
-            long playedTicks = player.getStatistic(Statistic.PLAY_ONE_MINUTE);
-            metadata.add("player_playtime=" + formatDuration(Duration.ofSeconds(playedTicks / 20L)));
-        }
 
+        String result = String.join(" | ", metadata.stream().distinct().toList());
+        return result.length() <= MAX_METADATA_CHARACTERS
+                ? result : result.substring(0, MAX_METADATA_CHARACTERS - 1) + "…";
+    }
+
+    private static void appendIntegrations(List<String> metadata, Player player, String message) {
         String integrations = collectIntegrations(player, message);
         if (!integrations.isBlank()) {
             metadata.addAll(Arrays.stream(integrations.split("\\s*\\|\\s*"))
                     .filter(part -> !part.isBlank()).toList());
         }
-
-        String result = String.join(" | ", metadata);
-        return result.length() <= MAX_METADATA_CHARACTERS
-                ? result : result.substring(0, MAX_METADATA_CHARACTERS - 1) + "…";
     }
 
     private static String collectIntegrations(Player player, String message) {
         try {
             AIlexPlugin plugin = AIlexPlugin.getPlugin();
             AssistantContextProviderRegistry registry = plugin.getAssistantContextProviderRegistry();
-            return registry == null ? "" : registry.collect(player, message);
+            return registry == null ? "" : registry.collect(player, message == null ? "" : message);
         } catch (RuntimeException ignored) {
             return "";
         }
@@ -321,16 +367,14 @@ public final class PaperLiveContextEnricher {
         return hours + "h" + minutes + "m";
     }
 
-    private static boolean looksLikeLiveQuestion(String text) {
+    private static boolean requesterSignal(String text) {
         return containsAny(text,
-                "waar", "where", "hier", "here", "nu", "now", "biome", "bioom", "position", "positie",
-                "location", "locatie", "coord", "health", "leven", "food", "honger", "gamemode", "level", "xp",
-                "item", "hand", "inventory", "inventaris", "armor", "pantser", "effect", "ping", "playtime",
-                "speeltijd", "weather", "weer", "time", "tijd", "light", "licht", "difficulty", "dimension",
-                "richting", "facing", "block", "blok", "looking", "kijk", "target", "nearby", "dichtbij", "mob",
-                "entity", "online", "tps", "mspt", "performance", "lag", "uptime", "version", "versie", "jij",
-                "jou", "you", "your", "rank", "saldo", "balance", "currency", "valuta", "combat", "tagged",
-                "autopickup", "fly", "god", "claim", "plot", "friends", "vrienden", "lottery", "loterij"
+                "health", "gezondheid", "leven", "honger", "food", "gamemode", "game mode", "level", "xp",
+                "ervaring", "experience", "item", "hand", "holding", "vasthoud", "effect", "armor", "armour",
+                "pantser", "ping", "latency", "playtime", "speeltijd", "gespeeld", "saturation", "air", "lucht",
+                "fire", "brand", "flying", "vliegen", "swimming", "zwemmen", "sprinting", "rennen", "rank",
+                "saldo", "balance", "currency", "valuta", "combat", "tagged", "autopickup", "fly", "god", "claim",
+                "plot", "friends", "vrienden", "lottery", "loterij"
         );
     }
 
@@ -339,13 +383,18 @@ public final class PaperLiveContextEnricher {
                 "pantser", "offhand", "hotbar", "slot");
     }
 
+    private static boolean worldSignal(String text) {
+        return containsAny(text, "waar", "where", "hier", "here", "biome", "bioom", "position", "positie", "location",
+                "locatie", "coord", "weather", "weer", "time", "tijd", "light", "licht", "difficulty", "dimension",
+                "dimensie", "richting", "facing", "hoogte", "height");
+    }
+
     private static boolean targetSignal(String text) {
         return containsAny(text, "kijk", "looking", "target", "blok", "block", "voor me", "in front");
     }
 
     private static boolean serverSignal(String text) {
-        return containsAny(text, "online", "tps", "mspt", "performance", "lag", "uptime", "versie", "version",
-                "server");
+        return containsAny(text, "online", "tps", "mspt", "performance", "lag", "uptime", "versie", "version", "server");
     }
 
     private static boolean nearbySignal(String text) {
