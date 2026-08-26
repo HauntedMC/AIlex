@@ -21,6 +21,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -102,6 +103,72 @@ class AssistantMemoryServiceTest {
         assertFalse(summary.contains("favorite_gamemode=Minigames"));
         assertFalse(summary.contains("staff.alice"));
         assertFalse(summary.contains("best_gamemode"));
+        memory.close();
+    }
+
+    @Test
+    void shouldRejectSensitiveValueShapesAtTheDurableBoundary() {
+        UUID playerId = UUID.randomUUID();
+        AssistantMemoryService memory = memoryService(dataDirectory.toFile());
+
+        assertNull(memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("player", "fact", "server_value", "192.168.1.44", "upsert"),
+                "Onthoud 192.168.1.44 als server value.",
+                false
+        ));
+        assertNull(memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("player", "fact", "favorite_place", "123 64 -550", "upsert"),
+                "Onthoud 123 64 -550 als mijn favorite place.",
+                false
+        ));
+        assertNull(memory.rememberTrusted(
+                MemoryScope.EVENT,
+                playerId.toString(),
+                "",
+                MemoryKind.EVENT,
+                "unsafe.event",
+                "Player reported 10.0.0.8",
+                1.0D,
+                0.5D,
+                "test",
+                "test",
+                System.currentTimeMillis(),
+                Duration.ofDays(1),
+                Set.of("test")
+        ));
+        memory.close();
+    }
+
+    @Test
+    void shouldNeverExposeAnotherPlayersScopedMemory() {
+        UUID first = UUID.randomUUID();
+        UUID second = UUID.randomUUID();
+        AssistantMemoryService memory = memoryService(dataDirectory.toFile());
+        memory.rememberCandidate(
+                first,
+                "first",
+                new MemoryCandidate("player", "preference", "answer_style", "kort", "upsert"),
+                "Ik heb liever korte antwoorden.",
+                false
+        );
+        memory.rememberCandidate(
+                second,
+                "second",
+                new MemoryCandidate("player", "preference", "answer_style", "uitgebreid", "upsert"),
+                "Ik heb liever uitgebreide antwoorden.",
+                false
+        );
+
+        String firstSummary = memory.summary(first);
+        String secondSummary = memory.summary(second);
+        assertTrue(firstSummary.contains("answer_style=kort"));
+        assertFalse(firstSummary.contains("uitgebreid"));
+        assertTrue(secondSummary.contains("answer_style=uitgebreid"));
+        assertFalse(secondSummary.contains("answer_style=kort"));
         memory.close();
     }
 
