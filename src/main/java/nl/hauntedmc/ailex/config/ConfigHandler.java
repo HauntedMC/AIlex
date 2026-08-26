@@ -14,27 +14,17 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.Set;
 
-/**
- * Utility class for handling the plugin configuration.
- */
+/** Utility class for handling the plugin configuration. */
 public class ConfigHandler {
 
+    private static final int CURRENT_CONFIG_VERSION = 2;
     private static ConfigHandler instance;
     private final JavaPlugin plugin;
 
-    /**
-     * Private constructor for the ConfigHandler.
-     * @param plugin the plugin to initialize the ConfigHandler with
-     */
     private ConfigHandler(JavaPlugin plugin) {
         this.plugin = plugin;
     }
 
-    /**
-     * Gets the instance of the ConfigHandler.
-     * This method can be called after calling init().
-     * @return the instance of the ConfigHandler
-     */
     public static ConfigHandler getInstance() {
         if (instance == null) {
             throw new IllegalStateException("AilexLogger is not initialized. Call init() first.");
@@ -42,11 +32,6 @@ public class ConfigHandler {
         return instance;
     }
 
-    /**
-     * Initializes the ConfigHandler with the given plugin.
-     * This method should be called before calling getInstance().
-     * @param plugin - the plugin to initialize the ConfigHandler with
-     */
     public static void init(JavaPlugin plugin) {
         if (instance == null) {
             instance = new ConfigHandler(plugin);
@@ -54,28 +39,16 @@ public class ConfigHandler {
         instance.synchronizeConfigWithDefaults();
     }
 
-    /**
-     * Reloads the plugin configuration.
-     * This method should be called after the configuration file has been modified.
-     */
     public void reload() {
         plugin.reloadConfig();
         synchronizeConfigWithDefaults();
         LoggerUtils.logInfo("Configuration reloaded.");
     }
 
-    /**
-     * Gets the plugin configuration.
-     * @return the plugin configuration
-     */
     public FileConfiguration getConfig() {
         return plugin.getConfig();
     }
 
-    /**
-     * Build default NPC properties from configuration.
-     * @return a new mutable {@link NPCProperties} instance populated from config defaults
-     */
     public NPCProperties getDefaultNPCProperties() {
         FileConfiguration config = getConfig();
         return new NPCProperties(
@@ -88,17 +61,15 @@ public class ConfigHandler {
                 config.getBoolean("npc.defaults.entity.listedInTab", NPCProperties.DEFAULT_LISTED_IN_TAB),
                 config.getBoolean("npc.defaults.entity.alwaysUseNameHologram",
                         NPCProperties.DEFAULT_ALWAYS_USE_NAME_HOLOGRAM),
-                config.getString("npc.defaults.entity.prompts.systemPrompt",
-                        NPCProperties.DEFAULT_SYSTEM_PROMPT),
+                config.getString("npc.defaults.entity.prompts.systemPrompt", NPCProperties.DEFAULT_SYSTEM_PROMPT),
                 config.getString("npc.defaults.entity.prompts.userPromptTemplate",
                         NPCProperties.DEFAULT_USER_PROMPT_TEMPLATE)
         );
     }
 
     /**
-     * Synchronize plugin config with bundled defaults:
-     * - missing keys are added
-     * - obsolete keys are removed
+     * Synchronizes plugin config with bundled defaults and applies one-way compatibility migrations first.
+     * Existing operator values are retained except where a versioned migration deliberately changes an unsafe old default.
      */
     private void synchronizeConfigWithDefaults() {
         InputStream defaultsStream = plugin.getResource("config.yml");
@@ -111,8 +82,21 @@ public class ConfigHandler {
         );
         FileConfiguration current = plugin.getConfig();
 
+        migrate(current);
         syncSection(current, defaults, "");
+        current.set("config_version", CURRENT_CONFIG_VERSION);
         plugin.saveConfig();
+    }
+
+    private void migrate(FileConfiguration current) {
+        int version = current.getInt("config_version", 1);
+        if (version < 2) {
+            // 1.4 persisted the raw short-term transcript by default. In 1.5 durable state lives in typed SQLite
+            // Memory V2, so an upgrade explicitly turns raw transcript persistence off. Operators may opt in again.
+            current.set("openai.chat_context.persist_to_disk", false);
+            current.set("config_version", 2);
+            LoggerUtils.logInfo("Migrated AIlex config to v2: disabled legacy raw chat transcript persistence.");
+        }
     }
 
     private void syncSection(FileConfiguration currentConfig, ConfigurationSection defaultsSection, String currentPath) {
