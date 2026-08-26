@@ -14,6 +14,7 @@ public final class ProactiveChatService {
     private final Supplier<ProactiveChatSettings> settingsSupplier;
     private final LongSupplier currentTimeMillis;
     private final CollectiveReactionTracker collectiveTracker = new CollectiveReactionTracker();
+    private final ConversationParticipationTracker conversationTracker = new ConversationParticipationTracker();
     private final AtomicLong lastBotMessageMillis;
     private final AtomicLong lastPlayerMessageMillis;
     private final AtomicLong lastProactiveRequestMillis = new AtomicLong(Long.MIN_VALUE);
@@ -41,12 +42,24 @@ public final class ProactiveChatService {
         long now = currentTimeMillis.getAsLong();
         lastPlayerMessageMillis.set(now);
         ProactiveChatSettings settings = settingsSupplier.get();
+        ProactiveChatSettings.QuestionSettings questions = settings.questions();
+        Collection<? extends Player> players = onlinePlayers.get();
+        boolean activeConversation = conversationTracker.isLikelyConversation(
+                source,
+                message,
+                players,
+                now,
+                questions.conversationWindowMillis(),
+                questions.minimumSpeakerAlternations()
+        );
+        conversationTracker.record(source, message, now, questions.conversationWindowMillis());
+
         if (!settings.enabled()) {
             return;
         }
-        if (settings.questions().enabled()
-                && GeneralQuestionDetector.isGeneralQuestion(message, source, onlinePlayers.get())
-                && passesProbability(settings.questions().probability())
+        if (questions.enabled()
+                && GeneralQuestionDetector.isGeneralQuestion(message, source, players, activeConversation)
+                && passesProbability(questions.probability())
                 && submitIfOffCooldown(source, ProactiveChatTrigger.question(message), now, settings, consumer)) {
             return;
         }
