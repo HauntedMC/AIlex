@@ -171,7 +171,12 @@ public final class AssistantIntentClassifier {
     }
 
     private static boolean hasCurrentSelfReference(String message) {
-        String padded = " " + (message == null ? "" : message.replaceAll("\\s+", " ").trim()) + " ";
+        String normalized = message == null ? "" : message
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^\\p{L}\\p{N}']+", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+        String padded = " " + normalized + " ";
         return containsAnyPhrase(
                 padded,
                 " mijn ", " my ", " heb ik ", " ik heb ", " ben ik ", " am i ", " i have ", " i'm ", " im ",
