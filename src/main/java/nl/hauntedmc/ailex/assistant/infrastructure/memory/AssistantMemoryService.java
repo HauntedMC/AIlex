@@ -1,6 +1,7 @@
 package nl.hauntedmc.ailex.assistant.infrastructure.memory;
 
 import nl.hauntedmc.ailex.assistant.domain.AssistantSettings;
+import nl.hauntedmc.ailex.assistant.security.AssistantDataSafety;
 
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -12,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -23,14 +25,16 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Typed semantic/episodic memory facade. Reads are served from a hot active-record map while durable writes are
- * serialized to SQLite/WAL on one dedicated writer. Semantic records are key-addressable and therefore correctable:
- * a new value for the same semantic key supersedes the old value instead of accumulating contradictory sentences.
- * Retrieval combines relevance, salience, confidence, type-aware recency and one-hop associative spreading.
+ * Typed semantic/episodic memory facade. Durable writes are serialized to SQLite/WAL while reads use an audience-
+ * indexed hot store, so a player request scores only memories that can actually be visible to that player/NPC rather
+ * than scanning network-wide memory. Semantic keys are correctable and associative retrieval remains bounded.
  */
 public final class AssistantMemoryService implements AutoCloseable {
 
     private static final String DATABASE_FILE_NAME = "assistant-memory.db";
+    private static final String GLOBAL_AUDIENCE = "global";
+    private static final String PLAYER_AUDIENCE_PREFIX = "player:";
+    private static final String NPC_AUDIENCE_PREFIX = "npc:";
     private static final int MAX_VALUE_LENGTH = 320;
     private static final int MAX_KEY_LENGTH = 96;
     private static final int MAX_RECENT_TOPIC_TERMS = 192;
@@ -52,6 +56,7 @@ public final class AssistantMemoryService implements AutoCloseable {
     private final JavaPlugin plugin;
     private final MemoryRepository repository;
     private final Map<String, MemoryRecord> activeRecords = new ConcurrentHashMap<>();
+    private final Map<String, Set<String>> audienceIndex = new ConcurrentHashMap<>();
     private final Map<UUID, Map<String, Integer>> recentTopicTerms = new ConcurrentHashMap<>();
     private final ExecutorService writer;
     private volatile boolean closed;
@@ -76,6 +81,7 @@ public final class AssistantMemoryService implements AutoCloseable {
     public synchronized void reload() {
         flush();
         activeRecords.clear();
+        audienceIndex.clear();
         recentTopicTerms.clear();
         loadFromRepository();
     }
@@ -138,6 +144,9 @@ public final class AssistantMemoryService implements AutoCloseable {
                 MemoryScope.PLAYER, playerId.toString(), "", MemoryKind.PREFERENCE, "language"
         ));
         if (record == null || !record.activeAt(System.currentTimeMillis())) {
+            if (record != null) {
+                evictExpired(record);
+            }
             return "";
         }
         return AssistantSettings.from(plugin.getConfig()).languageAllowed(record.value()) ? record.value() : "";
@@ -184,7 +193,7 @@ public final class AssistantMemoryService implements AutoCloseable {
         }
 
         String value = normalizeValue(candidate.value());
-        if (!safeValue(value) || !candidateSupportedByMessage(key, value, kind, playerMessage, playerId)) {
+        if (!safeMemory(key, value) || !candidateSupportedByMessage(key, value, kind, playerMessage, playerId)) {
             return null;
         }
         if (kind == MemoryKind.PREFERENCE && "language".equals(key)) {
@@ -258,21 +267,23 @@ public final class AssistantMemoryService implements AutoCloseable {
             Duration ttl,
             Set<String> tags
     ) {
-        if (!memoryFeatureEnabled() || scope == null || kind == null || !safeKey(canonicalKey(key)) || !safeValue(value)) {
+        String canonicalKey = canonicalKey(key);
+        String normalizedValue = normalizeValue(value);
+        if (!memoryFeatureEnabled() || scope == null || kind == null || !safeMemory(canonicalKey, normalizedValue)) {
             return null;
         }
         long now = System.currentTimeMillis();
         long expiresAt = ttl == null || ttl.isZero() || ttl.isNegative() ? 0L : now + ttl.toMillis();
         Set<String> enrichedTags = new HashSet<>(tags == null ? Set.of() : tags);
-        enrichedTags.addAll(keyTags(canonicalKey(key)));
-        enrichedTags.addAll(valueTags(value));
+        enrichedTags.addAll(keyTags(canonicalKey));
+        enrichedTags.addAll(valueTags(normalizedValue));
         MemoryRecord record = nextRecord(
                 scope,
                 clean(subjectId),
                 clean(relationId),
                 kind,
-                canonicalKey(key),
-                normalizeValue(value),
+                canonicalKey,
+                normalizedValue,
                 confidence,
                 salience,
                 sourceType,
@@ -344,9 +355,7 @@ public final class AssistantMemoryService implements AutoCloseable {
         Set<String> queryTerms = Set.copyOf(significantWords(query));
         String normalizedQuery = clean(query).toLowerCase(Locale.ROOT);
 
-        List<ScoredMemory> primary = activeRecords.values().stream()
-                .filter(record -> record.activeAt(now))
-                .filter(record -> visibleTo(record, player, npc))
+        List<ScoredMemory> primary = visibleCandidates(player, npc, now).stream()
                 .filter(record -> effectiveKinds.contains(record.kind()))
                 .map(record -> new ScoredMemory(
                         record,
@@ -366,17 +375,23 @@ public final class AssistantMemoryService implements AutoCloseable {
                 ))
                 .sorted(Comparator.comparingDouble(ScoredMemory::score).reversed()
                         .thenComparing(scored -> scored.record().lastConfirmed(), Comparator.reverseOrder()))
-                .limit(Math.max(64, Math.clamp(maximumResults, 1, 96) * 4L))
+                .limit(Math.max(64L, Math.clamp(maximumResults, 1, 96) * 4L))
                 .toList();
         return selectDiverse(associated, Math.clamp(maximumResults, 1, 96));
     }
 
     public List<MemoryRecord> activeSnapshot() {
         long now = System.currentTimeMillis();
-        return activeRecords.values().stream()
-                .filter(record -> record.activeAt(now))
-                .sorted(Comparator.comparingLong(MemoryRecord::lastConfirmed).reversed())
-                .toList();
+        List<MemoryRecord> snapshot = new ArrayList<>();
+        for (MemoryRecord record : activeRecords.values()) {
+            if (record.activeAt(now)) {
+                snapshot.add(record);
+            } else {
+                evictExpired(record);
+            }
+        }
+        snapshot.sort(Comparator.comparingLong(MemoryRecord::lastConfirmed).reversed());
+        return List.copyOf(snapshot);
     }
 
     public void flush() {
@@ -429,6 +444,103 @@ public final class AssistantMemoryService implements AutoCloseable {
                     record,
                     (left, right) -> left.lastConfirmed() >= right.lastConfirmed() ? left : right
             );
+        }
+        activeRecords.values().forEach(this::indexRecord);
+    }
+
+    private List<MemoryRecord> visibleCandidates(String playerId, String npcId, long now) {
+        Set<String> identities = new LinkedHashSet<>();
+        addAudience(identities, GLOBAL_AUDIENCE);
+        addAudience(identities, PLAYER_AUDIENCE_PREFIX + playerId);
+        if (!npcId.isBlank()) {
+            addAudience(identities, NPC_AUDIENCE_PREFIX + npcId);
+        }
+        List<MemoryRecord> result = new ArrayList<>(identities.size());
+        for (String identity : identities) {
+            MemoryRecord record = activeRecords.get(identity);
+            if (record == null) {
+                continue;
+            }
+            if (!record.activeAt(now)) {
+                evictExpired(record);
+                continue;
+            }
+            if (visibleTo(record, playerId, npcId)) {
+                result.add(record);
+            }
+        }
+        return result;
+    }
+
+    private void addAudience(Set<String> target, String audience) {
+        Set<String> indexed = audienceIndex.get(audience);
+        if (indexed != null) {
+            target.addAll(indexed);
+        }
+    }
+
+    private void indexRecord(MemoryRecord record) {
+        for (String audience : audiences(record)) {
+            audienceIndex.computeIfAbsent(audience, ignored -> ConcurrentHashMap.newKeySet())
+                    .add(record.identityKey());
+        }
+    }
+
+    private void unindexRecord(MemoryRecord record) {
+        for (String audience : audiences(record)) {
+            Set<String> indexed = audienceIndex.get(audience);
+            if (indexed == null) {
+                continue;
+            }
+            indexed.remove(record.identityKey());
+            if (indexed.isEmpty()) {
+                audienceIndex.remove(audience, indexed);
+            }
+        }
+    }
+
+    private Set<String> audiences(MemoryRecord record) {
+        Set<String> audiences = new HashSet<>();
+        switch (record.scope()) {
+            case GLOBAL -> audiences.add(GLOBAL_AUDIENCE);
+            case PLAYER, SESSION -> {
+                if (!record.subjectId().isBlank()) {
+                    audiences.add(PLAYER_AUDIENCE_PREFIX + record.subjectId());
+                }
+            }
+            case NPC -> {
+                if (!record.subjectId().isBlank()) {
+                    audiences.add(NPC_AUDIENCE_PREFIX + record.subjectId());
+                }
+            }
+            case PLAYER_NPC -> {
+                if (!record.subjectId().isBlank()) {
+                    audiences.add(PLAYER_AUDIENCE_PREFIX + record.subjectId());
+                }
+                if (!record.relationId().isBlank()) {
+                    audiences.add(NPC_AUDIENCE_PREFIX + record.relationId());
+                }
+            }
+            case EVENT -> {
+                if (record.subjectId().isBlank()) {
+                    audiences.add(GLOBAL_AUDIENCE);
+                } else {
+                    audiences.add(PLAYER_AUDIENCE_PREFIX + record.subjectId());
+                }
+                if (!record.relationId().isBlank()) {
+                    audiences.add(NPC_AUDIENCE_PREFIX + record.relationId());
+                }
+            }
+            case WORLD -> {
+                // World-scoped memories are intentionally not exposed by the player memory facade.
+            }
+        }
+        return Set.copyOf(audiences);
+    }
+
+    private void evictExpired(MemoryRecord record) {
+        if (record != null && activeRecords.remove(record.identityKey(), record)) {
+            unindexRecord(record);
         }
     }
 
@@ -520,6 +632,10 @@ public final class AssistantMemoryService implements AutoCloseable {
             return;
         }
         MemoryRecord previous = activeRecords.put(record.identityKey(), record);
+        if (previous != null) {
+            unindexRecord(previous);
+        }
+        indexRecord(record);
         writer.execute(() -> {
             try {
                 if (previous != null && !previous.id().equals(record.id())) {
@@ -538,6 +654,7 @@ public final class AssistantMemoryService implements AutoCloseable {
         if (previous == null) {
             return;
         }
+        unindexRecord(previous);
         long now = System.currentTimeMillis();
         writer.execute(() -> repository.upsert(previous.expireAt(now)));
     }
@@ -566,7 +683,11 @@ public final class AssistantMemoryService implements AutoCloseable {
     }
 
     private void enforceLimit(MemoryScope scope, String subjectId, Set<MemoryKind> kinds, int limit) {
-        List<MemoryRecord> matching = activeRecords.values().stream()
+        String audience = scope == MemoryScope.GLOBAL ? GLOBAL_AUDIENCE : PLAYER_AUDIENCE_PREFIX + subjectId;
+        Set<String> indexed = audienceIndex.getOrDefault(audience, Set.of());
+        List<MemoryRecord> matching = indexed.stream()
+                .map(activeRecords::get)
+                .filter(java.util.Objects::nonNull)
                 .filter(record -> record.scope() == scope && record.subjectId().equals(subjectId))
                 .filter(record -> kinds.contains(record.kind()))
                 .sorted(Comparator.comparingDouble(MemoryRecord::salience)
@@ -577,6 +698,7 @@ public final class AssistantMemoryService implements AutoCloseable {
         for (int index = 0; index < removeCount; index++) {
             MemoryRecord record = matching.get(index);
             if (activeRecords.remove(record.identityKey(), record)) {
+                unindexRecord(record);
                 long now = System.currentTimeMillis();
                 writer.execute(() -> repository.upsert(record.expireAt(now)));
             }
@@ -810,16 +932,27 @@ public final class AssistantMemoryService implements AutoCloseable {
                 .anyMatch(word -> observed.getOrDefault(word, 0) >= 2);
     }
 
+    private boolean safeMemory(String key, String value) {
+        return safeKey(key)
+                && safeValue(value)
+                && !AssistantDataSafety.forbiddenDurableMemory(key, value);
+    }
+
     private boolean safeKey(String key) {
         if (key == null || key.isBlank() || key.length() > MAX_KEY_LENGTH) {
             return false;
         }
-        return key.matches("[a-z0-9._-]+") && !containsSensitiveTerm(key.replace('_', ' ').replace('.', ' '));
+        return key.matches("[a-z0-9._-]+")
+                && !containsSensitiveTerm(key.replace('_', ' ').replace('.', ' '))
+                && !AssistantDataSafety.forbiddenDurableMemory(key, "");
     }
 
     private boolean safeValue(String value) {
         String normalized = normalizeValue(value);
-        return !normalized.isBlank() && normalized.length() <= MAX_VALUE_LENGTH && !containsSensitiveTerm(normalized);
+        return !normalized.isBlank()
+                && normalized.length() <= MAX_VALUE_LENGTH
+                && !containsSensitiveTerm(normalized)
+                && !AssistantDataSafety.forbiddenDurableMemory("", normalized);
     }
 
     private boolean containsSensitiveTerm(String value) {
