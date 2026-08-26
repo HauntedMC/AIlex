@@ -4,9 +4,9 @@ Thanks for taking the time to contribute.
 
 ## Before You Start
 
-- Use Java 21 and Gradle.
+- Use the Java toolchain declared by the Gradle build.
 - Make sure you can run a local compile and test pass.
-- If your change affects runtime NPC behavior, test it on a Paper server.
+- If your change affects runtime NPC, live-context or proactive behavior, test it on a Paper server.
 
 ## Setup
 
@@ -44,7 +44,7 @@ Recommended before merge:
 
 - Use a clear title and summary.
 - Explain what changed and why.
-- Call out configuration or migration impact.
+- Call out configuration or operational impact.
 - Link related issues where relevant.
 - Keep commits readable and review-friendly.
 
@@ -54,7 +54,10 @@ Recommended before merge:
 - Keep movement and action boundaries testable.
 - Handle malformed input safely.
 - Avoid blocking server-critical paths.
-- Log failures in a way operators can act on.
+- Keep the LLM path read-only; expose custom server state through bounded trusted context providers.
+- Treat raw chat as working context, not durable player identity.
+- Validate semantic memory writes and player-visible evidence deterministically.
+- Log failures in a way operators can act on without leaking sensitive player content.
 
 ## Security
 
