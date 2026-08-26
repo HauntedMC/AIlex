@@ -9,6 +9,7 @@ import nl.hauntedmc.ailex.application.registry.BuiltinTypeRegistry;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryKind;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryRecord;
 import nl.hauntedmc.ailex.config.ConfigHandler;
+import nl.hauntedmc.ailex.infrastructure.openai.OpenAiResponsesClient;
 import nl.hauntedmc.ailex.listener.llm.AssistantRequestTracer;
 import nl.hauntedmc.ailex.npc.NPC;
 import nl.hauntedmc.ailex.npc.NPCData;
@@ -25,7 +26,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -115,6 +115,11 @@ public class MainCommand implements CommandExecutor, TabCompleter {
 
     private void handleAssistantCommand(Player player, String[] args) {
         String action = args.length >= 2 ? args[1].toLowerCase(Locale.ROOT) : "status";
+        if ("usage".equals(action)) {
+            OpenAiResponsesClient client = plugin.getOpenAiResponsesClient();
+            sendCommandMessage(player, client == null ? "OpenAI client is unavailable." : "OpenAI " + client.usageStatus());
+            return;
+        }
         if (plugin.getAssistantService() == null) {
             sendCommandMessage(player, "Assistant engine is unavailable.");
             return;
@@ -126,13 +131,17 @@ public class MainCommand implements CommandExecutor, TabCompleter {
                 if (tracer != null) {
                     status.append(", active_requests=").append(tracer.activeCount());
                 }
+                OpenAiResponsesClient client = plugin.getOpenAiResponsesClient();
+                if (client != null) {
+                    status.append("; OpenAI ").append(client.usageStatus());
+                }
                 sendCommandMessage(player, status.toString());
             }
             case "rebuild-index" -> {
                 plugin.getAssistantService().reload();
                 sendCommandMessage(player, "Assistant knowledge and memory indexes reloaded.");
             }
-            default -> sendCommandMessage(player, "Usage: /ailex ai <status|rebuild-index>");
+            default -> sendCommandMessage(player, "Usage: /ailex ai <status|usage|rebuild-index>");
         }
     }
 
@@ -348,7 +357,7 @@ public class MainCommand implements CommandExecutor, TabCompleter {
             return filterByPrefix(subcommands, args[0]);
         }
         if ("ai".equals(subcommand)) {
-            return args.length == 2 ? filterByPrefix(List.of("status", "rebuild-index"), args[1]) : List.of();
+            return args.length == 2 ? filterByPrefix(List.of("status", "usage", "rebuild-index"), args[1]) : List.of();
         }
         if ("trace".equals(subcommand)) {
             return args.length == 2 ? filterByPrefix(List.of("recent"), args[1]) : List.of();
