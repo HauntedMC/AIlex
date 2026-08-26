@@ -31,6 +31,7 @@ public final class AssistantGenerationPolicy {
             return true;
         }
         return hasDurableMemorySignal(playerMessage)
+                || hasEmbodiedActionSignal(playerMessage)
                 || intent == AssistantIntent.MEMORY_RECALL
                 || intent == AssistantIntent.EVENT_RECALL;
     }
@@ -81,9 +82,26 @@ public final class AssistantGenerationPolicy {
                 || normalized.contains("actually");
     }
 
+    public static boolean hasEmbodiedActionSignal(String message) {
+        String normalized = message == null ? "" : message.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
+        return containsAny(normalized,
+                "volg mij", "volg me", "loop met me mee", "follow me", "come with me", "walk with me",
+                "kom hier", "kom naar mij", "kom naar me", "come here", "come to me", "walk over here",
+                "stop met lopen", "blijf hier", "blijf staan", "stop moving", "stay here", "halt");
+    }
+
     public static boolean mayEscalate(AssistantMode mode, int modelCalls, int maximumModelCalls, long remainingMillis) {
         return (mode == AssistantMode.GROUNDED || mode == AssistantMode.DELIBERATE)
                 && modelCalls < maximumModelCalls
                 && remainingMillis >= 2_000L;
+    }
+
+    private static boolean containsAny(String text, String... phrases) {
+        for (String phrase : phrases) {
+            if (text.contains(phrase)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
