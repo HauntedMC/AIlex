@@ -73,7 +73,6 @@ public record ProactiveChatSettings(
         );
     }
 
-
     /** Source-compatible constructor retained for existing tests/integrations. */
     public ProactiveChatSettings(
             boolean enabled,
@@ -180,8 +179,10 @@ public record ProactiveChatSettings(
             return new GoalSettings(
                     config.getBoolean(PATH + ".goals.enabled", true),
                     Set.copyOf(goals),
-                    probability(config.getDouble(PATH + ".goals.probability", 0.30D)),
-                    probability(config.getDouble(PATH + ".goals.follow_up_probability", 0.12D))
+                    ProactiveChatSettings.probability(config.getDouble(PATH + ".goals.probability", 0.30D)),
+                    ProactiveChatSettings.probability(
+                            config.getDouble(PATH + ".goals.follow_up_probability", 0.12D)
+                    )
             );
         }
 
