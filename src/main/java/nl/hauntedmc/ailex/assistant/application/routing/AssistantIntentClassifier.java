@@ -19,11 +19,13 @@ public final class AssistantIntentClassifier {
             "wachtwoord", "password", "ban", "appeal", "report", "ticket", "unban"
     );
     private static final Set<String> LIVE_WORDS = Set.of(
-            "waar", "hier", "dichtbij", "nearby", "near", "biome", "coord", "coords", "coördinaten",
+            "waar", "hier", "dichtbij", "nearby", "near", "biome", "bioom", "coord", "coords", "coördinaten",
             "positie", "location", "locatie", "weer", "weather", "online", "spelers", "players", "tps",
-            "mspt", "ping", "health", "gezondheid", "honger", "food", "item", "hand", "holding", "vast",
-            "kijk", "level", "xp", "ervaring", "experience", "effect", "armor", "pantser", "light", "licht",
-            "difficulty", "moeilijkheid", "environment", "omgeving", "version", "versie", "uptime", "playtime"
+            "mspt", "performance", "lag", "ping", "latency", "health", "gezondheid", "honger", "food", "item",
+            "hand", "holding", "vasthoud", "vast", "kijk", "facing", "richting", "level", "xp", "ervaring",
+            "experience", "effect", "armor", "armour", "pantser", "light", "licht", "difficulty", "moeilijkheid",
+            "environment", "omgeving", "dimension", "dimensie", "version", "versie", "uptime", "playtime",
+            "speeltijd", "gespeeld"
     );
     private static final Set<String> SERVER_WORDS = Set.of(
             "rank", "elite", "legend", "supreme", "claim", "regels", "rules", "vote", "stem",
@@ -67,7 +69,7 @@ public final class AssistantIntentClassifier {
         if (context.active() && containsAny(normalized, EVENT_WORDS)) {
             return new Analysis(AssistantIntent.EVENT_RECALL, AssistantMode.GROUNDED, language);
         }
-        if (containsAny(normalized, LIVE_WORDS)) {
+        if (containsAny(normalized, LIVE_WORDS) || containsLivePhrase(normalized)) {
             return new Analysis(AssistantIntent.LIVE_STATE, AssistantMode.DELIBERATE, language);
         }
         if (containsAny(normalized, SERVER_WORDS) || normalized.contains("/")) {
@@ -86,6 +88,10 @@ public final class AssistantIntentClassifier {
             return new Analysis(AssistantIntent.CONTEXT_FOLLOWUP, mode, language);
         }
         return new Analysis(AssistantIntent.CONVERSATION, AssistantMode.FAST, language);
+    }
+
+    private static boolean containsLivePhrase(String message) {
+        return message.contains("om me heen") || message.contains("around me") || message.contains("near me");
     }
 
     private static boolean isContextualFollowUp(String message, AssistantDialogueContext context) {
