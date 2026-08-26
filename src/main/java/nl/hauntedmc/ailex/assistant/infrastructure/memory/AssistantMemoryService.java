@@ -374,7 +374,9 @@ public final class AssistantMemoryService implements AutoCloseable {
                         scored.score() + associationBonus(scored.record(), bridgeTerms, queryTerms)
                 ))
                 .sorted(Comparator.comparingDouble(ScoredMemory::score).reversed()
-                        .thenComparing(scored -> scored.record().lastConfirmed(), Comparator.reverseOrder()))
+                        .thenComparing(Comparator.comparingLong(
+                                (ScoredMemory scored) -> scored.record().lastConfirmed()
+                        ).reversed()))
                 .limit(Math.max(64L, Math.clamp(maximumResults, 1, 96) * 4L))
                 .toList();
         return selectDiverse(associated, Math.clamp(maximumResults, 1, 96));
@@ -522,13 +524,13 @@ public final class AssistantMemoryService implements AutoCloseable {
                 }
             }
             case EVENT -> {
-                if (record.subjectId().isBlank()) {
-                    audiences.add(GLOBAL_AUDIENCE);
-                } else {
+                if (!record.subjectId().isBlank()) {
+                    // Player ownership is restrictive: an NPC relation must never expose this event to other players.
                     audiences.add(PLAYER_AUDIENCE_PREFIX + record.subjectId());
-                }
-                if (!record.relationId().isBlank()) {
+                } else if (!record.relationId().isBlank()) {
                     audiences.add(NPC_AUDIENCE_PREFIX + record.relationId());
+                } else {
+                    audiences.add(GLOBAL_AUDIENCE);
                 }
             }
             case WORLD -> {
@@ -606,8 +608,14 @@ public final class AssistantMemoryService implements AutoCloseable {
         String identity = identity(scope, subjectId, relationId, kind, key);
         MemoryRecord previous = activeRecords.get(identity);
         long firstObserved = previous == null ? now : previous.firstObserved();
+        boolean updateInPlace = previous != null
+                && (kind == MemoryKind.RELATIONSHIP || previous.value().equalsIgnoreCase(value));
+        String id = updateInPlace ? previous.id() : UUID.randomUUID().toString();
+        String supersedes = previous == null
+                ? ""
+                : updateInPlace ? previous.supersedes() : previous.id();
         return new MemoryRecord(
-                UUID.randomUUID().toString(),
+                id,
                 scope,
                 subjectId,
                 relationId,
@@ -622,7 +630,7 @@ public final class AssistantMemoryService implements AutoCloseable {
                 now,
                 occurredAt,
                 expiresAt,
-                previous == null ? "" : previous.id(),
+                supersedes,
                 tags
         );
     }
@@ -847,8 +855,12 @@ public final class AssistantMemoryService implements AutoCloseable {
             case NPC -> !npcId.isBlank() && record.subjectId().equals(npcId);
             case PLAYER_NPC -> record.subjectId().equals(playerId)
                     && (npcId.isBlank() || record.relationId().equals(npcId));
-            case EVENT -> record.subjectId().isBlank() || record.subjectId().equals(playerId)
-                    || (!npcId.isBlank() && record.relationId().equals(npcId));
+            case EVENT -> {
+                boolean ownerVisible = record.subjectId().isBlank() || record.subjectId().equals(playerId);
+                boolean relationMatches = npcId.isBlank() || record.relationId().isBlank()
+                        || record.relationId().equals(npcId);
+                yield ownerVisible && relationMatches;
+            }
             case WORLD -> false;
         };
     }
