@@ -1,5 +1,7 @@
 package nl.hauntedmc.ailex.assistant.infrastructure.memory;
 
+import nl.hauntedmc.ailex.assistant.security.AssistantDataSafety;
+
 import java.util.Locale;
 
 /**
@@ -20,6 +22,10 @@ public record MemoryCandidate(
         key = clean(key).toLowerCase(Locale.ROOT).replace(' ', '_');
         value = clean(value);
         operation = normalize(operation, "upsert");
+        if (AssistantDataSafety.forbiddenDurableMemory(key, value)) {
+            key = "";
+            value = "";
+        }
     }
 
     public boolean forget() {
