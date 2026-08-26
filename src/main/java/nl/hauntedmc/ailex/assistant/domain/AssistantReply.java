@@ -1,5 +1,7 @@
 package nl.hauntedmc.ailex.assistant.domain;
 
+import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryCandidate;
+
 import java.util.List;
 import java.util.Set;
 
@@ -9,7 +11,7 @@ public record AssistantReply(
         Set<String> evidenceIds,
         String confidence,
         String handoff,
-        List<String> memoryCandidates,
+        List<MemoryCandidate> memoryCandidates,
         boolean valid
 ) {
     public static AssistantReply invalid() {
