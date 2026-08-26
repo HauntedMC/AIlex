@@ -1,6 +1,7 @@
 import io.papermc.paperweight.userdev.ReobfArtifactConfiguration
 import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.api.plugins.quality.Checkstyle
+import org.gradle.testing.jacoco.tasks.JacocoCoverageVerification
 import org.gradle.testing.jacoco.tasks.JacocoReport
 
 plugins {
@@ -34,9 +35,13 @@ dependencies {
     implementation("net.citizensnpcs:citizens-main:2.0.43-SNAPSHOT")
     compileOnly("com.github.retrooper:packetevents-spigot:2.13.0")
 
-    // Semantic and episodic memory uses local SQLite/WAL. Embed only the JDBC driver itself.
+    // Local durable memory uses SQLite/WAL. Shared network memory can use MySQL; bundle both JDBC drivers only.
     compileOnly("org.xerial:sqlite-jdbc:3.53.2.1")
     bundled("org.xerial:sqlite-jdbc:3.53.2.1") {
+        isTransitive = false
+    }
+    compileOnly("com.mysql:mysql-connector-j:26.7.0")
+    bundled("com.mysql:mysql-connector-j:26.7.0") {
         isTransitive = false
     }
 
@@ -47,6 +52,7 @@ dependencies {
     testImplementation("org.mockito:mockito-inline:5.2.0")
     testImplementation("com.github.retrooper:packetevents-spigot:2.13.0")
     testImplementation("org.xerial:sqlite-jdbc:3.53.2.1")
+    testImplementation("com.mysql:mysql-connector-j:26.7.0")
 }
 
 java {
@@ -98,8 +104,27 @@ tasks.withType<JacocoReport>().configureEach {
     }
 }
 
+tasks.withType<JacocoCoverageVerification>().configureEach {
+    dependsOn(tasks.test)
+    violationRules {
+        rule {
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.55".toBigDecimal()
+            }
+            limit {
+                counter = "BRANCH"
+                value = "COVEREDRATIO"
+                minimum = "0.40".toBigDecimal()
+            }
+        }
+    }
+}
+
 tasks.check {
     dependsOn(tasks.jacocoTestReport)
+    dependsOn(tasks.jacocoTestCoverageVerification)
 }
 
 paperweight.reobfArtifactConfiguration = ReobfArtifactConfiguration.MOJANG_PRODUCTION

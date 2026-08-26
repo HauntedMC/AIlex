@@ -111,7 +111,9 @@ class ProactiveChatServiceTest {
         return new ProactiveChatSettings(
                 true, "server", 120_000L,
                 new ProactiveChatSettings.JoinSettings(false, 0.0D, 300_000L, "Hoi {player_name}"),
-                new ProactiveChatSettings.QuestionSettings(questionsEnabled, 1.0D, 45_000L, 2),
+                new ProactiveChatSettings.QuestionSettings(
+                        questionsEnabled, 1.0D, 45_000L, 2, 180_000L, 2.5D
+                ),
                 new ProactiveChatSettings.CollectiveSettings(
                         collectiveEnabled, List.of("gg", "wp"), 2, 45_000L, 1.0D
                 ),

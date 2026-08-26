@@ -4,9 +4,16 @@ import nl.hauntedmc.ailex.assistant.domain.AssistantIntent;
 import nl.hauntedmc.ailex.assistant.domain.AssistantMode;
 
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 /** Cheap deterministic inference policy so model calls are reserved for work that benefits from them. */
 public final class AssistantGenerationPolicy {
+
+    private static final Pattern EXPLICIT_FIRST_PERSON_FACT = Pattern.compile(
+            "(?:^|[.!?]\\s*)(?:ik heb|ik ben|mijn [\\p{L}0-9 _-]{1,40} (?:is|zijn)|"
+                    + "i have|i am|i'm|my [a-z0-9 _-]{1,40} (?:is|are))\\b.*",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
+    );
 
     private AssistantGenerationPolicy() {
     }
@@ -28,9 +35,15 @@ public final class AssistantGenerationPolicy {
                 || intent == AssistantIntent.EVENT_RECALL;
     }
 
+    /**
+     * Enables the structured envelope for explicit first-person information as well as explicit memory operations.
+     * The memory validator remains the authority on whether a proposed fact is sufficiently durable, supported and safe;
+     * this method merely makes extraction possible without adding a second model call.
+     */
     public static boolean hasDurableMemorySignal(String message) {
-        String normalized = message == null ? "" : message.toLowerCase(Locale.ROOT);
-        return normalized.contains("onthoud")
+        String normalized = message == null ? "" : message.toLowerCase(Locale.ROOT).trim();
+        return EXPLICIT_FIRST_PERSON_FACT.matcher(normalized).matches()
+                || normalized.contains("onthoud")
                 || normalized.contains("remember")
                 || normalized.contains("vergeet")
                 || normalized.contains("forget")
@@ -69,7 +82,7 @@ public final class AssistantGenerationPolicy {
     }
 
     public static boolean mayEscalate(AssistantMode mode, int modelCalls, int maximumModelCalls, long remainingMillis) {
-        return mode == AssistantMode.GROUNDED
+        return (mode == AssistantMode.GROUNDED || mode == AssistantMode.DELIBERATE)
                 && modelCalls < maximumModelCalls
                 && remainingMillis >= 2_000L;
     }

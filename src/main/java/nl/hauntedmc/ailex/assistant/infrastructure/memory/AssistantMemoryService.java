@@ -20,14 +20,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Typed semantic/episodic memory facade. Durable writes are serialized to SQLite/WAL while reads use an audience-
- * indexed hot store, so a player request scores only memories that can actually be visible to that player/NPC rather
- * than scanning network-wide memory. Semantic keys are correctable and associative retrieval remains bounded.
+ * Typed semantic/episodic memory facade. Durable writes are serialized to a bounded repository while reads use an
+ * audience-indexed hot store, so a player request scores only memories visible to that player/NPC. The default
+ * repository is SQLite/WAL; an optional shared MySQL repository lets all AIlex runtimes expose one durable identity.
+ * Semantic keys are correctable, historical versions remain queryable, and current truth is resolved deterministically.
  */
 public final class AssistantMemoryService implements AutoCloseable {
 
@@ -55,22 +56,42 @@ public final class AssistantMemoryService implements AutoCloseable {
 
     private final JavaPlugin plugin;
     private final MemoryRepository repository;
+    private final MemoryTruthResolver truthResolver = new MemoryTruthResolver();
     private final Map<String, MemoryRecord> activeRecords = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> audienceIndex = new ConcurrentHashMap<>();
     private final Map<UUID, Map<String, Integer>> recentTopicTerms = new ConcurrentHashMap<>();
-    private final ExecutorService writer;
+    private final ScheduledExecutorService writer;
+    private final Object sharedSyncLock = new Object();
     private volatile boolean closed;
+    private volatile long lastSharedRefreshMillis;
+    private volatile long sharedChangeSequence;
 
     public AssistantMemoryService(JavaPlugin plugin) {
+        this(plugin, null);
+    }
+
+    /** Test seam for deterministic storage/synchronization verification. */
+    AssistantMemoryService(JavaPlugin plugin, MemoryRepository suppliedRepository) {
         this.plugin = plugin;
-        this.repository = createRepository(plugin.getDataFolder());
-        this.writer = Executors.newSingleThreadExecutor(runnable -> {
+        if (suppliedRepository == null) {
+            this.repository = createRepository(plugin.getDataFolder());
+        } else {
+            suppliedRepository.initialize();
+            this.repository = suppliedRepository;
+        }
+        this.writer = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, "AIlex-MemoryWriter");
             thread.setDaemon(true);
             return thread;
         });
+        long initialSharedSequence = repository.shared() ? repository.latestChangeSequence() : 0L;
         loadFromRepository();
+        sharedChangeSequence = initialSharedSequence;
+        lastSharedRefreshMillis = 0L;
         writer.execute(() -> repository.deleteExpiredBefore(Instant.now().minus(Duration.ofDays(30)).toEpochMilli()));
+        if (repository.shared()) {
+            writer.scheduleWithFixedDelay(this::refreshSharedRepositorySafely, 0L, 1L, TimeUnit.SECONDS);
+        }
     }
 
     public boolean isEnabled(UUID playerId) {
@@ -78,12 +99,19 @@ public final class AssistantMemoryService implements AutoCloseable {
     }
 
     /** Reloads the hot index after queued writes have completed. */
-    public synchronized void reload() {
+    public void reload() {
         flush();
-        activeRecords.clear();
-        audienceIndex.clear();
-        recentTopicTerms.clear();
-        loadFromRepository();
+        synchronized (sharedSyncLock) {
+            synchronized (this) {
+                long initialSharedSequence = repository.shared() ? repository.latestChangeSequence() : 0L;
+                activeRecords.clear();
+                audienceIndex.clear();
+                recentTopicTerms.clear();
+                loadFromRepository();
+                sharedChangeSequence = initialSharedSequence;
+                lastSharedRefreshMillis = 0L;
+            }
+        }
     }
 
     /** Tracks repeated topic terms in volatile session memory; raw chat is never persisted here. */
@@ -251,7 +279,7 @@ public final class AssistantMemoryService implements AutoCloseable {
         return record;
     }
 
-    /** Stores trusted runtime knowledge such as an event or factual relationship update. */
+    /** Stores trusted runtime knowledge such as an event, relationship, or verified experience update. */
     public synchronized MemoryRecord rememberTrusted(
             MemoryScope scope,
             String subjectId,
@@ -331,6 +359,7 @@ public final class AssistantMemoryService implements AutoCloseable {
                 .map(record -> record.key() + '=' + record.value()).toList());
         appendSection(output, "Relevant remembered events", records.stream()
                 .filter(record -> record.kind() == MemoryKind.EVENT || record.kind() == MemoryKind.EPISODE)
+                .filter(record -> !record.tags().contains("experience"))
                 .limit(8)
                 .map(MemoryRecord::value)
                 .toList());
@@ -382,6 +411,47 @@ public final class AssistantMemoryService implements AutoCloseable {
         return selectDiverse(associated, Math.clamp(maximumResults, 1, 96));
     }
 
+    /** Historical visible versions for time-qualified questions and correction auditing. */
+    public List<MemoryRecord> timeline(UUID playerId, String npcId, String semanticKey, int maximumResults) {
+        if (!memoryFeatureEnabled() || playerId == null || maximumResults <= 0) {
+            return List.of();
+        }
+        String player = playerId.toString();
+        String npc = clean(npcId);
+        String key = semanticKey == null || semanticKey.isBlank() ? "" : canonicalKey(semanticKey);
+        return repository.loadTimeline("", "", key, Math.clamp(maximumResults * 6, 8, 128)).stream()
+                .filter(record -> visibleTo(record, player, npc))
+                .sorted(Comparator.comparingLong(MemoryRecord::lastConfirmed).reversed())
+                .limit(Math.clamp(maximumResults, 1, 32))
+                .toList();
+    }
+
+    /** Deterministically resolves the best-supported claim at an arbitrary point in time. */
+    public List<MemoryTruthResolver.ResolvedClaim> resolveClaims(
+            UUID playerId,
+            String npcId,
+            String semanticKey,
+            long atEpochMillis,
+            int maximumResults
+    ) {
+        if (playerId == null || maximumResults <= 0) {
+            return List.of();
+        }
+        List<MemoryRecord> candidates;
+        if (semanticKey == null || semanticKey.isBlank()) {
+            candidates = search(playerId, npcId, "", Set.of(MemoryKind.values()), Math.min(96, maximumResults * 6));
+        } else {
+            candidates = timeline(playerId, npcId, semanticKey, Math.min(64, maximumResults * 6));
+        }
+        return truthResolver.resolve(candidates, atEpochMillis).stream()
+                .limit(Math.clamp(maximumResults, 1, 32))
+                .toList();
+    }
+
+    public boolean sharedRepository() {
+        return repository.shared();
+    }
+
     public List<MemoryRecord> activeSnapshot() {
         long now = System.currentTimeMillis();
         List<MemoryRecord> snapshot = new ArrayList<>();
@@ -425,6 +495,30 @@ public final class AssistantMemoryService implements AutoCloseable {
 
     private MemoryRepository createRepository(File dataFolder) {
         File effectiveFolder = dataFolder == null ? new File("plugins/AIlex") : dataFolder;
+        FileConfiguration config = plugin.getConfig();
+        String backend = config == null ? "sqlite" : config.getString(
+                "openai.assistant.memory.storage.backend", "sqlite"
+        );
+        if (backend != null && "mysql".equalsIgnoreCase(backend.trim())) {
+            MemoryRepository shared = new MysqlMemoryRepository(
+                    config.getString("openai.assistant.memory.storage.mysql.jdbc_url", ""),
+                    config.getString("openai.assistant.memory.storage.mysql.username", ""),
+                    config.getString("openai.assistant.memory.storage.mysql.password", ""),
+                    config.getString("openai.assistant.memory.storage.mysql.table_prefix", "ailex_")
+            );
+            try {
+                shared.initialize();
+                return shared;
+            } catch (RuntimeException exception) {
+                shared.close();
+                warn("Shared MySQL assistant memory unavailable; using non-persistent fail-safe to avoid split-brain "
+                        + "server memories: " + exception.getMessage());
+                MemoryRepository fallback = new InMemoryMemoryRepository();
+                fallback.initialize();
+                return fallback;
+            }
+        }
+
         MemoryRepository candidate = new SqliteMemoryRepository(new File(effectiveFolder, DATABASE_FILE_NAME).toPath());
         try {
             candidate.initialize();
@@ -448,6 +542,82 @@ public final class AssistantMemoryService implements AutoCloseable {
             );
         }
         activeRecords.values().forEach(this::indexRecord);
+    }
+
+    private void refreshSharedRepositorySafely() {
+        if (!repository.shared() || closed) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (now - lastSharedRefreshMillis < sharedRefreshIntervalMillis()) {
+            return;
+        }
+        synchronized (sharedSyncLock) {
+            if (closed) {
+                return;
+            }
+            try {
+                synchronizeSharedMemoryNow();
+                lastSharedRefreshMillis = System.currentTimeMillis();
+            } catch (RuntimeException exception) {
+                warn("Could not refresh shared assistant memory: " + exception.getMessage());
+            }
+        }
+    }
+
+    /** Package-private deterministic hook used by synchronization regressions; production calls it off-thread only. */
+    void synchronizeSharedMemoryNow() {
+        if (!repository.shared() || closed) {
+            return;
+        }
+        long cursor = sharedChangeSequence;
+        while (true) {
+            List<MemoryRepository.SharedChange> changes = repository.loadChangesAfter(cursor, 2_048);
+            if (changes.isEmpty()) {
+                // Advance over compacted/orphaned change rows without using server wall clocks as a cursor.
+                sharedChangeSequence = Math.max(cursor, repository.latestChangeSequence());
+                return;
+            }
+            long now = System.currentTimeMillis();
+            for (MemoryRepository.SharedChange change : changes) {
+                applyRepositoryChange(change.record(), now);
+                cursor = Math.max(cursor, change.sequence());
+            }
+            sharedChangeSequence = cursor;
+            if (changes.size() < 2_048) {
+                return;
+            }
+        }
+    }
+
+    private void applyRepositoryChange(MemoryRecord incoming, long now) {
+        if (incoming == null) {
+            return;
+        }
+        MemoryRecord current = activeRecords.get(incoming.identityKey());
+        if (!incoming.activeAt(now)) {
+            long incomingClock = Math.max(incoming.lastConfirmed(), incoming.expiresAt());
+            if (current != null && (current.id().equals(incoming.id()) || current.lastConfirmed() <= incomingClock)) {
+                evictExpired(current);
+            }
+            return;
+        }
+        if (current != null && current.lastConfirmed() > incoming.lastConfirmed()) {
+            return;
+        }
+        if (current != null) {
+            unindexRecord(current);
+        }
+        activeRecords.put(incoming.identityKey(), incoming);
+        indexRecord(incoming);
+    }
+
+    private long sharedRefreshIntervalMillis() {
+        FileConfiguration config = plugin.getConfig();
+        int seconds = config == null ? 5 : Math.clamp(config.getInt(
+                "openai.assistant.memory.storage.shared_sync_seconds", 5
+        ), 1, 60);
+        return TimeUnit.SECONDS.toMillis(seconds);
     }
 
     private List<MemoryRecord> visibleCandidates(String playerId, String npcId, long now) {
@@ -607,9 +777,8 @@ public final class AssistantMemoryService implements AutoCloseable {
         long now = System.currentTimeMillis();
         String identity = identity(scope, subjectId, relationId, kind, key);
         MemoryRecord previous = activeRecords.get(identity);
-        long firstObserved = previous == null ? now : previous.firstObserved();
-        boolean updateInPlace = previous != null
-                && (kind == MemoryKind.RELATIONSHIP || previous.value().equalsIgnoreCase(value));
+        boolean updateInPlace = previous != null && previous.value().equalsIgnoreCase(value);
+        long firstObserved = updateInPlace ? previous.firstObserved() : now;
         String id = updateInPlace ? previous.id() : UUID.randomUUID().toString();
         String supersedes = previous == null
                 ? ""
@@ -743,7 +912,7 @@ public final class AssistantMemoryService implements AutoCloseable {
             case OPINION -> 0.92D;
             case FACT -> 0.90D;
             case RELATIONSHIP -> 0.78D;
-            case EVENT, EPISODE -> 0.72D;
+            case EVENT, EPISODE -> record.tags().contains("experience") ? 0.86D : 0.72D;
         };
         return record.salience() * 0.23D
                 + record.confidence() * 0.16D

@@ -22,6 +22,18 @@ class AssistantGenerationPolicyTest {
         assertTrue(AssistantGenerationPolicy.useStructuredOutput(
                 true, AssistantMode.FAST, AssistantIntent.CONVERSATION, "mijn favoriete gamemode is survival"
         ));
+        assertTrue(AssistantGenerationPolicy.useStructuredOutput(
+                true, AssistantMode.FAST, AssistantIntent.CONVERSATION, "Ik heb twee katten."
+        ));
+        assertTrue(AssistantGenerationPolicy.useStructuredOutput(
+                true, AssistantMode.FAST, AssistantIntent.CONVERSATION, "My current project is a castle."
+        ));
+    }
+
+    @Test
+    void shouldNotStructureAmbientStatementsWithoutDurableSignal() {
+        assertFalse(AssistantGenerationPolicy.hasDurableMemorySignal("mooie spawn vandaag"));
+        assertFalse(AssistantGenerationPolicy.hasDurableMemorySignal("waar is de shop?"));
     }
 
     @Test
@@ -32,8 +44,9 @@ class AssistantGenerationPolicyTest {
     }
 
     @Test
-    void shouldOnlyEscalateGroundedWorkWithBudgetAndTimeLeft() {
+    void shouldEscalateGroundedOrDeliberateWorkOnlyWithBudgetAndTimeLeft() {
         assertTrue(AssistantGenerationPolicy.mayEscalate(AssistantMode.GROUNDED, 1, 3, 5_000L));
+        assertTrue(AssistantGenerationPolicy.mayEscalate(AssistantMode.DELIBERATE, 1, 3, 5_000L));
         assertFalse(AssistantGenerationPolicy.mayEscalate(AssistantMode.FAST, 1, 3, 5_000L));
         assertFalse(AssistantGenerationPolicy.mayEscalate(AssistantMode.GROUNDED, 3, 3, 5_000L));
         assertFalse(AssistantGenerationPolicy.mayEscalate(AssistantMode.GROUNDED, 1, 3, 1_000L));

@@ -1,22 +1,29 @@
 # Configuration
 
-`src/main/resources/config.yml` is the source of truth for shipped settings. Keep production overrides small and prefer the adaptive defaults unless measurements show a reason to change them.
+`src/main/resources/config.yml` is the source of truth for shipped settings. Production overrides should stay small; change a default only when measurements or deployment topology justify it.
 
-## API and inference
+## API and adaptive inference
 
 `openai.api_key` configures the provider credential. `store_responses` is disabled by default. `request_timeout_seconds` bounds upstream calls.
 
-The assistant uses three adaptive profiles under `openai.assistant.models`:
+The assistant uses three profiles under `openai.assistant.models`:
 
-- `fast` for ordinary conversation;
-- `grounded` for factual, live-state and evidence-backed work;
-- `deliberate` for expensive reasoning/escalation.
+- `fast` — ordinary conversation and low-cost turns;
+- `grounded` — factual, live-state and evidence-backed work;
+- `deliberate` — difficult reasoning or quality escalation.
 
-`max_model_calls`, `max_tool_rounds` and `total_deadline_seconds` bound work per request. These limits exist to protect the Minecraft server from unbounded retries and latency.
+The main hard bounds are:
+
+```yaml
+assistant:
+  total_deadline_seconds: 15
+  max_model_calls: 3
+  max_tool_rounds: 1
+```
+
+The single default tool round is intentional. When a planner call is genuinely needed, a three-call ceiling still leaves capacity for answer generation and one corrective escalation. `AssistantReadAgent` also skips the planner entirely when deterministic retrieval already supplied the required source.
 
 ## Context budgets
-
-`openai.assistant.context` defines hard prompt ceilings:
 
 ```yaml
 context:
@@ -25,11 +32,9 @@ context:
   max_input_tokens_deliberate: 18000
 ```
 
-They are ceilings, not target prompt sizes. `ContextCompiler` prioritizes the current request and useful evidence, then allocates space to dialogue, live state, memory, reviewed knowledge and optional recent chat. Increasing these values only helps when useful context is available; it should not be used as a substitute for better retrieval.
+These are ceilings, not targets. `ContextCompiler` prioritizes the current request and useful evidence, then allocates space to dialogue, live state, memory, reviewed knowledge and optional recent chat. Larger ceilings do not compensate for weak retrieval.
 
-## Knowledge retrieval
-
-`openai.assistant.retrieval` controls reviewed-knowledge selection:
+## Neural hybrid knowledge retrieval
 
 ```yaml
 retrieval:
@@ -38,31 +43,56 @@ retrieval:
   max_evidence_characters: 24000
   query_cache_seconds: 300
   exclude_expired: true
+  semantic_embeddings:
+    enabled: true
+    model: "text-embedding-3-small"
+    dimensions: 512
+    timeout_seconds: 8
 ```
 
-Knowledge articles live in the configured external `knowledge` directory. Keep them concise, sourceable and player-safe. Never put credentials, staff-only notes, reports, sanctions, private player information or infrastructure details in knowledge files.
+The index fuses BM25/exact/phrase/concept signals with learned semantic similarity and reciprocal-rank fusion. Exact commands and server vocabulary remain lexical-first; embeddings mainly improve paraphrase/meaning recall. Corpus vectors warm asynchronously and query/document vectors are cached. A cold, failed or unavailable embeddings path falls back to lexical retrieval instead of blocking the player request while a complete corpus is embedded.
 
-Open-ended prompts such as “tell me a fun fact” use corpus discovery instead of requiring strong lexical query terms.
+Knowledge articles live in the configured external `knowledge` directory. Keep them concise, attributable and player-safe. Never put credentials, staff-only notes, reports, sanctions, private player information or infrastructure details in knowledge files.
 
-## Read-only live tools
+Open-ended prompts such as “tell me a fun fact” use corpus discovery rather than forcing a meaningless lexical search.
 
-`openai.assistant.tools.allowed` is a capability ceiling. The deterministic context planner chooses the relevant subset for each turn.
+## Bounded typed read-agent
 
-Typical sources are:
+```yaml
+agent:
+  enabled: true
+  planner_model: "gpt-5.6-luna"
+  max_tool_calls_per_round: 2
+```
 
-- `requester` — safe state about the player asking;
-- `world` — world, biome, location, weather, time, light, target context;
+`AssistantToolRegistry` is the model-facing capability boundary. Each `AssistantTool` owns a strict schema, a deterministic availability predicate and a bounded Java executor. The planner can only choose from tools registered for the current request; it cannot execute commands, discover arbitrary plugin APIs, access SQL/filesystem internals or create new capabilities.
+
+The agent is information-gain gated. Examples:
+
+- complete live snapshot → no planner call;
+- strong reviewed knowledge hit → no planner call;
+- temporal memory wording → timeline lookup may be useful;
+- missing server evidence → one focused knowledge search may be useful.
+
+Increasing tool rounds should be treated as a measured exception because it consumes both latency and final-answer call budget. Planner input/output token usage is tracked separately from final-generation usage.
+
+## Read-only capability ceiling
+
+`openai.assistant.tools.allowed` defines which source families may ever be exposed:
+
+- `requester` — safe state about the requesting player (including bounded inventory state);
+- `world` — dimension/biome/location/weather/time/light/target context;
 - `nearby` — bounded nearby entity information;
-- `server` — safe operational state such as online count/TPS/MSPT/version/uptime;
-- `npc` — the addressed bot's safe state;
-- `session` — dialogue and typed memory;
+- `server` — player-safe operational state such as online count/TPS/MSPT/version/uptime;
+- `npc` — addressed bot state;
+- `session` — dialogue, typed memory, timeline and verified experience;
 - `knowledge` — reviewed HauntedMC knowledge.
 
-`redact_other_players: true` should remain enabled unless there is a specific player-facing reason to expose other player names.
+`redact_other_players: true` should remain enabled. Other HauntedMC plugins should register an `AssistantContextProvider` for selected read-only feature state. Provider outputs are bounded and pass deterministic data-safety filters.
 
-Other HauntedMC plugins should use `AssistantContextProviderRegistry` to expose additional read-only facts. A provider should return only information that is safe and useful for the requesting player.
+For grounded live-state work, AIlex freezes an authorized superset of safe Paper state on the server thread before asynchronous reasoning begins. The planner may inspect only that frozen snapshot; it never calls Bukkit/Paper asynchronously.
 
-## Durable memory
+## Memory fabric
 
 ```yaml
 memory:
@@ -71,29 +101,53 @@ memory:
   max_player_memories: 256
   max_context_characters: 8000
   shared_write_permission: "ailex.admin"
+  storage:
+    backend: "sqlite"
+    shared_sync_seconds: 5
+    mysql:
+      jdbc_url: ""
+      username: ""
+      password: ""
+      table_prefix: "ailex_"
 ```
 
-Durable memory is typed rather than transcript-based. Supported semantic kinds are facts, preferences, opinions, interests and goals; relationship/event memory is written by trusted runtime code.
+`MemoryRecord` is the backward-compatible durable storage envelope. The cognitive memory model separates current/historical `MemoryClaim`s, typed `MemoryEvent`s, ordered `MemoryEpisode`s, relationship `MemoryEdge`s and verified procedural experience. Raw chat is not the durable identity model.
 
-Shared learned memory is limited to facts and requires `shared_write_permission`. Do not make this permission globally available: player statements about themselves should remain player-scoped, while server-wide facts need a trusted author.
+Memory candidates still pass source-support and privacy validation. Structured output being enabled does **not** mean every first-person sentence becomes permanent memory; it only gives the validator a candidate to evaluate.
 
-Goals are treated as temporary current projects and expire unless reconfirmed. Corrections reuse a stable semantic key and supersede the old active meaning. Explicit forgetting removes the named player semantic key.
+Shared learned memory is fact-only and requires `shared_write_permission`. Player facts should remain player-scoped unless they are genuinely trusted server-wide facts.
 
-The SQLite database is local to the plugin and WAL is enabled for low-overhead durable writes.
+### SQLite
+
+`backend: sqlite` is self-contained and uses the embedded SQLite JDBC driver with WAL. This is the default development/single-runtime backend.
+
+### Shared MySQL
+
+`backend: mysql` makes the durable repository authoritative across AIlex runtimes. The MySQL JDBC driver is embedded in the plugin. Configure a normal JDBC URL plus credentials; these configuration values are never part of model context.
+
+Each runtime serves player requests from its audience-indexed in-memory hot store. Database refresh runs off-thread and uses a database-owned monotonic change sequence, not server wall-clock timestamps, so clock skew and bursts do not silently skip changes. `shared_sync_seconds` controls refresh cadence; synchronization paginates until the runtime has consumed all available changes.
+
+If MySQL is explicitly selected but unavailable at startup, AIlex deliberately uses a non-persistent in-memory fail-safe. It does **not** silently fall back to a per-server SQLite database, because doing so would create multiple divergent AIlex identities that later look authoritative. Production multi-runtime deployments should alert on `shared_memory=false` and restore the shared backend.
+
+## Temporal truth
+
+Corrections reuse stable semantic keys. A changed value receives a new validity start; the superseded row retains its previous validity interval and provenance. `MemoryTruthResolver` deterministically selects the best-supported claim for a requested point in time using source authority, confidence, validity, recency and salience. Near-tied conflicting values are represented as disputed.
+
+This behavior is deterministic; there is no configuration that allows the model to override source authority or repository freshness.
 
 ## Chat and working context
 
 `openai.chat.session_timeout_seconds` controls how long a player can naturally continue an active player↔assistant conversation without repeating the assistant name.
 
-`openai.chat_context` controls short-lived raw conversation/ambient context. This data is not the assistant's durable identity store. `persist_to_disk` is disabled by default; durable knowledge should be represented through typed memory instead.
+`openai.chat_context` controls short-lived raw conversation/ambient context. `persist_to_disk` is disabled by default. Durable knowledge belongs in typed memory instead of raw transcript persistence.
 
-Large `max_context_characters` values do not mean every message is copied into every prompt. `WorkingContextPolicy` decides whether historical raw chat is useful for the current turn.
+Large `max_context_characters` values do not mean every message is copied into every prompt. `WorkingContextPolicy` decides when recent raw chat is useful.
 
 ## Proactive chat
 
-All proactive activity is lower priority than a direct player request.
+All proactive work is lower priority than direct player requests.
 
-### Public questions
+### Public questions and social intervention
 
 ```yaml
 questions:
@@ -101,19 +155,23 @@ questions:
   probability: 0.3
   conversation_window_seconds: 45
   minimum_speaker_alternations: 2
+  social_graph_window_seconds: 180
+  strong_pair_score: 2.5
 ```
 
-AIlex keeps a small in-memory recent-speaker window. Questions are suppressed when recent alternation/direct-address/contextual wording indicates an active player-to-player conversation. Explicit public cues such as `weet iemand...?`, `kan iemand...?`, `anyone know...?` or `can someone...?` remain eligible.
+`SocialConversationGraph` is the single transient player-conversation model. It combines a bounded volatile speaker/message window for direct-address/alternation/thread evidence with decaying pair edges over the longer social window. Nothing in this graph is persisted, and it does not infer friendship, affection, personality or private social profiles.
 
-The tracker is deliberately conservative: missing an occasional proactive answer is better than interrupting two players talking to each other.
+A question must still look genuinely general/public. Likely player-to-player continuation is suppressed. Explicit broadcast wording such as `weet iemand...?`, `kan iemand...?`, `anyone know...?` or `can someone...?` can override conversation suppression because it clearly addresses the wider chat.
+
+The policy is intentionally conservative: false silence is preferable to AIlex interrupting a human conversation.
 
 ### Join, collective and idle behavior
 
 `join` controls occasional personal join greetings. `collective` reacts only after enough distinct players participate in configured community phrases. `idle` can produce rare low-priority activity after a long bot silence.
 
-Use low probabilities and meaningful cooldowns. Proactive AI should feel like a participant, not a chat bot responding to everything.
+Use low probabilities and meaningful cooldowns. Proactive output should be exceptional, not a response to every chat signal.
 
-## Verification
+## Evidence packets and claim-level verification
 
 ```yaml
 verification:
@@ -121,18 +179,23 @@ verification:
   minimum_confidence: "medium"
 ```
 
-For grounded server/live questions, AIlex validates that model-supplied evidence IDs actually exist in the request. Answers that require local/live grounding cannot silently cite invented source identifiers.
+`EvidencePacket` normalizes the provenance IDs made available to deterministic grounding. Grounded structured output carries exact evidence IDs and line-level `claim_evidence`. IDs not supplied by reviewed knowledge, memory, the bounded read-agent or live snapshot are rejected. Once an answer cites evidence, every emitted line must carry a supporting mapping; partially grounded multi-line replies are invalid.
+
+Server/live/memory routes require the appropriate evidence family even when retrieval returned nothing. Deterministic negative observations such as `knowledge.none`, `memory.none` or `live.*.none` let the model explain/abstain based on a real retrieval result; they do not authorize an unsupported positive claim. Failed verification may use a bounded stronger-model escalation when call/deadline budget remains; otherwise AIlex abstains with a safe fallback.
 
 ## Reliability
 
-- `circuit_breaker_enabled` prevents repeated upstream failure from occupying workers.
-- static answer caching is context-fingerprinted so changed memory/live evidence does not reuse a stale grounded answer.
-- direct requests use bounded concurrent/queued capacity.
-- proactive requests yield to direct traffic.
+- `circuit_breaker_enabled` prevents repeated upstream failure from occupying workers;
+- static-answer caching is context-fingerprinted so changed memory/live evidence does not reuse stale output;
+- direct requests use bounded concurrent/queued capacity;
+- newer queued turns can supersede stale same-player work;
+- proactive requests yield to direct traffic;
+- embeddings and read tools fail toward simpler deterministic retrieval or explicit abstention rather than taking down chat;
+- shared memory never performs database network I/O on the Paper tick thread.
 
 ## Observability
 
-`openai.assistant.observability` controls routing/completion diagnostics. Response previews are disabled by default. Prefer structured operational metadata over logging player chat or extracted memory values.
+`openai.assistant.observability` controls routing/completion diagnostics. Response previews are disabled by default. Prefer counters, route/model/tool usage and timing over logging player text or extracted memory values.
 
 Useful commands include:
 
@@ -143,4 +206,6 @@ Useful commands include:
 /ailex trace recent
 ```
 
-When tuning AIlex, measure latency, model calls, cached/input/output tokens, retrieval counts, fallback rate and queue pressure together. Optimizing only one of these usually moves cost or latency somewhere else.
+`/ailex ai status` reports learned semantic retrieval/shared-memory state plus read-agent planner/tool counts and planner token totals. Per-request completion diagnostics include retrieved chunk count, evidence IDs, claim-evidence line count, model-call count and latency.
+
+When tuning AIlex, measure response latency, model calls, tool calls, cached/input/output tokens, retrieval quality, fallback rate and queue pressure together. A change that improves one dimension by increasing every other cost is not automatically an improvement.

@@ -69,8 +69,8 @@ public final class AssistantDataSafety {
         int index = value.indexOf(term);
         while (index >= 0) {
             int end = index + term.length();
-            boolean before = index == 0 || Character.isLetterOrDigit(value.charAt(index - 1)) == false;
-            boolean after = end == value.length() || Character.isLetterOrDigit(value.charAt(end)) == false;
+            boolean before = index == 0 || !Character.isLetterOrDigit(value.charAt(index - 1));
+            boolean after = end == value.length() || !Character.isLetterOrDigit(value.charAt(end));
             if (before && after) {
                 return true;
             }
