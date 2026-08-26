@@ -69,6 +69,13 @@ public final class AssistantService {
         String language = settings.languageDetection()
                 ? AssistantIntentClassifier.detectLanguage(message, settings.defaultLanguage(), settings.allowedLanguages())
                 : settings.defaultLanguage();
+        if (memoryService != null && settings.toolAllowed("session")) {
+            memoryService.rememberExplicitLanguagePreference(player.getUniqueId(), message);
+            String preferredLanguage = memoryService.preferredLanguage(player.getUniqueId());
+            if (!preferredLanguage.isBlank()) {
+                language = preferredLanguage;
+            }
+        }
         analysis = new AssistantIntentClassifier.Analysis(
                 analysis.intent(), settings.resolveMode(analysis.mode()), language
         );
@@ -440,6 +447,8 @@ public final class AssistantService {
             text = "Daar kan ik niet mee helpen, maar ik kan wel veilig helpen met Minecraft of de serverregels.";
         } else if (request.analysis().intent() == AssistantIntent.SUPPORT) {
             text = "Dat kan ik niet verifiëren of afhandelen. Gebruik /help of neem contact op met de officiële Support.";
+        } else if (request.analysis().intent() == AssistantIntent.CONVERSATION) {
+            text = "Sorry, ik kreeg daar geen bruikbaar antwoord op. Kun je het nog eens kort zeggen?";
         } else if ("nl".equals(request.analysis().language())) {
             text = "Dat kan ik nu niet betrouwbaar verifiëren. Kijk in /help of vraag een stafflid om de actuele info.";
         } else {
@@ -612,8 +621,8 @@ public final class AssistantService {
                         : "nearby_players=" + String.join(",", nearbyNames));
                 sourceIds.add("live.nearby");
             }
-            if (settings.toolAllowed("npc") && npc != null && npc.getEntity() != null) {
-                Location npcLocation = npc.getEntity().getLocation();
+            if (settings.toolAllowed("npc") && npc != null && npc.isSpawned()) {
+                Location npcLocation = npc.getLastKnownLocation();
                 values.add(String.format(Locale.ROOT, "npc_pos=%.0f,%.0f,%.0f", npcLocation.getX(), npcLocation.getY(),
                         npcLocation.getZ()));
                 sourceIds.add("live.npc");

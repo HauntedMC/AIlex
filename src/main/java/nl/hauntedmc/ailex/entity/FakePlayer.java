@@ -144,6 +144,19 @@ public class FakePlayer implements Entity {
     }
 
     /**
+     * Returns whether the Citizens NPC currently has a Bukkit entity. Citizens keeps the NPC object
+     * after a despawn, so checking the wrapper itself is not sufficient before accessing its entity.
+     */
+    public boolean isSpawned() {
+        return !removed && npc.isSpawned() && npc.getEntity() != null;
+    }
+
+    /** Returns the spawned Bukkit entity, or {@code null} while Citizens has despawned this NPC. */
+    public @Nullable Entity getSpawnedEntity() {
+        return isSpawned() ? npc.getEntity() : null;
+    }
+
+    /**
      * Method to set the custom name of the NPC
      * @param playerName The name of the player
      */

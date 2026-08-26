@@ -301,7 +301,7 @@ final class ChatContextStore {
         }
 
         for (int index = entries.size() - 1; index >= 0; index--) {
-            if (!queryWords.isEmpty() && selectedEntries.size() >= 2) {
+            if (!queryWords.isEmpty() && selectedEntries.size() >= 5) {
                 break;
             }
             ChatEntry entry = entries.get(index);

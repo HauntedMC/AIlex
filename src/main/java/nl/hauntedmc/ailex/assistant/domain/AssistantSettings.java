@@ -95,7 +95,7 @@ public record AssistantSettings(
         Set<String> allowed = new LinkedHashSet<>();
         for (String language : configuredLanguages) {
             String normalized = normalizeLanguage(language);
-            if ("nl".equals(normalized) || "en".equals(normalized)) {
+            if ("nl".equals(normalized) || "en".equals(normalized) || "de".equals(normalized)) {
                 allowed.add(normalized);
             }
         }
@@ -117,6 +117,7 @@ public record AssistantSettings(
         return switch (normalized) {
             case "nl", "nederlands", "dutch" -> "nl";
             case "en", "english", "engels" -> "en";
+            case "de", "deutsch", "duits", "german" -> "de";
             default -> "";
         };
     }

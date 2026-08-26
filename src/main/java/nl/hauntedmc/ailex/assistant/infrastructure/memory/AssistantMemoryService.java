@@ -98,6 +98,34 @@ public final class AssistantMemoryService {
         terms.forEach(term -> observed.merge(term, 1, (oldValue, ignored) -> Math.min(oldValue + 1, 3)));
     }
 
+    /**
+     * Records an unambiguous first-person language preference before the model is called. This
+     * avoids losing a clear preference merely because an upstream structured response is retried.
+     */
+    public synchronized void rememberExplicitLanguagePreference(UUID playerId, String playerMessage) {
+        if (!memoryFeatureEnabled() || playerId == null || playerMessage == null) {
+            return;
+        }
+        String normalized = playerMessage.toLowerCase(Locale.ROOT);
+        if (!isFirstPersonLanguagePreference(normalized)) {
+            return;
+        }
+        String language = explicitLanguage(normalized);
+        if (!language.isBlank()) {
+            rememberPreference(playerId, "language=" + language, playerMessage);
+        }
+    }
+
+    /** Returns the saved output language, if it remains supported by the active configuration. */
+    public String preferredLanguage(UUID playerId) {
+        PreferenceMemory preference = preferences.get(playerId);
+        if (preference == null || preference.expired(retentionDays())) {
+            return "";
+        }
+        String language = preference.language();
+        return AssistantSettings.from(plugin.getConfig()).languageAllowed(language) ? language : "";
+    }
+
     /** Saves a candidate, allowing shared memory only for a caller authorized by server configuration. */
     public synchronized void remember(
             UUID playerId, String playerName, String candidate, String playerMessage, boolean canWriteSharedMemory
@@ -281,10 +309,32 @@ public final class AssistantMemoryService {
                         || normalized.contains("dutch");
                 case "en" -> normalized.contains("english") || normalized.contains("engels")
                         || normalized.contains("in en");
+                case "de" -> normalized.contains("duits") || normalized.contains("deutsch")
+                        || normalized.contains("german") || normalized.contains("in de");
                 default -> false;
             };
         }
         return containsWord(normalized, value);
+    }
+
+    private boolean isFirstPersonLanguagePreference(String message) {
+        return message.matches(".*\\bik\\s+(spreek|praat)\\b.*")
+                || message.matches(".*\\bi\\s+(speak|talk)\\b.*")
+                || message.matches(".*\\bich\\s+spreche\\b.*")
+                || message.matches(".*\\b(antwoord|reageer|reply|respond)\\b.*\\b(tegen mij|to me|zu mir)\\b.*");
+    }
+
+    private String explicitLanguage(String message) {
+        if (message.contains("duits") || message.contains("deutsch") || message.contains("german")) {
+            return "de";
+        }
+        if (message.contains("engels") || message.contains("english")) {
+            return "en";
+        }
+        if (message.contains("nederlands") || message.contains("dutch")) {
+            return "nl";
+        }
+        return "";
     }
 
     private boolean containsWord(String text, String value) {

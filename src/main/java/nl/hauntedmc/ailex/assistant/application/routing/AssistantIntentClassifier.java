@@ -81,9 +81,6 @@ public final class AssistantIntentClassifier {
      */
     public static String detectLanguage(String message, String fallbackLanguage, Set<String> allowedLanguages) {
         String fallback = allowedLanguages.contains(fallbackLanguage) ? fallbackLanguage : "nl";
-        if (!allowedLanguages.contains("en")) {
-            return fallback;
-        }
         String normalized = message == null ? "" : message.toLowerCase(Locale.ROOT);
         int englishSignals = countSignals(normalized, Set.of(
                 "the", "and", "what", "how", "why", "where", "can", "please", "hello", "thanks", "thank",
@@ -93,7 +90,20 @@ public final class AssistantIntentClassifier {
                 "de", "het", "een", "en", "wat", "hoe", "waarom", "waar", "kan", "wil", "jij", "mijn",
                 "met", "voor", "dank", "hallo", "als"
         ));
-        return englishSignals > dutchSignals && englishSignals > 0 ? "en" : fallback;
+        int germanSignals = countSignals(normalized, Set.of(
+                "der", "die", "das", "und", "was", "wie", "warum", "wo", "kann", "bitte", "hallo",
+                "danke", "mit", "für", "ich", "mein", "nicht", "auf", "deutsch"
+        ));
+        String detected = fallback;
+        int bestScore = dutchSignals;
+        if (allowedLanguages.contains("en") && englishSignals > bestScore) {
+            detected = "en";
+            bestScore = englishSignals;
+        }
+        if (allowedLanguages.contains("de") && germanSignals > bestScore) {
+            detected = "de";
+        }
+        return detected;
     }
 
     private static int countSignals(String message, Set<String> signals) {

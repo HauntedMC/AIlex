@@ -74,6 +74,17 @@ class AssistantMemoryServiceTest {
     }
 
     @Test
+    void shouldPersistAnExplicitGermanFirstPersonLanguagePreference() {
+        UUID playerId = UUID.randomUUID();
+        AssistantMemoryService memory = memoryService(dataDirectory.toFile());
+
+        memory.rememberExplicitLanguagePreference(playerId, "Ik spreek vanaf nu alleen nog Duits, onthoud mijn voorkeur.");
+
+        assertTrue(memory.summary(playerId).contains("language=de"));
+        assertTrue("de".equals(memory.preferredLanguage(playerId)));
+    }
+
+    @Test
     void shouldPersistHarmlessPersonalInterestFromAParaphrase() {
         AssistantMemoryService memory = memoryService(dataDirectory.toFile());
         UUID playerId = UUID.randomUUID();
@@ -112,6 +123,7 @@ class AssistantMemoryServiceTest {
         config.set("openai.assistant.memory.retention_days", 90);
         config.set("openai.assistant.memory.max_shared_facts", 128);
         config.set("openai.assistant.memory.max_player_facts", 24);
+        config.set("openai.assistant.routing.allowed_languages", List.of("nl", "en", "de"));
         when(plugin.getConfig()).thenReturn(config);
         when(plugin.getDataFolder()).thenReturn(dataFolder);
         return new AssistantMemoryService(plugin);

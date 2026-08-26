@@ -99,6 +99,16 @@ class AssistantIntentClassifierTest {
     }
 
     @Test
+    void shouldDetectGermanOnlyWhenConfigured() {
+        assertEquals("de", AssistantIntentClassifier.detectLanguage(
+                "Wie baue ich eine Farm?", "nl", Set.of("nl", "en", "de")
+        ));
+        assertEquals("nl", AssistantIntentClassifier.detectLanguage(
+                "Wie baue ich eine Farm?", "nl", Set.of("nl", "en")
+        ));
+    }
+
+    @Test
     void shouldNormalizeConfiguredLanguageListAndKeepDutchFallback() {
         YamlConfiguration config = new YamlConfiguration();
         config.set("openai.assistant.routing.default_language", "English");

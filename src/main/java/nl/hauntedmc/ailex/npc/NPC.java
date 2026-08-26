@@ -174,8 +174,9 @@ public abstract class NPC implements Kinematic {
      * Reset the kinematics of the NPC
      */
     public void resetKinematics() {
-        position = Geometry.locationToVector3d(fakePlayer.getLocation());
-        orientation = fakePlayer.getLocation().getYaw();
+        Location location = getLastKnownLocation();
+        position = Geometry.locationToVector3d(location);
+        orientation = location.getYaw();
         velocity = new Vector3d(0, 0, 0);
         rotation = 0;
     }
@@ -241,7 +242,7 @@ public abstract class NPC implements Kinematic {
      * @return The data of the NPC
      */
     public NPCData getNPCData() {
-        return new NPCData(id, name, fakePlayer.getLocation(), getClass().getName(), properties.copy());
+        return new NPCData(id, name, getLastKnownLocation(), getClass().getName(), properties.copy());
     }
 
     // --------------------------------------------------------------------------
@@ -258,6 +259,28 @@ public abstract class NPC implements Kinematic {
 
     public Entity getEntity() {
         return fakePlayer;
+    }
+
+    /**
+     * Citizens NPC handles remain registered after their Bukkit entity despawns. This distinguishes
+     * a live physical NPC from that retained, non-spawned handle.
+     */
+    public boolean isSpawned() {
+        return fakePlayer != null && fakePlayer.isSpawned();
+    }
+
+    /**
+     * Uses the live entity position where available and otherwise the stored spawn position.
+     * This lets lifecycle persistence safely survive a Citizens despawn or hot reload.
+     */
+    public Location getLastKnownLocation() {
+        if (fakePlayer != null) {
+            Entity entity = fakePlayer.getSpawnedEntity();
+            if (entity != null) {
+                return entity.getLocation();
+            }
+        }
+        return spawnLocation == null ? new Location(null, 0, 0, 0) : spawnLocation.clone();
     }
 
     public NPC getNPC() {

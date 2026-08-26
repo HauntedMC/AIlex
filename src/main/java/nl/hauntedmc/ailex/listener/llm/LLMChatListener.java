@@ -176,7 +176,7 @@ public class LLMChatListener implements Listener {
 
         // If an NPC is mentioned in the message forward chat to AI
         for (NPC npc : npcManager.getNPCRegistry().values()) {
-            if (!npc.isChatEnabled()) {
+            if (!npc.isChatEnabled() || !npc.isSpawned()) {
                 continue;
             }
 
@@ -632,8 +632,8 @@ public class LLMChatListener implements Listener {
         appendServerMetadata(metadata, config);
         appendNearbyPlayerMetadata(metadata, config, source);
         appendNearbyEntityMetadata(metadata, config, source);
-        if (npc != null && npc.getEntity() != null) {
-            Location npcLocation = npc.getEntity().getLocation();
+        if (npc != null && npc.isSpawned()) {
+            Location npcLocation = npc.getLastKnownLocation();
             World npcWorld = npcLocation.getWorld();
             if (npcWorld != null && config.getBoolean(METADATA_PATH + ".include_npc_world", true)) {
                 metadata.add("bot_world=" + npcWorld.getName());
@@ -975,6 +975,9 @@ public class LLMChatListener implements Listener {
 
     private boolean bypassesResponseRateLimit(Player player) {
         FileConfiguration config = plugin.getConfig();
+        if (config != null && config.getBoolean("openai.rate_limit.bypass_operators", true) && player.isOp()) {
+            return true;
+        }
         String permission = config == null ? "ailex.rate_limit.bypass"
                 : config.getString(RATE_LIMIT_BYPASS_PERMISSION_PATH, "ailex.rate_limit.bypass");
         return permission != null && !permission.isBlank() && player.hasPermission(permission.trim());
