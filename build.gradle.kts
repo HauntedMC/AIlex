@@ -13,7 +13,7 @@ plugins {
 
 
 group = "nl.hauntedmc.ailex"
-version = "1.5.0"
+version = "1.6.0"
 description = "AIlex"
 
 repositories {
@@ -34,7 +34,7 @@ dependencies {
     implementation("net.citizensnpcs:citizens-main:2.0.43-SNAPSHOT")
     compileOnly("com.github.retrooper:packetevents-spigot:2.13.0")
 
-    // Memory V2 uses local SQLite/WAL. Embed only the JDBC driver itself; Paper already supplies shared logging APIs.
+    // Semantic and episodic memory uses local SQLite/WAL. Embed only the JDBC driver itself.
     compileOnly("org.xerial:sqlite-jdbc:3.53.2.1")
     bundled("org.xerial:sqlite-jdbc:3.53.2.1") {
         isTransitive = false
