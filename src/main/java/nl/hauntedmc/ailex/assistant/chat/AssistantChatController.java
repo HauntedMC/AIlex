@@ -6,7 +6,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import nl.hauntedmc.ailex.AIlexPlugin;
 import nl.hauntedmc.ailex.assistant.application.AssistantService;
 import nl.hauntedmc.ailex.assistant.domain.AssistantReply;
-import nl.hauntedmc.ailex.assistant.infrastructure.live.PaperLiveContextEnricher;
+import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantEventMemoryService;
 import nl.hauntedmc.ailex.assistant.proactive.ProactiveChatService;
 import nl.hauntedmc.ailex.assistant.proactive.ProactiveChatSettings;
 import nl.hauntedmc.ailex.assistant.proactive.ProactiveChatTrigger;
@@ -33,10 +33,9 @@ import java.util.UUID;
 /**
  * Application-facing chat coordinator.
  *
- * <p>This class deliberately owns no Bukkit metadata extraction. {@link AssistantService#prepare} remains the
- * authority that decides which live sources are allowed into a prompt; {@link PaperLiveContextEnricher} only supplies
- * bounded supplemental Paper facts for live-state questions. Raw chat history is appended only when
- * {@link WorkingContextPolicy} says the turn needs historical context.</p>
+ * <p>This class owns routing and delivery, but not Bukkit metadata extraction. {@link AssistantService#prepare}
+ * captures planner-selected live state synchronously before model work is admitted. Raw chat history is appended only
+ * when {@link WorkingContextPolicy} says the turn needs historical context.</p>
  */
 public final class AssistantChatController implements AutoCloseable {
 
@@ -106,10 +105,17 @@ public final class AssistantChatController implements AutoCloseable {
             return;
         }
 
-        AssistantChatTarget followUpTarget = activeFollowUpTarget(source, chatMessage);
-        if (followUpTarget != null) {
-            submitRequest(source, followUpTarget, chatMessage, contextSettings);
-            return;
+        boolean ambientPlayerConversation = proactiveChatService.isLikelyPlayerConversation(
+                source,
+                chatMessage,
+                onlinePlayers()
+        );
+        if (!ambientPlayerConversation) {
+            AssistantChatTarget followUpTarget = activeFollowUpTarget(source, chatMessage);
+            if (followUpTarget != null) {
+                submitRequest(source, followUpTarget, chatMessage, contextSettings);
+                return;
+            }
         }
 
         chatContextStore.recordGeneralChat(source.getName(), chatMessage, contextSettings);
@@ -190,14 +196,13 @@ public final class AssistantChatController implements AutoCloseable {
 
         try {
             String userPrompt = promptWithWorkingHistory(target, source, message, dialogue, contextSettings);
-            String liveEnrichment = PaperLiveContextEnricher.collect(source, target.npc(), message);
             AssistantService.PreparedRequest prepared = assistantService.prepare(
                     source,
                     target.npc(),
                     message,
                     target.systemPrompt(),
                     userPrompt,
-                    liveEnrichment,
+                    "",
                     dialogue.asDialogueContext()
             );
             requestTracer.transition(requestId, AssistantRequestTracer.State.PREPARED, "");
@@ -210,10 +215,13 @@ public final class AssistantChatController implements AutoCloseable {
                     requestId,
                     sourceId,
                     priority,
-                    () -> executeRequest(requestId, source, target, prepared, contextSettings),
+                    () -> executeRequest(requestId, sourceId, source, target, prepared, contextSettings),
                     configuration.maximumConcurrentRequests(),
                     configuration.maximumQueuedRequests()
             );
+            if (submission.accepted()) {
+                recordAcceptedInteraction(sourceId, target);
+            }
             handleSubmission(source, requestId, submission);
         } catch (RuntimeException exception) {
             requestTracer.transition(requestId, AssistantRequestTracer.State.UPSTREAM_FAILED, "prepare");
@@ -254,8 +262,16 @@ public final class AssistantChatController implements AutoCloseable {
         chatContextStore.recordBotMemory(target.id(), source.getName(), message, contextSettings);
     }
 
+    private void recordAcceptedInteraction(UUID sourceId, AssistantChatTarget target) {
+        AssistantEventMemoryService eventMemory = plugin.getAssistantEventMemoryService();
+        if (eventMemory != null) {
+            eventMemory.recordInteraction(sourceId, String.valueOf(target.id()));
+        }
+    }
+
     private void executeRequest(
             UUID requestId,
+            UUID sourceId,
             Player source,
             AssistantChatTarget target,
             AssistantService.PreparedRequest prepared,
@@ -282,12 +298,10 @@ public final class AssistantChatController implements AutoCloseable {
                 return;
             }
 
-            chatContextStore.recordConversation(
-                    source.getUniqueId(), target.id(), target.name(), response, contextSettings
-            );
+            chatContextStore.recordConversation(sourceId, target.id(), target.name(), response, contextSettings);
             chatContextStore.recordBotMemory(target.id(), target.name(), response, contextSettings);
             conversationManager.recordAssistant(
-                    source.getUniqueId(), target.id(), target.name(), response, prepared.analysis().intent()
+                    sourceId, target.id(), target.name(), response, prepared.analysis().intent()
             );
             proactiveChatService.recordBotResponse();
 
