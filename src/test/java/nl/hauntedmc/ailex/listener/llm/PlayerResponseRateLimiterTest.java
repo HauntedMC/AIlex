@@ -68,6 +68,19 @@ class PlayerResponseRateLimiterTest {
     }
 
     @Test
+    void shouldAllowStaffBypassWithoutConsumingAPlayerResponseSlot() {
+        PlayerResponseRateLimiter limiter = new PlayerResponseRateLimiter(
+                () -> new PlayerResponseRateLimiter.ResponseRateLimit(true, 1, 1_000L), () -> 0L
+        );
+        UUID playerId = UUID.randomUUID();
+
+        assertTrue(limiter.tryAcquire(playerId, true));
+        assertTrue(limiter.tryAcquire(playerId, true));
+        assertTrue(limiter.tryAcquire(playerId));
+        assertFalse(limiter.tryAcquire(playerId));
+    }
+
+    @Test
     void shouldReportHowLongThePlayerMustWaitAfterReachingTheLimit() {
         AtomicLong now = new AtomicLong(100L);
         PlayerResponseRateLimiter limiter = new PlayerResponseRateLimiter(

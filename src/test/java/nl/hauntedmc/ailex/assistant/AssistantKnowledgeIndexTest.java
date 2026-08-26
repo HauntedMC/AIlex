@@ -48,6 +48,21 @@ class LocalKnowledgeIndexTest {
         assertTrueEmpty(new LocalKnowledgeIndex(plugin).search("en de", AssistantSettings.defaults()));
     }
 
+    @Test
+    void shouldNotTreatGenericServerBrandingAsGameplayEvidence() {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        YamlConfiguration config = new YamlConfiguration();
+        config.set("openai.knowledge.enabled", true);
+        config.set("openai.knowledge.prompt", "HauntedMC is a Minecraft server.");
+        when(plugin.getConfig()).thenReturn(config);
+
+        List<LocalKnowledgeIndex.KnowledgeChunk> results = new LocalKnowledgeIndex(plugin).search(
+                "Hoe tem ik een wolf in Minecraft, Haunty?", AssistantSettings.defaults()
+        );
+
+        assertTrueEmpty(results);
+    }
+
     private void assertTrueEmpty(List<?> values) {
         assertEquals(0, values.size());
     }

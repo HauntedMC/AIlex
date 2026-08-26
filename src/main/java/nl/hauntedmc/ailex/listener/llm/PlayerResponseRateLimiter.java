@@ -33,6 +33,17 @@ final class PlayerResponseRateLimiter {
      * @return true when a response may be requested
      */
     boolean tryAcquire(UUID playerId) {
+        return tryAcquire(playerId, false);
+    }
+
+    /**
+     * Reserve one response unless the caller has the configured staff bypass.
+     * Bypassed responses do not consume a regular player's rate-limit slot.
+     */
+    boolean tryAcquire(UUID playerId, boolean bypassRateLimit) {
+        if (bypassRateLimit) {
+            return true;
+        }
         ResponseRateLimit limit = limitSupplier.get();
         if (!limit.enabled()) {
             return true;

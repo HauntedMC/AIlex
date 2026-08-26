@@ -12,11 +12,16 @@ import nl.hauntedmc.ailex.npc.lifecycle.NpcManager;
 import nl.hauntedmc.ailex.util.LoggerUtils;
 import nl.hauntedmc.ailex.infrastructure.openai.OpenAiResponsesClient;
 import nl.hauntedmc.ailex.assistant.application.AssistantService;
-import nl.hauntedmc.ailex.assistant.application.command.AssistantMemoryCommand;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantMemoryService;
 
-import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.plugin.java.JavaPlugin;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Main class of the AIlex plugin
@@ -37,7 +42,10 @@ public class AIlexPlugin extends JavaPlugin {
     public void onEnable() {
         // Save the default config
         saveDefaultConfig();
-        saveResource("knowledge/README.md", false);
+        saveBuiltInKnowledge();
+        saveResource("assistant-memory.yml", false);
+        saveResource("assistant-long-term-memory.yml", false);
+        saveResource("assistant-short-term-memory.yml", false);
 
         // Initialize different parts of the plugin
         ConfigHandler.init(this);
@@ -92,11 +100,20 @@ public class AIlexPlugin extends JavaPlugin {
         ailexCommand.setExecutor(mainCommand);
         ailexCommand.setTabCompleter(mainCommand);
 
-        PluginCommand memoryCommand = getCommand("ailexmemory");
-        if (memoryCommand == null) {
-            throw new IllegalStateException("The ailexmemory command is missing from plugin.yml");
+    }
+
+    private void saveBuiltInKnowledge() {
+        try (InputStream resource = getResource("knowledge/index.txt")) {
+            if (resource == null) {
+                throw new IllegalStateException("The bundled knowledge manifest is missing");
+            }
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(resource, StandardCharsets.UTF_8))) {
+                reader.lines().map(String::trim).filter(file -> file.endsWith(".md"))
+                        .forEach(file -> saveResource("knowledge/" + file, false));
+            }
+        } catch (IOException exception) {
+            throw new IllegalStateException("Could not load the bundled knowledge manifest", exception);
         }
-        memoryCommand.setExecutor(new AssistantMemoryCommand(assistantMemoryService));
     }
 
     /**
@@ -149,7 +166,7 @@ public class AIlexPlugin extends JavaPlugin {
         return assistantService;
     }
 
-    /** Returns player-controlled preference memory. */
+    /** Returns automatically managed assistant memory. */
     public AssistantMemoryService getAssistantMemoryService() {
         return assistantMemoryService;
     }

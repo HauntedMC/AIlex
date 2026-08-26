@@ -1,5 +1,14 @@
 package nl.hauntedmc.ailex.listener.llm;
 
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.YamlConfiguration;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -20,6 +29,8 @@ import java.util.function.LongSupplier;
 final class ChatContextStore {
 
     private static final long CLEANUP_INTERVAL_MILLIS = 60_000L;
+    private static final String PERSISTENCE_FILE_NAME = "assistant-short-term-memory.yml";
+    private static final int MAX_PERSISTED_ENTRY_CHARACTERS = 2_000;
     private static final DateTimeFormatter DEFAULT_TIMESTAMP_FORMAT = new DateTimeFormatterBuilder()
             .appendPattern("HH:mm:ss")
             .toFormatter();
@@ -27,12 +38,26 @@ final class ChatContextStore {
     private final Deque<ChatEntry> generalChat = new ArrayDeque<>();
     private final Map<ConversationKey, Deque<ChatEntry>> conversations = new ConcurrentHashMap<>();
     private final Map<Integer, Deque<ChatEntry>> botMemories = new ConcurrentHashMap<>();
+    private final Map<ConversationKey, ChatEntry> metadataSnapshots = new ConcurrentHashMap<>();
     private final LongSupplier currentTimeMillis;
+    private final File persistenceFile;
     private final AtomicLong lastConversationCleanupMillis = new AtomicLong(Long.MIN_VALUE);
     private final AtomicLong lastBotMemoryCleanupMillis = new AtomicLong(Long.MIN_VALUE);
 
     ChatContextStore(LongSupplier currentTimeMillis) {
+        this(null, currentTimeMillis);
+    }
+
+    ChatContextStore(File dataFolder, LongSupplier currentTimeMillis) {
+        this(dataFolder, currentTimeMillis, true);
+    }
+
+    ChatContextStore(File dataFolder, LongSupplier currentTimeMillis, boolean restorePersistedContext) {
         this.currentTimeMillis = currentTimeMillis;
+        this.persistenceFile = dataFolder == null ? null : new File(dataFolder, PERSISTENCE_FILE_NAME);
+        if (restorePersistedContext) {
+            loadPersistedContext();
+        }
     }
 
     void recordGeneralChat(String playerName, String message, ContextSettings settings) {
@@ -44,6 +69,7 @@ final class ChatContextStore {
             generalChat.addLast(createEntry(playerName, message, settings.maxMessageCharacters()));
             trim(generalChat, settings.generalChat());
         }
+        persist(settings);
     }
 
     void recordConversation(UUID playerId, int npcId, String speaker, String message, ContextSettings settings) {
@@ -61,6 +87,7 @@ final class ChatContextStore {
                 conversations.remove(key, conversation);
             }
         }
+        persist(settings);
     }
 
     void recordBotMemory(int npcId, String speaker, String message, ContextSettings settings) {
@@ -77,6 +104,17 @@ final class ChatContextStore {
                 botMemories.remove(npcId, memory);
             }
         }
+        persist(settings);
+    }
+
+    /** Saves the latest live metadata for operator inspection; it is never reused as future live state. */
+    void recordMetadata(UUID playerId, int npcId, String metadata, ContextSettings settings) {
+        if (!settings.enabled() || !settings.persistToDisk() || playerId == null || metadata == null || metadata.isBlank()) {
+            return;
+        }
+        metadataSnapshots.put(new ConversationKey(playerId, npcId), createEntry("trusted_metadata", metadata,
+                MAX_PERSISTED_ENTRY_CHARACTERS));
+        persist(settings);
     }
 
     String buildContext(UUID playerId, int npcId, String npcName, ContextSettings settings) {
@@ -192,6 +230,7 @@ final class ChatContextStore {
                 }
             }
         });
+        metadataSnapshots.entrySet().removeIf(entry -> entry.getValue().timestampMillis() <= now - settings.maxAgeMillis());
     }
 
     private void removeExpiredBotMemories(HistorySettings settings) {
@@ -321,6 +360,7 @@ final class ChatContextStore {
 
     record ContextSettings(
             boolean enabled,
+            boolean persistToDisk,
             int maxMessageCharacters,
             boolean includeTimestamps,
             String timestampFormat,
@@ -338,5 +378,181 @@ final class ChatContextStore {
     }
 
     private record ChatEntry(long timestampMillis, String speaker, String message) {
+    }
+
+    private synchronized void persist(ContextSettings settings) {
+        if (!settings.persistToDisk() || persistenceFile == null) {
+            return;
+        }
+        removeExpiredConversations(settings.conversation());
+        removeExpiredBotMemories(settings.botMemory());
+        YamlConfiguration configuration = new YamlConfiguration();
+        configuration.set("general_chat", serialize(snapshotGeneralChat(settings.generalChat())));
+
+        conversations.forEach((key, entries) -> {
+            synchronized (entries) {
+                trim(entries, settings.conversation());
+                if (!entries.isEmpty()) {
+                    configuration.set("conversations." + key.playerId() + "." + key.npcId(), serialize(entries));
+                }
+            }
+        });
+        botMemories.forEach((npcId, entries) -> {
+            synchronized (entries) {
+                trim(entries, settings.botMemory());
+                if (!entries.isEmpty()) {
+                    configuration.set("bot_memory." + npcId, serialize(entries));
+                }
+            }
+        });
+        long oldestMetadata = currentTimeMillis.getAsLong() - settings.conversation().maxAgeMillis();
+        metadataSnapshots.entrySet().removeIf(entry -> entry.getValue().timestampMillis() <= oldestMetadata);
+        metadataSnapshots.forEach((key, entry) -> configuration.set(
+                "metadata." + key.playerId() + "." + key.npcId(), serializeEntry(entry)
+        ));
+        configuration.set("saved_at", currentTimeMillis.getAsLong());
+        saveAtomically(configuration);
+    }
+
+    private List<Map<String, Object>> serialize(Iterable<ChatEntry> entries) {
+        List<Map<String, Object>> serialized = new ArrayList<>();
+        entries.forEach(entry -> serialized.add(serializeEntry(entry)));
+        return serialized;
+    }
+
+    private Map<String, Object> serializeEntry(ChatEntry entry) {
+        return Map.of("timestamp", entry.timestampMillis(), "speaker", entry.speaker(), "message", entry.message());
+    }
+
+    private void loadPersistedContext() {
+        if (persistenceFile == null || !persistenceFile.isFile()) {
+            return;
+        }
+        YamlConfiguration configuration = YamlConfiguration.loadConfiguration(persistenceFile);
+        loadEntries(configuration.getMapList("general_chat"), generalChat);
+        ConfigurationSection conversationSection = configuration.getConfigurationSection("conversations");
+        if (conversationSection != null) {
+            conversationSection.getKeys(false).forEach(playerKey -> loadConversations(configuration, playerKey));
+        }
+        ConfigurationSection botMemorySection = configuration.getConfigurationSection("bot_memory");
+        if (botMemorySection != null) {
+            botMemorySection.getKeys(false).forEach(npcKey -> loadBotMemory(configuration, npcKey));
+        }
+        ConfigurationSection metadataSection = configuration.getConfigurationSection("metadata");
+        if (metadataSection != null) {
+            metadataSection.getKeys(false).forEach(playerKey -> loadMetadata(configuration, playerKey));
+        }
+    }
+
+    private void loadConversations(YamlConfiguration configuration, String playerKey) {
+        try {
+            UUID playerId = UUID.fromString(playerKey);
+            ConfigurationSection npcSection = configuration.getConfigurationSection("conversations." + playerKey);
+            if (npcSection == null) {
+                return;
+            }
+            npcSection.getKeys(false).forEach(npcKey -> {
+                try {
+                    Deque<ChatEntry> entries = new ArrayDeque<>();
+                    loadEntries(configuration.getMapList("conversations." + playerKey + "." + npcKey), entries);
+                    if (!entries.isEmpty()) {
+                        conversations.put(new ConversationKey(playerId, Integer.parseInt(npcKey)), entries);
+                    }
+                } catch (IllegalArgumentException ignored) {
+                    // Ignore malformed operator edits.
+                }
+            });
+        } catch (IllegalArgumentException ignored) {
+            // Ignore malformed operator edits.
+        }
+    }
+
+    private void loadBotMemory(YamlConfiguration configuration, String npcKey) {
+        try {
+            Deque<ChatEntry> entries = new ArrayDeque<>();
+            loadEntries(configuration.getMapList("bot_memory." + npcKey), entries);
+            if (!entries.isEmpty()) {
+                botMemories.put(Integer.parseInt(npcKey), entries);
+            }
+        } catch (IllegalArgumentException ignored) {
+            // Ignore malformed operator edits.
+        }
+    }
+
+    private void loadMetadata(YamlConfiguration configuration, String playerKey) {
+        try {
+            UUID playerId = UUID.fromString(playerKey);
+            ConfigurationSection npcSection = configuration.getConfigurationSection("metadata." + playerKey);
+            if (npcSection == null) {
+                return;
+            }
+            npcSection.getKeys(false).forEach(npcKey -> {
+                try {
+                    ChatEntry entry = loadEntry(configuration.getConfigurationSection(
+                            "metadata." + playerKey + "." + npcKey
+                    ));
+                    if (entry != null) {
+                        metadataSnapshots.put(new ConversationKey(playerId, Integer.parseInt(npcKey)), entry);
+                    }
+                } catch (IllegalArgumentException ignored) {
+                    // Ignore malformed operator edits.
+                }
+            });
+        } catch (IllegalArgumentException ignored) {
+            // Ignore malformed operator edits.
+        }
+    }
+
+    private void loadEntries(List<Map<?, ?>> values, Deque<ChatEntry> target) {
+        values.stream().map(this::loadEntry).filter(java.util.Objects::nonNull).limit(1_000).forEach(target::addLast);
+    }
+
+    private ChatEntry loadEntry(Map<?, ?> value) {
+        return createLoadedEntry(value.get("timestamp"), value.get("speaker"), value.get("message"));
+    }
+
+    private ChatEntry createLoadedEntry(Object timestamp, Object speaker, Object message) {
+        if (!(timestamp instanceof Number number) || !(speaker instanceof String speakerText)
+                || !(message instanceof String messageText) || number.longValue() <= 0L) {
+            return null;
+        }
+        return new ChatEntry(number.longValue(), compact(speakerText, 64), compact(messageText,
+                MAX_PERSISTED_ENTRY_CHARACTERS));
+    }
+
+    private ChatEntry loadEntry(ConfigurationSection section) {
+        if (section == null) {
+            return null;
+        }
+        return createLoadedEntry(section.get("timestamp"), section.get("speaker"), section.get("message"));
+    }
+
+    private void saveAtomically(YamlConfiguration configuration) {
+        Path temporaryFile = null;
+        try {
+            Path target = persistenceFile.toPath();
+            Path parent = target.getParent();
+            if (parent == null) {
+                return;
+            }
+            Files.createDirectories(parent);
+            temporaryFile = Files.createTempFile(parent, persistenceFile.getName(), ".tmp");
+            configuration.save(temporaryFile.toFile());
+            try {
+                Files.move(temporaryFile, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException ignored) {
+                Files.move(temporaryFile, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException ignored) {
+            // Chat context remains available in memory if the optional inspection snapshot cannot be written.
+        } finally {
+            if (temporaryFile != null) {
+                try {
+                    Files.deleteIfExists(temporaryFile);
+                } catch (IOException ignored) {
+                    // A later write will clean up stale temporary files.
+                }
+            }
+        }
     }
 }

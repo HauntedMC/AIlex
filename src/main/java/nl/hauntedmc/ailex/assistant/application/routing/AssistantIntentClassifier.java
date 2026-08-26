@@ -18,12 +18,19 @@ public final class AssistantIntentClassifier {
             "wachtwoord", "password", "ban", "appeal", "report", "ticket", "unban"
     );
     private static final Set<String> LIVE_WORDS = Set.of(
-            "waar", "hier", "dichtbij", "nearby", "near", "biome", "coord", "coörd", "positie",
-            "location", "locatie", "weer", "weather", "online", "tps", "ping", "health", "honger"
+            "waar", "hier", "dichtbij", "nearby", "near", "biome", "coord", "coords", "coördinaten",
+            "positie", "location", "locatie", "weer", "weather", "online", "spelers", "players", "tps",
+            "mspt", "ping", "health", "gezondheid", "honger", "food", "item", "hand", "holding", "vast",
+            "kijk", "level", "xp", "ervaring", "experience", "effect", "armor", "pantser", "light", "licht",
+            "difficulty", "moeilijkheid", "environment", "omgeving", "version", "versie", "uptime", "playtime"
     );
     private static final Set<String> SERVER_WORDS = Set.of(
             "rank", "elite", "legend", "supreme", "claim", "regels", "rules", "vote", "stem",
             "store", "winkel", "warp", "command", "commando", "server", "hauntedmc"
+    );
+    private static final Set<String> GAMEPLAY_WORDS = Set.of(
+            "minecraft", "kameel", "camel", "wolf", "tem", "temt", "tammen", "tame", "craft", "recept", "recipe",
+            "redstone", "enchant", "betover", "potion", "drank", "mob", "farm", "bouwen", "build"
     );
     private static final Set<String> UNSAFE_WORDS = Set.of(
             "exploit", "dupe", "xray", "hack", "cheat", "dox", "doxx", "groom", "zelfmoord", "suicide"
@@ -51,7 +58,7 @@ public final class AssistantIntentClassifier {
                     detectLanguage(normalized, "nl", DEFAULT_ALLOWED_LANGUAGES));
         }
         if (normalized.contains("hoe ") || normalized.contains("how ") || normalized.contains("waarom")
-                || normalized.contains("why ") || normalized.contains("help")) {
+                || normalized.contains("why ") || normalized.contains("help") || containsAny(normalized, GAMEPLAY_WORDS)) {
             return new Analysis(AssistantIntent.GAMEPLAY_HELP, AssistantMode.GROUNDED,
                     detectLanguage(normalized, "nl", DEFAULT_ALLOWED_LANGUAGES));
         }
@@ -60,7 +67,12 @@ public final class AssistantIntentClassifier {
     }
 
     private static boolean containsAny(String message, Set<String> words) {
-        return words.stream().anyMatch(word -> message.contains(word));
+        for (String token : message.split("[^\\p{L}\\p{N}/+]+")) {
+            if (words.contains(token)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

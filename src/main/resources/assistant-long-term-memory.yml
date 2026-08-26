@@ -1,0 +1,6 @@
+# Automatically managed long-term AIlex memory. Do not add facts here manually: changes can be overwritten.
+# Put maintained server documentation in config.yml's openai.knowledge section or knowledge/*.md instead.
+# AIlex records only explicit, non-sensitive facts. It rejects passwords, contact details, IP addresses,
+# precise coordinates, reports, sanctions, and private staff information.
+shared_facts: []
+players: {}

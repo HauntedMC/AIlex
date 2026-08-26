@@ -23,14 +23,25 @@ Top-level sections in `config.yml`:
 - `openai.chat.standalone`: the mention, display name, and persona for chat-only mode. It is used when
   `npc.enabled: false`, without creating a Citizens NPC.
 - `openai.rate_limit.feedback`: private, configurable feedback for players who reach the response limit. Its message supports `{remaining_seconds}`.
+- `openai.rate_limit.bypass_permission`: staff permission that bypasses the per-player AI response limit. The
+  default is `ailex.rate_limit.bypass`, which defaults to operators; grant it to other staff roles as needed. Leave
+  it empty to disable the bypass.
 - `openai.safety.enabled`: enables a mandatory global safety system prompt.
 - `openai.safety.system_prompt`: non-optional safety policy prompt prepended to every OpenAI request.
 - `openai.knowledge`: an operator-maintained bullet-point knowledge base. AIlex selects relevant bullets for each question before applying `max_characters`.
 - `openai.knowledge.external`: reviewed Markdown/text facts from `plugins/AIlex/knowledge/`. This is the right place for maintainable server documentation; do not put private staff or player data in it because selected text is sent to the model.
+  AIlex ships reviewed topic guides for core HauntedMC information; they are copied into this directory on first startup.
+  The shipped `README.md` is only an authoring guide and is never indexed as evidence.
 - `openai.chat_context`: bounded recent chat context. Its per-source and total character limits are input-cost controls.
+  With `persist_to_disk: true` (the default), it is restored from
+  `plugins/AIlex/assistant-short-term-memory.yml` after reloads or restarts. The file includes recent chat, per-NPC
+  conversation context, bot memory, and inspectable live metadata snapshots. Metadata is never reused as live state:
+  every new request obtains a fresh snapshot. Set it to `false` and restart the plugin to start with an empty,
+  in-memory context.
 - `openai.chat_context.metadata.only_when_relevant`: sends live Minecraft metadata only for questions where location, inventory, nearby entities, or player state can help.
-- `openai.assistant`: enables the adaptive evidence-first pipeline. It routes casual chat to a fast response,
-  retrieves local knowledge for server facts, and captures a small read-only Paper/Bukkit snapshot for live questions.
+- `openai.assistant`: enables the adaptive pipeline. It routes casual chat to a fast response, retrieves local
+  knowledge for server facts, and captures a small read-only Paper/Bukkit snapshot for live questions. Stable
+  vanilla gameplay questions can use the model's general Minecraft knowledge by default.
 - `openai.assistant.routing.default_language` and `allowed_languages`: control player-facing language. The default is
   Dutch (`nl`); AIlex detects English only when `en` is allowed, and falls back to Dutch for ambiguous or unsupported input.
 - `openai.assistant.models.fast|grounded|deliberate`: independent model, reasoning, and output-token profiles.
@@ -40,8 +51,19 @@ Top-level sections in `config.yml`:
   `knowledge/*.md`; expired articles are excluded when configured.
 - `openai.assistant.structured_output`: requires a small JSON reply contract before AIlex renders player-facing chat.
   AIlex rejects malformed or ungrounded factual replies instead of broadcasting them.
-- `openai.assistant.memory`: controls opt-in preference memory. Players manage it with
-  `/ailexmemory on|off|show|forget`; AIlex stores no chat transcripts in this file.
+- `openai.assistant.verification`: validates the reply contract and confidence. Local knowledge and live Bukkit
+  snapshots enrich answers, but do not prevent the model from using its general knowledge.
+- `openai.assistant.memory`: automatically stores only explicit, non-sensitive preferences and durable facts; it
+  never stores chat transcripts. `assistant-memory.yml` stores per-player preferences, while
+  `assistant-long-term-memory.yml` stores shared server facts (such as public staff roles) and player facts. Each
+  accepted memory is written immediately with an atomic file replacement, so it survives plugin reloads and normal
+  server restarts without leaving a partially written YAML file.
+  Harmless personal interests and repeatedly mentioned topics are eligible for player memory; repeated-topic
+  detection is session-only and stores no chat transcript.
+  Both files are system-managed and can be overwritten; put maintained documentation in `openai.knowledge` or
+  `knowledge/*.md` instead. Shared facts are automatically written only by players with
+  `openai.assistant.memory.shared_write_permission` (default: `ailex.admin`); leave that setting empty to allow
+  every player to contribute shared facts.
 - `openai.assistant.observability`: emits a route and completion line for every assistant request. It records the
   selected intent, layer, language, model, retrieval/evidence result, response classification, and latency without
   logging prompts or chat. Set `include_response_preview: true` only when administrators need short answer previews.

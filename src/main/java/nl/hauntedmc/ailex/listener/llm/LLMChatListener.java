@@ -55,6 +55,7 @@ public class LLMChatListener implements Listener {
     private static final String RATE_LIMIT_ENABLED_PATH = "openai.rate_limit.enabled";
     private static final String RATE_LIMIT_MAX_RESPONSES_PATH = "openai.rate_limit.max_responses_per_player";
     private static final String RATE_LIMIT_WINDOW_SECONDS_PATH = "openai.rate_limit.window_seconds";
+    private static final String RATE_LIMIT_BYPASS_PERMISSION_PATH = "openai.rate_limit.bypass_permission";
     private static final String CHAT_PATH = "openai.chat";
     private static final String CHAT_ACCESS_PERMISSION_PATH = CHAT_PATH + ".access_permission";
     private static final String CHAT_RESPONSE_VISIBILITY_PATH = CHAT_PATH + ".response_visibility";
@@ -113,7 +114,12 @@ public class LLMChatListener implements Listener {
         this.plugin = plugin;
         this.responseRateLimiter = new PlayerResponseRateLimiter(this::getResponseRateLimit, System::currentTimeMillis);
         this.requestGate = new ChatRequestGate();
-        this.chatContextStore = new ChatContextStore(System::currentTimeMillis);
+        FileConfiguration initialConfig = plugin.getConfig();
+        this.chatContextStore = new ChatContextStore(
+                plugin.getDataFolder(),
+                System::currentTimeMillis,
+                initialConfig == null || initialConfig.getBoolean(CHAT_CONTEXT_PATH + ".persist_to_disk", true)
+        );
         this.knowledgeRepository = new KnowledgeRepository(plugin);
         this.proactiveChatService = new ProactiveChatService(() -> ProactiveChatSettings.from(plugin.getConfig()));
         AssistantService pluginAssistantService = plugin.getAssistantService();
@@ -180,7 +186,7 @@ public class LLMChatListener implements Listener {
                     chatContextStore.recordGeneralChat(source.getName(), chatMessage, contextSettings);
                     return;
                 }
-                if (!responseRateLimiter.tryAcquire(source.getUniqueId())) {
+                if (!responseRateLimiter.tryAcquire(source.getUniqueId(), bypassesResponseRateLimit(source))) {
                     sendRateLimitFeedback(source);
                     chatContextStore.recordGeneralChat(source.getName(), chatMessage, contextSettings);
                     return;
@@ -197,15 +203,16 @@ public class LLMChatListener implements Listener {
                     int npcId = npc.getId();
                     String systemPrompt = buildSystemPrompt(npc, chatMessage);
                     String userPrompt = buildUserPrompt(npc, sourceName, chatMessage);
-                    String contextualPrompt = appendContext(
+                    PromptContext context = appendContext(
                             userPrompt,
                             chatMessage,
                             source,
                             npc,
                             contextSettings
                     );
+                    chatContextStore.recordMetadata(sourceId, npcId, context.trustedMetadata(), contextSettings);
                     AssistantService.PreparedRequest assistantRequest = assistantService.prepare(
-                            source, npc, chatMessage, systemPrompt, contextualPrompt
+                            source, npc, chatMessage, systemPrompt, context.prompt(), context.trustedMetadata()
                     );
                     chatContextStore.recordGeneralChat(sourceName, chatMessage, contextSettings);
                     chatContextStore.recordConversation(
@@ -229,7 +236,7 @@ public class LLMChatListener implements Listener {
                                 AssistantReply assistantReply = assistantService.respond(assistantRequest);
                                 response = String.join("\n", assistantReply.lines());
                             } else {
-                                response = openAiClient.getChatResponse(systemPrompt, contextualPrompt);
+                                response = openAiClient.getChatResponse(systemPrompt, context.prompt());
                                 assistantService.recordDirectResponse(assistantRequest, response);
                             }
                             if (response == null || response.isBlank()) {
@@ -278,7 +285,7 @@ public class LLMChatListener implements Listener {
             chatContextStore.recordGeneralChat(source.getName(), chatMessage, contextSettings);
             return;
         }
-        if (!responseRateLimiter.tryAcquire(source.getUniqueId())) {
+        if (!responseRateLimiter.tryAcquire(source.getUniqueId(), bypassesResponseRateLimit(source))) {
             sendRateLimitFeedback(source);
             chatContextStore.recordGeneralChat(source.getName(), chatMessage, contextSettings);
             return;
@@ -294,10 +301,11 @@ public class LLMChatListener implements Listener {
         String systemPrompt = standaloneSystemPrompt();
         String userPrompt = "Bericht van speler " + sourceName + ": \"" + chatMessage
                 + "\". Antwoord als " + assistantName + " in maximaal één korte chatregel, zonder speaker label.";
-        String contextualPrompt = appendContext(userPrompt, chatMessage, source, null, contextSettings);
+        PromptContext context = appendContext(userPrompt, chatMessage, source, null, contextSettings);
+        chatContextStore.recordMetadata(sourceId, STANDALONE_CHAT_ID, context.trustedMetadata(), contextSettings);
         try {
             AssistantService.PreparedRequest assistantRequest = assistantService.prepare(
-                    source, null, chatMessage, systemPrompt, contextualPrompt
+                    source, null, chatMessage, systemPrompt, context.prompt(), context.trustedMetadata()
             );
             chatContextStore.recordGeneralChat(sourceName, chatMessage, contextSettings);
             chatContextStore.recordConversation(sourceId, STANDALONE_CHAT_ID, sourceName, chatMessage, contextSettings);
@@ -313,7 +321,7 @@ public class LLMChatListener implements Listener {
                         if (assistantRequest.settings().enabled()) {
                             response = String.join("\n", assistantService.respond(assistantRequest).lines());
                         } else {
-                            response = openAiClient.getChatResponse(systemPrompt, contextualPrompt);
+                            response = openAiClient.getChatResponse(systemPrompt, context.prompt());
                             assistantService.recordDirectResponse(assistantRequest, response);
                         }
                         if (response == null || response.isBlank()) {
@@ -382,11 +390,11 @@ public class LLMChatListener implements Listener {
         String systemPrompt = buildSystemPrompt(npc, trigger.context());
         String userPrompt = "Proactieve aanleiding: \"" + trigger.context() + "\"\n" + trigger.instruction()
                 + " Antwoord als " + npcName + " in exact één korte, gewone chatregel, zonder speaker label.";
-        String contextualPrompt = appendContext(userPrompt, trigger.context(), contextPlayer, npc, contextSettings);
+        PromptContext context = appendContext(userPrompt, trigger.context(), contextPlayer, npc, contextSettings);
         AssistantService.PreparedRequest assistantRequest;
         try {
             assistantRequest = assistantService.prepare(
-                    contextPlayer, npc, trigger.context(), systemPrompt, contextualPrompt
+                    contextPlayer, npc, trigger.context(), systemPrompt, context.prompt(), context.trustedMetadata()
             );
         } catch (RuntimeException exception) {
             requestGate.release(requestId);
@@ -404,7 +412,7 @@ public class LLMChatListener implements Listener {
                     }
                     String response = assistantRequest.settings().enabled()
                             ? String.join("\n", assistantService.respond(assistantRequest).lines())
-                            : openAiClient.getChatResponse(systemPrompt, contextualPrompt);
+                            : openAiClient.getChatResponse(systemPrompt, context.prompt());
                     if (!assistantRequest.settings().enabled()) {
                         assistantService.recordDirectResponse(assistantRequest, response);
                     }
@@ -559,27 +567,23 @@ public class LLMChatListener implements Listener {
         }
     }
 
-    private String appendContext(
+    private PromptContext appendContext(
             String userPrompt,
             String chatMessage,
             Player source,
             NPC npc,
             ChatContextStore.ContextSettings contextSettings
     ) {
-        if (!contextSettings.enabled()) {
-            return userPrompt;
-        }
-
-        String chatContext = chatContextStore.buildContext(
+        String metadata = shouldIncludeMetadata(chatMessage) ? buildMetadata(source, npc) : "";
+        String chatContext = contextSettings.enabled() ? chatContextStore.buildContext(
                 source.getUniqueId(),
                 npc == null ? STANDALONE_CHAT_ID : npc.getId(),
                 npc == null ? standaloneMention() : npc.getName(),
                 chatMessage,
                 contextSettings
-        );
-        String metadata = npc != null && shouldIncludeMetadata(chatMessage) ? buildMetadata(source, npc) : "";
+        ) : "";
         if (chatContext.isBlank() && metadata.isBlank()) {
-            return userPrompt;
+            return new PromptContext(userPrompt, "");
         }
 
         StringBuilder prompt = new StringBuilder(userPrompt);
@@ -589,7 +593,7 @@ public class LLMChatListener implements Listener {
         if (!chatContext.isBlank()) {
             prompt.append("\n\n").append(chatContext);
         }
-        return prompt.toString();
+        return new PromptContext(prompt.toString(), metadata);
     }
 
     String buildMetadata(Player source, NPC npc) {
@@ -628,7 +632,7 @@ public class LLMChatListener implements Listener {
         appendServerMetadata(metadata, config);
         appendNearbyPlayerMetadata(metadata, config, source);
         appendNearbyEntityMetadata(metadata, config, source);
-        if (npc.getEntity() != null) {
+        if (npc != null && npc.getEntity() != null) {
             Location npcLocation = npc.getEntity().getLocation();
             World npcWorld = npcLocation.getWorld();
             if (npcWorld != null && config.getBoolean(METADATA_PATH + ".include_npc_world", true)) {
@@ -638,7 +642,9 @@ public class LLMChatListener implements Listener {
                 metadata.add("bot_pos=" + formatLocation(npcLocation));
             }
         }
-        appendBotMetadata(metadata, config, npc);
+        if (npc != null) {
+            appendBotMetadata(metadata, config, npc);
+        }
         return limitMetadata(String.join(" | ", metadata), config);
     }
 
@@ -749,7 +755,8 @@ public class LLMChatListener implements Listener {
             return;
         }
 
-        String nearby = nearbyPlayers.stream()
+        boolean redactOtherPlayers = config.getBoolean("openai.assistant.tools.redact_other_players", true);
+        String nearby = redactOtherPlayers ? String.valueOf(nearbyPlayers.size()) : nearbyPlayers.stream()
                 .map(player -> player.getName() + "@"
                         + Math.round(player.getLocation().distance(source.getLocation())) + "b")
                 .collect(java.util.stream.Collectors.joining(","));
@@ -823,6 +830,9 @@ public class LLMChatListener implements Listener {
                 || normalizedPrompt.contains("holding") || normalizedPrompt.contains("kijk");
     }
 
+    private record PromptContext(String prompt, String trustedMetadata) {
+    }
+
     private String describeItem(ItemStack item) {
         if (item == null || isAir(item)) {
             return "empty";
@@ -871,6 +881,7 @@ public class LLMChatListener implements Listener {
 
         return new ChatContextStore.ContextSettings(
                 config.getBoolean(CHAT_CONTEXT_PATH + ".enabled", true),
+                config.getBoolean(CHAT_CONTEXT_PATH + ".persist_to_disk", true),
                 Math.max(1, config.getInt(CHAT_CONTEXT_PATH + ".max_message_characters", DEFAULT_CONTEXT_MESSAGE_MAX_CHARACTERS)),
                 config.getBoolean(CHAT_CONTEXT_PATH + ".include_timestamps", true),
                 config.getString(CHAT_CONTEXT_PATH + ".timestamp_format", "HH:mm:ss"),
@@ -922,6 +933,7 @@ public class LLMChatListener implements Listener {
     private ChatContextStore.ContextSettings defaultChatContextSettings() {
         return new ChatContextStore.ContextSettings(
                 true,
+                true,
                 DEFAULT_CONTEXT_MESSAGE_MAX_CHARACTERS,
                 true,
                 "HH:mm:ss",
@@ -959,6 +971,13 @@ public class LLMChatListener implements Listener {
                 maxResponses,
                 TimeUnit.SECONDS.toMillis(windowSeconds)
         );
+    }
+
+    private boolean bypassesResponseRateLimit(Player player) {
+        FileConfiguration config = plugin.getConfig();
+        String permission = config == null ? "ailex.rate_limit.bypass"
+                : config.getString(RATE_LIMIT_BYPASS_PERMISSION_PATH, "ailex.rate_limit.bypass");
+        return permission != null && !permission.isBlank() && player.hasPermission(permission.trim());
     }
 
     private PlayerResponseRateLimiter.ResponseRateLimit defaultResponseRateLimit() {

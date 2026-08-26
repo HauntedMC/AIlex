@@ -33,8 +33,9 @@ public final class LocalKnowledgeIndex {
     private static final Pattern TOKEN_SEPARATOR = Pattern.compile("[^\\p{L}\\p{N}/+]+");
     private static final Set<String> STOP_WORDS = Set.of(
             "aan", "als", "and", "are", "bij", "can", "dan", "dat", "de", "die", "dit", "een",
-            "en", "for", "het", "hoe", "ik", "in", "is", "je", "met", "mijn", "naar", "of", "om",
-            "op", "the", "to", "van", "wat", "wel", "wie", "with", "you", "your"
+            "en", "for", "hauntedmc", "haunty", "het", "hoe", "ik", "in", "is", "je", "met",
+            "minecraft", "mijn", "naar", "of", "om", "op", "the", "to", "van", "wat", "wel", "wie",
+            "with", "you", "your"
     );
 
     private final JavaPlugin plugin;
@@ -172,7 +173,7 @@ public final class LocalKnowledgeIndex {
 
     private boolean isKnowledgeFile(Path path) {
         String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
-        return name.endsWith(".md") || name.endsWith(".txt");
+        return !"readme.md".equals(name) && (name.endsWith(".md") || name.endsWith(".txt"));
     }
 
     private void readKnowledgeFile(Path path, List<KnowledgeChunk> loaded, int maxCharacters) {

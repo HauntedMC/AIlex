@@ -17,7 +17,7 @@ public record AssistantSettings(
         int maxLinesFast, int maxLinesGrounded, int maxLinesDeliberate, int maxLineCharacters,
         boolean structuredOutput, boolean verificationEnabled, String minimumConfidence,
         boolean externalKnowledgeEnabled, int externalMaxFiles, int externalMaxCharacters,
-        boolean memoryOptInRequired, boolean circuitBreakerEnabled, boolean cacheStaticAnswers, boolean shadowMode,
+        boolean circuitBreakerEnabled, boolean cacheStaticAnswers, boolean shadowMode,
         boolean diagnosticLogging, boolean logRequesterName, boolean logResponsePreview, int maxResponsePreviewCharacters
 ) {
     private static final String PATH = "openai.assistant";
@@ -61,7 +61,6 @@ public record AssistantSettings(
                 config.getBoolean("openai.knowledge.external.enabled", true),
                 Math.clamp(config.getInt("openai.knowledge.external.max_files", 20), 1, 100),
                 Math.clamp(config.getInt("openai.knowledge.external.max_characters", 30000), 1, 120000),
-                config.getBoolean(PATH + ".memory.opt_in_required", true),
                 config.getBoolean(PATH + ".reliability.circuit_breaker_enabled", true),
                 config.getBoolean(PATH + ".reliability.cache_static_answers", true),
                 config.getBoolean(PATH + ".reliability.shadow_mode", false),
@@ -79,7 +78,7 @@ public record AssistantSettings(
                 new ModelProfile("gpt-5.6-terra", "medium", 320),
                 new ModelProfile("gpt-5.6-sol", "high", 480),
                 true, Set.of("knowledge", "requester", "world", "nearby", "server", "npc", "session"), true,
-                1, 2, 3, 220, true, true, "medium", true, 20, 30000, true, true, true, false,
+                1, 2, 3, 220, true, true, "medium", true, 20, 30000, true, true, false,
                 true, true, false, 240);
     }
 

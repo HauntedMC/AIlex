@@ -9,11 +9,11 @@ public record AssistantReply(
         Set<String> evidenceIds,
         String confidence,
         String handoff,
-        String memoryCandidate,
+        List<String> memoryCandidates,
         boolean valid
 ) {
     public static AssistantReply invalid() {
-        return new AssistantReply(List.of(), Set.of(), "", "", "", false);
+        return new AssistantReply(List.of(), Set.of(), "", "", List.of(), false);
     }
 
     public static AssistantReply unavailable() {
@@ -22,11 +22,11 @@ public record AssistantReply(
 
     public static AssistantReply fromPlainText(String text) {
         String safe = text == null ? "" : text.replaceAll("\\s+", " ").trim();
-        return new AssistantReply(safe.isBlank() ? List.of() : List.of(safe), Set.of(), "", "", "",
+        return new AssistantReply(safe.isBlank() ? List.of() : List.of(safe), Set.of(), "", "", List.of(),
                 !safe.isBlank());
     }
 
     public AssistantReply withHandoff(String value) {
-        return new AssistantReply(lines, evidenceIds, confidence, value, memoryCandidate, valid);
+        return new AssistantReply(lines, evidenceIds, confidence, value, memoryCandidates, valid);
     }
 }

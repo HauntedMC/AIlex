@@ -1,7 +1,10 @@
 package nl.hauntedmc.ailex.listener.llm;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
+import java.nio.file.Path;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -100,6 +103,30 @@ class ChatContextStoreTest {
         assertTrue(context.contains("Use /plot claim"));
     }
 
+    @Test
+    void shouldRestorePersistedShortTermContextAfterRestart(@TempDir Path dataDirectory) {
+        AtomicLong now = new AtomicLong(1L);
+        ChatContextStore.ContextSettings settings = persistentSettings();
+        UUID playerId = UUID.randomUUID();
+        ChatContextStore store = new ChatContextStore(dataDirectory.toFile(), now::get);
+
+        store.recordGeneralChat("Alex", "I am building a redstone farm.", settings);
+        store.recordConversation(playerId, 1, "Alex", "Can you help with observers?", settings);
+        store.recordBotMemory(1, "Bot", "Observers detect block updates.", settings);
+        store.recordMetadata(playerId, 1, "player.world=world; player.location=10,64,10", settings);
+
+        ChatContextStore restored = new ChatContextStore(dataDirectory.toFile(), now::get);
+        String context = restored.buildContext(playerId, 1, "Bot", settings);
+        File savedFile = dataDirectory.resolve("assistant-short-term-memory.yml").toFile();
+
+        assertTrue(savedFile.isFile());
+        assertTrue(context.contains("I am building a redstone farm."));
+        assertTrue(context.contains("Can you help with observers?"));
+        assertTrue(context.contains("Observers detect block updates."));
+        assertTrue(org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(savedFile)
+                .getString("metadata." + playerId + ".1.message", "").contains("player.location"));
+    }
+
     private static ChatContextStore.ContextSettings settings(int generalMaxMessages, int conversationMaxMessages, long maxAgeMillis) {
         return settings(generalMaxMessages, conversationMaxMessages, maxAgeMillis, 240);
     }
@@ -112,12 +139,27 @@ class ChatContextStoreTest {
     ) {
         return new ChatContextStore.ContextSettings(
                 true,
+                false,
                 maxMessageCharacters,
                 true,
                 "HH:mm:ss",
                 new ChatContextStore.HistorySettings(true, generalMaxMessages, maxAgeMillis, 1_000),
                 new ChatContextStore.HistorySettings(true, conversationMaxMessages, maxAgeMillis, 1_000),
                 new ChatContextStore.HistorySettings(true, 10, maxAgeMillis, 1_000),
+                3_000
+        );
+    }
+
+    private static ChatContextStore.ContextSettings persistentSettings() {
+        return new ChatContextStore.ContextSettings(
+                true,
+                true,
+                240,
+                true,
+                "HH:mm:ss",
+                new ChatContextStore.HistorySettings(true, 10, 10_000L, 1_000),
+                new ChatContextStore.HistorySettings(true, 10, 10_000L, 1_000),
+                new ChatContextStore.HistorySettings(true, 10, 10_000L, 1_000),
                 3_000
         );
     }

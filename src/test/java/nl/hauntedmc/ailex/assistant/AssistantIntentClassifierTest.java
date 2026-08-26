@@ -44,6 +44,21 @@ class AssistantIntentClassifierTest {
     }
 
     @Test
+    void shouldRouteVanillaMobQuestionsToGameplayHelp() {
+        AssistantIntentClassifier.Analysis camel = AssistantIntentClassifier.analyze(
+                "ik wil weten hoe je een kameel temt"
+        );
+        AssistantIntentClassifier.Analysis wolf = AssistantIntentClassifier.analyze(
+                "Hoe tem je een wolf in Minecraft?"
+        );
+
+        assertEquals(AssistantIntent.GAMEPLAY_HELP, camel.intent());
+        assertEquals(AssistantMode.GROUNDED, camel.mode());
+        assertEquals(AssistantIntent.GAMEPLAY_HELP, wolf.intent());
+        assertEquals(AssistantMode.GROUNDED, wolf.mode());
+    }
+
+    @Test
     void shouldUseIndependentModelProfilesForEachAssistantLayer() {
         YamlConfiguration config = new YamlConfiguration();
         config.set("openai.model", "gpt-5.6-luna");

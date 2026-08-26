@@ -1,5 +1,9 @@
 # AIlex knowledge base
 
+AIlex ships with reviewed HauntedMC guides for core server topics. Every missing Markdown file listed in
+`index.txt` is copied here on startup and loaded as local retrieval evidence. Keep them for their intended topic;
+add your own durable local documentation as separate files rather than editing `assistant-long-term-memory.yml`.
+
 Keep each item concise, factual, dated where it can change, and sourced from an approved HauntedMC document or live system.
 
 For larger articles, use front matter so AIlex can retrieve and audit a source precisely:
