@@ -1,20 +1,20 @@
 package nl.hauntedmc.ailex;
 
+import nl.hauntedmc.ailex.assistant.adapter.paper.AssistantChatListener;
+import nl.hauntedmc.ailex.assistant.application.AssistantService;
+import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantEventMemoryService;
+import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantMemoryService;
 import nl.hauntedmc.ailex.command.MainCommand;
 import nl.hauntedmc.ailex.config.ConfigHandler;
 import nl.hauntedmc.ailex.config.DataHandler;
-import nl.hauntedmc.ailex.listener.llm.LLMChatListener;
-import nl.hauntedmc.ailex.listener.llm.AssistantRequestTracer;
+import nl.hauntedmc.ailex.infrastructure.openai.OpenAiResponsesClient;
 import nl.hauntedmc.ailex.listener.citizens.NPCDeathListener;
 import nl.hauntedmc.ailex.listener.citizens.NPCSpawnListener;
+import nl.hauntedmc.ailex.listener.llm.AssistantRequestTracer;
 import nl.hauntedmc.ailex.listener.player.PlayerJoinListener;
 import nl.hauntedmc.ailex.listener.player.PlayerLeaveListener;
 import nl.hauntedmc.ailex.npc.lifecycle.NpcManager;
 import nl.hauntedmc.ailex.util.LoggerUtils;
-import nl.hauntedmc.ailex.infrastructure.openai.OpenAiResponsesClient;
-import nl.hauntedmc.ailex.assistant.application.AssistantService;
-import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantEventMemoryService;
-import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantMemoryService;
 
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -25,7 +25,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 
-/** Main plugin entrypoint. */
+/** Main plugin entrypoint and composition root. */
 public class AIlexPlugin extends JavaPlugin {
 
     private NpcManager npcManager;
@@ -34,6 +34,7 @@ public class AIlexPlugin extends JavaPlugin {
     private AssistantEventMemoryService assistantEventMemoryService;
     private AssistantService assistantService;
     private AssistantRequestTracer assistantRequestTracer;
+    private AssistantChatListener assistantChatListener;
 
     @Override
     public void onEnable() {
@@ -65,6 +66,10 @@ public class AIlexPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (assistantChatListener != null) {
+            assistantChatListener.close();
+            assistantChatListener = null;
+        }
         if (npcManager != null) {
             npcManager.unloadAllNPCs();
             npcManager.clearNPCRegistry();
@@ -100,9 +105,9 @@ public class AIlexPlugin extends JavaPlugin {
     }
 
     private void registerListeners() {
-        LLMChatListener chatListener = new LLMChatListener(this);
-        getServer().getPluginManager().registerEvents(chatListener, this);
-        chatListener.startProactiveConversationChecks();
+        assistantChatListener = new AssistantChatListener(this);
+        getServer().getPluginManager().registerEvents(assistantChatListener, this);
+        assistantChatListener.startProactiveConversationChecks();
         if (assistantEventMemoryService != null) {
             getServer().getPluginManager().registerEvents(assistantEventMemoryService, this);
         }
