@@ -11,7 +11,8 @@ final class ChatContextStore extends nl.hauntedmc.ailex.assistant.runtime.contex
     }
 
     ChatContextStore(File dataFolder, LongSupplier currentTimeMillis) {
-        super(dataFolder, currentTimeMillis);
+        // Preserve pre-1.5 constructor semantics only for compatibility callers/tests.
+        super(dataFolder, currentTimeMillis, true);
     }
 
     ChatContextStore(File dataFolder, LongSupplier currentTimeMillis, boolean restorePersistedContext) {
