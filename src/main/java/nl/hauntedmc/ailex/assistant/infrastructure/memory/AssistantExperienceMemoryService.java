@@ -113,13 +113,16 @@ public final class AssistantExperienceMemoryService {
                 .toList();
     }
 
-    /** Success/failure evidence for one reusable strategy key, used as a simple test-time learned prior. */
+    /** Success/failure history for one reusable strategy key, used as a conservative test-time learned prior. */
     public StrategyStatistics statistics(UUID playerId, String npcId, String lessonKey) {
         if (memoryService == null || playerId == null || blank(npcId) || blank(lessonKey)) {
             return new StrategyStatistics(0, 0);
         }
-        List<MemoryRecord> matches = recall(playerId, npcId, lessonKey, 16).stream()
-                .filter(record -> record.key().equals("experience." + safeKey(lessonKey)))
+        String key = "experience." + safeKey(lessonKey);
+        List<MemoryRecord> matches = memoryService.timeline(playerId, npcId, key, 32).stream()
+                .filter(record -> record.scope() == MemoryScope.NPC)
+                .filter(record -> record.tags().contains("experience"))
+                .filter(record -> record.key().equals(key))
                 .toList();
         int successes = (int) matches.stream().filter(record -> record.tags().contains("success")).count();
         int failures = (int) matches.stream().filter(record -> record.tags().contains("failure")).count();
