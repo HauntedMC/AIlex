@@ -1,66 +1,62 @@
 # Testing and Quality
 
-Testing in this project is focused on preventing regressions in movement logic, action behavior, and command/runtime integration points.
+AIlex tests deterministic logic at component boundaries so reliability failures can be reproduced without a live Minecraft server or real model call.
 
-## Test Structure
-
-Tests live under `src/test/java` and mirror production package boundaries:
-
-- movement/pathfinding tests for deterministic algorithms;
-- action/config/npc tests for runtime behavior and contracts;
-- listener/command/util tests for integration-facing logic and guard rails.
-
-## Local Commands
-
-Run tests:
+## Local commands
 
 ```bash
 ./gradlew test
-```
-
-Run full quality checks:
-
-```bash
+./gradlew checkstyleMain checkstyleTest
+./gradlew test jacocoTestReport
 ./gradlew check
 ```
 
-Run lint checks:
+Coverage reports are written to:
 
-```bash
-./gradlew checkstyleMain checkstyleTest
-```
+- `build/reports/jacoco/test/html/index.html`
+- `build/reports/jacoco/test/jacocoTestReport.xml`
 
-Generate local coverage report:
+## Test areas
 
-```bash
-./gradlew test jacocoTestReport
-```
+Tests under `src/test/java` cover:
 
-## What to Test
+- movement/pathfinding algorithms;
+- NPC lifecycle, actions, config and persistence;
+- chat mention/routing behavior;
+- active player↔NPC dialogue state;
+- request admission, queueing, supersession and proactive priority;
+- route-specific context/token budgets;
+- selective live-context planning;
+- local hybrid retrieval;
+- Memory V2 validation, supersession, SQLite persistence and legacy YAML migration;
+- selective episodic/event memory;
+- OpenAI request construction, response parsing and provider usage/cache accounting;
+- command/operator diagnostics.
 
-When changing behavior, add or update tests near the affected boundary:
+## Reliability regressions
 
-- movement changes: directional math, clipping, and steering outputs;
-- action changes: stop conditions, world/entity guards, and completion behavior;
-- command changes: parse/validation logic and operator-visible outcomes;
-- config/data changes: load/save semantics and invalid-input handling.
+`HauntyIncidentRegressionTest` encodes the production failure that motivated Runtime V2. It verifies that an unresolved addressed turn keeps `haunty?` as a continuation and that newer turns sent while a request is active are queued/superseded instead of silently disappearing.
 
-## Test Quality Bar
+`AssistantRequestCoordinatorLoadTest` applies deterministic pressure without timing assumptions. With the shipped admission shape it verifies that 100 distinct direct submissions cannot exceed four active + eight queued requests, rejected work cannot grow the queue, proactive traffic gets no direct queue capacity, and accepted work drains completely.
 
-Use these rules when adding or reviewing tests:
+These tests should remain even if the implementation is reorganized; they describe required user-visible behavior rather than a specific internal class layout.
 
-- prefer behavior assertions over "does not throw" assertions;
-- validate both happy path and failure/edge path;
-- assert observable outcomes (state changes, outputs, interactions);
-- avoid overly broad mocks when local deterministic tests are possible.
+## Assistant quality bar
 
-## Coverage Reports
+When changing assistant behavior, test both the selected route and what is *not* selected. Examples:
 
-After `jacocoTestReport`:
+- casual chat should not capture world/server state;
+- nearby-player questions should not automatically capture global server population;
+- event recall should use episodic memory rather than unrelated live context;
+- vanilla gameplay answers may be accepted without HauntedMC evidence;
+- custom/time-sensitive HauntedMC facts must not invent evidence IDs;
+- an active follow-up should preserve unresolved dialogue intent;
+- queue pressure must produce explicit accepted/queued/rejected outcomes.
 
-- HTML report: `build/reports/jacoco/test/html/index.html`
-- XML report: `build/reports/jacoco/test/jacocoTestReport.xml`
+For memory, assert provenance/scope/expiry/supersession rather than only checking a rendered summary string.
+
+For OpenAI integration, mock HTTP and assert exact request fields and provider-reported token/cache parsing. Tests must never depend on a real API key.
 
 ## CI
 
-CI validates lint checks, tests, and coverage report generation on pull requests and `main` branch updates.
+Pull requests run separate lint and test/coverage workflows. A release candidate is not considered ready until both workflows pass on the current PR head.
