@@ -33,8 +33,9 @@ public record AssistantSettings(
         Set<String> allowedLanguages = allowedLanguages(config.getStringList(PATH + ".routing.allowed_languages"));
         return new AssistantSettings(
                 config.getBoolean(PATH + ".enabled", true), config.getString(PATH + ".mode", "adaptive"),
-                Math.clamp(config.getInt(PATH + ".total_deadline_seconds", 15), 3, 60),
-                Math.clamp(config.getInt(PATH + ".max_model_calls", 3), 1, 3),
+                Math.clamp(config.getInt(PATH + ".total_deadline_seconds", 18), 3, 60),
+                // Four calls permits two planner/tool rounds + answer + one grounded escalation. Six remains a hard ceiling.
+                Math.clamp(config.getInt(PATH + ".max_model_calls", 4), 1, 6),
                 Math.clamp(config.getInt(PATH + ".max_tool_rounds", 2), 0, 4),
                 config.getBoolean(PATH + ".routing.language_detection", true),
                 defaultLanguage(config.getString(PATH + ".routing.default_language", "nl"), allowedLanguages),
@@ -76,7 +77,7 @@ public record AssistantSettings(
     }
 
     public static AssistantSettings defaults() {
-        return new AssistantSettings(true, "adaptive", 15, 3, 2, true, "nl", Set.of("nl", "en"), true, true,
+        return new AssistantSettings(true, "adaptive", 18, 4, 2, true, "nl", Set.of("nl", "en"), true, true,
                 300, true, 24_000, 10,
                 new ModelProfile("gpt-5.6-luna", "low", 180),
                 new ModelProfile("gpt-5.6-terra", "medium", 360),
