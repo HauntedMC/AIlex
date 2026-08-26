@@ -13,7 +13,7 @@ plugins {
 
 
 group = "nl.hauntedmc.ailex"
-version = "1.6.0"
+version = "1.7.0"
 description = "AIlex"
 
 repositories {
