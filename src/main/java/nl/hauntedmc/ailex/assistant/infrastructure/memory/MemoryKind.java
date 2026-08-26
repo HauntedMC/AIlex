@@ -5,6 +5,8 @@ public enum MemoryKind {
     PREFERENCE,
     FACT,
     OPINION,
+    INTEREST,
+    GOAL,
     RELATIONSHIP,
     EPISODE,
     EVENT
