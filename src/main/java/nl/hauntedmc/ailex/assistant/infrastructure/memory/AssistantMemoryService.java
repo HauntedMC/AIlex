@@ -25,7 +25,8 @@ import java.util.concurrent.TimeUnit;
 /**
  * Typed semantic/episodic memory facade. Reads are served from a hot active-record map while durable writes are
  * serialized to SQLite/WAL on one dedicated writer. Semantic records are key-addressable and therefore correctable:
- * a new value for the same scope/kind/key supersedes the old value instead of accumulating contradictory sentences.
+ * a new value for the same semantic key supersedes the old value instead of accumulating contradictory sentences.
+ * Retrieval combines relevance, salience, confidence, type-aware recency and one-hop associative spreading.
  */
 public final class AssistantMemoryService implements AutoCloseable {
 
@@ -33,11 +34,19 @@ public final class AssistantMemoryService implements AutoCloseable {
     private static final int MAX_VALUE_LENGTH = 320;
     private static final int MAX_KEY_LENGTH = 96;
     private static final int MAX_RECENT_TOPIC_TERMS = 192;
+    private static final int ASSOCIATION_SEEDS = 8;
     private static final List<String> SENSITIVE_TERMS = List.of(
             "password", "wachtwoord", "ip address", "ip-adres", "email", "e-mail", "telefoon", "phone",
             "discord token", "api key", "apikey", "secret", "verification code", "verificatiecode",
             "coordinates", "coordinaten", "coördinaten", "home address", "woonadres", "report", "rapport",
             "ban reason", "sanction", "strafreden"
+    );
+    private static final Set<MemoryKind> PLAYER_SEMANTIC_KINDS = Set.of(
+            MemoryKind.PREFERENCE,
+            MemoryKind.FACT,
+            MemoryKind.OPINION,
+            MemoryKind.INTEREST,
+            MemoryKind.GOAL
     );
 
     private final JavaPlugin plugin;
@@ -103,6 +112,9 @@ public final class AssistantMemoryService implements AutoCloseable {
         if (language.isBlank()) {
             return;
         }
+        forgetConflictingSemanticKinds(
+                MemoryScope.PLAYER, playerId.toString(), "", MemoryKind.PREFERENCE, "language"
+        );
         storeSemantic(
                 MemoryScope.PLAYER,
                 playerId.toString(),
@@ -133,7 +145,7 @@ public final class AssistantMemoryService implements AutoCloseable {
 
     /**
      * Validates and stores one model-proposed semantic memory operation. Only explicit source-supported information is
-     * accepted. Shared facts additionally require the caller's trusted shared-write permission.
+     * accepted. Shared memory is strictly factual and additionally requires trusted shared-write permission.
      */
     public synchronized MemoryRecord rememberCandidate(
             UUID playerId,
@@ -150,7 +162,7 @@ public final class AssistantMemoryService implements AutoCloseable {
             return null;
         }
         MemoryKind kind = candidateKind(candidate.kind());
-        if (kind == null) {
+        if (kind == null || (scope == MemoryScope.GLOBAL && kind != MemoryKind.FACT)) {
             return null;
         }
         String key = canonicalKey(candidate.key());
@@ -163,7 +175,11 @@ public final class AssistantMemoryService implements AutoCloseable {
             if (!hasForgetSignal(playerMessage) || !keySupportedByMessage(key, playerMessage)) {
                 return null;
             }
-            forget(scope, subject, "", kind, key);
+            if (scope == MemoryScope.PLAYER) {
+                forgetSemanticKey(scope, subject, "", key);
+            } else {
+                forget(scope, subject, "", kind, key);
+            }
             return null;
         }
 
@@ -182,11 +198,15 @@ public final class AssistantMemoryService implements AutoCloseable {
         double confidence = switch (kind) {
             case PREFERENCE -> 0.99D;
             case OPINION -> 0.96D;
+            case INTEREST -> 0.94D;
+            case GOAL -> 0.93D;
             case FACT -> scope == MemoryScope.GLOBAL ? 0.97D : 0.93D;
             default -> 0.90D;
         };
         double salience = switch (kind) {
             case PREFERENCE -> 0.90D;
+            case GOAL -> 0.84D;
+            case INTEREST -> 0.80D;
             case OPINION -> 0.76D;
             case FACT -> scope == MemoryScope.GLOBAL ? 0.88D : 0.72D;
             default -> 0.65D;
@@ -196,7 +216,11 @@ public final class AssistantMemoryService implements AutoCloseable {
         tags.add(kind.name().toLowerCase(Locale.ROOT));
         tags.add(scope == MemoryScope.GLOBAL ? "shared" : "player");
         tags.addAll(keyTags(key));
+        tags.addAll(valueTags(value));
 
+        if (scope == MemoryScope.PLAYER) {
+            forgetConflictingSemanticKinds(scope, subject, "", kind, key);
+        }
         MemoryRecord record = storeSemantic(
                 scope,
                 subject,
@@ -213,12 +237,7 @@ public final class AssistantMemoryService implements AutoCloseable {
         if (scope == MemoryScope.GLOBAL) {
             enforceLimit(MemoryScope.GLOBAL, "", Set.of(MemoryKind.FACT), maxSharedFacts());
         } else {
-            enforceLimit(
-                    MemoryScope.PLAYER,
-                    playerId.toString(),
-                    Set.of(MemoryKind.FACT, MemoryKind.PREFERENCE, MemoryKind.OPINION),
-                    maxPlayerMemories()
-            );
+            enforceLimit(MemoryScope.PLAYER, playerId.toString(), PLAYER_SEMANTIC_KINDS, maxPlayerMemories());
         }
         return record;
     }
@@ -244,6 +263,9 @@ public final class AssistantMemoryService implements AutoCloseable {
         }
         long now = System.currentTimeMillis();
         long expiresAt = ttl == null || ttl.isZero() || ttl.isNegative() ? 0L : now + ttl.toMillis();
+        Set<String> enrichedTags = new HashSet<>(tags == null ? Set.of() : tags);
+        enrichedTags.addAll(keyTags(canonicalKey(key)));
+        enrichedTags.addAll(valueTags(value));
         MemoryRecord record = nextRecord(
                 scope,
                 clean(subjectId),
@@ -257,7 +279,7 @@ public final class AssistantMemoryService implements AutoCloseable {
                 sourceId,
                 occurredAt,
                 expiresAt,
-                tags
+                Set.copyOf(enrichedTags)
         );
         store(record);
         return record;
@@ -277,6 +299,12 @@ public final class AssistantMemoryService implements AutoCloseable {
         StringBuilder output = new StringBuilder();
         appendSection(output, "Player preferences", records.stream()
                 .filter(record -> record.scope() == MemoryScope.PLAYER && record.kind() == MemoryKind.PREFERENCE)
+                .map(record -> record.key() + '=' + record.value()).toList());
+        appendSection(output, "Player interests", records.stream()
+                .filter(record -> record.scope() == MemoryScope.PLAYER && record.kind() == MemoryKind.INTEREST)
+                .map(record -> record.key() + '=' + record.value()).toList());
+        appendSection(output, "Player goals", records.stream()
+                .filter(record -> record.scope() == MemoryScope.PLAYER && record.kind() == MemoryKind.GOAL)
                 .map(record -> record.key() + '=' + record.value()).toList());
         appendSection(output, "Player facts", records.stream()
                 .filter(record -> record.scope() == MemoryScope.PLAYER && record.kind() == MemoryKind.FACT)
@@ -313,13 +341,34 @@ public final class AssistantMemoryService implements AutoCloseable {
         String player = playerId.toString();
         String npc = clean(npcId);
         long now = System.currentTimeMillis();
-        return activeRecords.values().stream()
+        Set<String> queryTerms = Set.copyOf(significantWords(query));
+        String normalizedQuery = clean(query).toLowerCase(Locale.ROOT);
+
+        List<ScoredMemory> primary = activeRecords.values().stream()
                 .filter(record -> record.activeAt(now))
                 .filter(record -> visibleTo(record, player, npc))
                 .filter(record -> effectiveKinds.contains(record.kind()))
-                .sorted(memoryComparator(query, player, npc, now))
-                .limit(Math.clamp(maximumResults, 1, 96))
+                .map(record -> new ScoredMemory(
+                        record,
+                        memoryScore(record, queryTerms, normalizedQuery, player, npc, now)
+                ))
+                .sorted(Comparator.comparingDouble(ScoredMemory::score).reversed())
                 .toList();
+        if (primary.isEmpty()) {
+            return List.of();
+        }
+
+        Set<String> bridgeTerms = associationBridgeTerms(primary, queryTerms);
+        List<ScoredMemory> associated = primary.stream()
+                .map(scored -> new ScoredMemory(
+                        scored.record(),
+                        scored.score() + associationBonus(scored.record(), bridgeTerms, queryTerms)
+                ))
+                .sorted(Comparator.comparingDouble(ScoredMemory::score).reversed()
+                        .thenComparing(scored -> scored.record().lastConfirmed(), Comparator.reverseOrder()))
+                .limit(Math.max(64, Math.clamp(maximumResults, 1, 96) * 4L))
+                .toList();
+        return selectDiverse(associated, Math.clamp(maximumResults, 1, 96));
     }
 
     public List<MemoryRecord> activeSnapshot() {
@@ -397,12 +446,16 @@ public final class AssistantMemoryService implements AutoCloseable {
             Set<String> tags
     ) {
         MemoryRecord previous = activeRecords.get(identity(scope, subjectId, relationId, kind, key));
-        double reinforcedConfidence = previous != null && previous.value().equalsIgnoreCase(value)
-                ? Math.min(1.0D, Math.max(confidence, previous.confidence() + 0.02D))
+        boolean confirmation = previous != null && previous.value().equalsIgnoreCase(value);
+        double reinforcedConfidence = confirmation
+                ? Math.min(1.0D, Math.max(confidence, previous.confidence() + 0.025D))
                 : confidence;
-        double reinforcedSalience = previous != null && previous.value().equalsIgnoreCase(value)
-                ? Math.min(1.0D, Math.max(salience, previous.salience() + 0.04D))
+        double reinforcedSalience = confirmation
+                ? Math.min(1.0D, Math.max(salience, previous.salience() + 0.035D))
                 : salience;
+        long expiresAt = kind == MemoryKind.GOAL
+                ? System.currentTimeMillis() + Duration.ofDays(30).toMillis()
+                : 0L;
         MemoryRecord record = nextRecord(
                 scope,
                 clean(subjectId),
@@ -415,7 +468,7 @@ public final class AssistantMemoryService implements AutoCloseable {
                 sourceType,
                 sourceId,
                 0L,
-                0L,
+                expiresAt,
                 tags
         );
         store(record);
@@ -489,6 +542,29 @@ public final class AssistantMemoryService implements AutoCloseable {
         writer.execute(() -> repository.upsert(previous.expireAt(now)));
     }
 
+    private void forgetSemanticKey(MemoryScope scope, String subject, String relation, String key) {
+        for (MemoryKind kind : PLAYER_SEMANTIC_KINDS) {
+            forget(scope, subject, relation, kind, key);
+        }
+    }
+
+    private void forgetConflictingSemanticKinds(
+            MemoryScope scope,
+            String subject,
+            String relation,
+            MemoryKind expectedKind,
+            String key
+    ) {
+        if (scope != MemoryScope.PLAYER || !PLAYER_SEMANTIC_KINDS.contains(expectedKind)) {
+            return;
+        }
+        for (MemoryKind kind : PLAYER_SEMANTIC_KINDS) {
+            if (kind != expectedKind) {
+                forget(scope, subject, relation, kind, key);
+            }
+        }
+    }
+
     private void enforceLimit(MemoryScope scope, String subjectId, Set<MemoryKind> kinds, int limit) {
         List<MemoryRecord> matching = activeRecords.values().stream()
                 .filter(record -> record.scope() == scope && record.subjectId().equals(subjectId))
@@ -507,15 +583,6 @@ public final class AssistantMemoryService implements AutoCloseable {
         }
     }
 
-    private Comparator<MemoryRecord> memoryComparator(String query, String playerId, String npcId, long now) {
-        Set<String> queryTerms = Set.copyOf(significantWords(query));
-        String normalizedQuery = clean(query).toLowerCase(Locale.ROOT);
-        return Comparator.<MemoryRecord>comparingDouble(
-                        record -> memoryScore(record, queryTerms, normalizedQuery, playerId, npcId, now)
-                ).reversed()
-                .thenComparing(Comparator.comparingLong(MemoryRecord::lastConfirmed).reversed());
-    }
-
     private double memoryScore(
             MemoryRecord record,
             Set<String> queryTerms,
@@ -524,19 +591,13 @@ public final class AssistantMemoryService implements AutoCloseable {
             String npcId,
             long now
     ) {
-        Set<String> recordTerms = new HashSet<>(significantWords(
-                record.key() + " " + record.value() + " " + String.join(" ", record.tags())
-        ));
-        double lexical = 0.0D;
-        if (!queryTerms.isEmpty()) {
-            long overlap = queryTerms.stream().filter(recordTerms::contains).count();
-            lexical = (double) overlap / Math.max(1, queryTerms.size());
-        }
+        Set<String> terms = recordTerms(record);
+        double lexical = overlapRatio(queryTerms, terms);
         double phrase = !normalizedQuery.isBlank()
                 && (record.value().toLowerCase(Locale.ROOT).contains(normalizedQuery)
                 || normalizedQuery.contains(record.value().toLowerCase(Locale.ROOT))) ? 1.0D : 0.0D;
         long age = Math.max(0L, now - record.lastConfirmed());
-        double recency = 1.0D / (1.0D + age / (double) Duration.ofDays(21).toMillis());
+        double recency = 1.0D / (1.0D + age / (double) recencyHalfLife(record.kind()).toMillis());
         double scope = switch (record.scope()) {
             case PLAYER -> record.subjectId().equals(playerId) ? 1.0D : 0.0D;
             case PLAYER_NPC -> record.subjectId().equals(playerId) && record.relationId().equals(npcId) ? 1.0D : 0.75D;
@@ -547,18 +608,114 @@ public final class AssistantMemoryService implements AutoCloseable {
         };
         double kind = switch (record.kind()) {
             case PREFERENCE -> 1.0D;
+            case GOAL -> 0.97D;
+            case INTEREST -> 0.95D;
             case OPINION -> 0.92D;
             case FACT -> 0.90D;
             case RELATIONSHIP -> 0.78D;
             case EVENT, EPISODE -> 0.72D;
         };
-        return record.salience() * 0.24D
+        return record.salience() * 0.23D
                 + record.confidence() * 0.16D
-                + recency * 0.12D
-                + lexical * 0.26D
+                + recency * 0.11D
+                + lexical * 0.27D
                 + phrase * 0.08D
                 + scope * 0.08D
-                + kind * 0.06D;
+                + kind * 0.07D;
+    }
+
+    private Duration recencyHalfLife(MemoryKind kind) {
+        return switch (kind) {
+            case EVENT -> Duration.ofDays(3);
+            case EPISODE -> Duration.ofDays(14);
+            case GOAL -> Duration.ofDays(14);
+            case RELATIONSHIP -> Duration.ofDays(60);
+            case OPINION -> Duration.ofDays(90);
+            case INTEREST -> Duration.ofDays(120);
+            case PREFERENCE -> Duration.ofDays(180);
+            case FACT -> Duration.ofDays(365);
+        };
+    }
+
+    private Set<String> associationBridgeTerms(List<ScoredMemory> primary, Set<String> queryTerms) {
+        if (queryTerms.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> bridge = new HashSet<>();
+        int seeds = 0;
+        for (ScoredMemory scored : primary) {
+            Set<String> terms = recordTerms(scored.record());
+            if (queryTerms.stream().noneMatch(terms::contains)) {
+                continue;
+            }
+            for (String term : terms) {
+                if (!queryTerms.contains(term)) {
+                    bridge.add(term);
+                }
+            }
+            if (++seeds >= ASSOCIATION_SEEDS) {
+                break;
+            }
+        }
+        return Set.copyOf(bridge);
+    }
+
+    private double associationBonus(MemoryRecord record, Set<String> bridgeTerms, Set<String> queryTerms) {
+        if (bridgeTerms.isEmpty()) {
+            return 0.0D;
+        }
+        Set<String> terms = recordTerms(record);
+        long linked = bridgeTerms.stream().filter(terms::contains).count();
+        if (linked == 0) {
+            return 0.0D;
+        }
+        boolean direct = queryTerms.stream().anyMatch(terms::contains);
+        double activation = Math.min(1.0D, linked / 4.0D);
+        return activation * (direct ? 0.045D : 0.10D);
+    }
+
+    private List<MemoryRecord> selectDiverse(List<ScoredMemory> scored, int maximumResults) {
+        List<MemoryRecord> selected = new ArrayList<>();
+        for (ScoredMemory candidate : scored) {
+            if (selected.size() >= maximumResults) {
+                break;
+            }
+            boolean nearDuplicate = selected.stream().anyMatch(existing ->
+                    tokenJaccard(existing, candidate.record()) >= 0.86D
+                            && existing.kind() == candidate.record().kind()
+            );
+            if (!nearDuplicate) {
+                selected.add(candidate.record());
+            }
+        }
+        return List.copyOf(selected);
+    }
+
+    private double tokenJaccard(MemoryRecord left, MemoryRecord right) {
+        Set<String> a = recordTerms(left);
+        Set<String> b = recordTerms(right);
+        if (a.isEmpty() || b.isEmpty()) {
+            return 0.0D;
+        }
+        Set<String> intersection = new HashSet<>(a);
+        intersection.retainAll(b);
+        Set<String> union = new HashSet<>(a);
+        union.addAll(b);
+        return (double) intersection.size() / union.size();
+    }
+
+    private double overlapRatio(Set<String> expected, Set<String> actual) {
+        if (expected.isEmpty()) {
+            return 0.0D;
+        }
+        long overlap = expected.stream().filter(actual::contains).count();
+        return (double) overlap / expected.size();
+    }
+
+    private Set<String> recordTerms(MemoryRecord record) {
+        return new HashSet<>(significantWords(
+                record.key() + " " + record.value() + " " + String.join(" ", record.tags())
+        ));
     }
 
     private boolean visibleTo(MemoryRecord record, String playerId, String npcId) {
@@ -590,6 +747,8 @@ public final class AssistantMemoryService implements AutoCloseable {
             case "preference" -> MemoryKind.PREFERENCE;
             case "fact" -> MemoryKind.FACT;
             case "opinion" -> MemoryKind.OPINION;
+            case "interest" -> MemoryKind.INTEREST;
+            case "goal" -> MemoryKind.GOAL;
             default -> null;
         };
     }
@@ -615,14 +774,22 @@ public final class AssistantMemoryService implements AutoCloseable {
         List<String> keyTerms = significantWords(key.replace('_', ' ').replace('.', ' '));
         long keyOverlap = keyTerms.stream().distinct().filter(messageTerms::contains).count();
 
-        boolean directSupport = valueTerms.isEmpty()
-                ? false
-                : valueOverlap >= Math.min(2, Math.max(1, valueTerms.size()));
+        boolean directSupport = !valueTerms.isEmpty()
+                && valueOverlap >= Math.min(2, Math.max(1, valueTerms.size()));
         boolean semanticSupport = keyOverlap >= 1 && valueOverlap >= 1;
         if (kind == MemoryKind.OPINION || kind == MemoryKind.PREFERENCE) {
             return (directSupport || semanticSupport)
                     && (hasPreferenceOrOpinionSignal(normalizedMessage) || hasRememberSignal(normalizedMessage)
                     || hasRepeatedTopic(playerId, valueTerms, messageTerms));
+        }
+        if (kind == MemoryKind.INTEREST) {
+            return (directSupport || semanticSupport)
+                    && (hasInterestSignal(normalizedMessage) || hasRememberSignal(normalizedMessage)
+                    || hasRepeatedTopic(playerId, valueTerms, messageTerms));
+        }
+        if (kind == MemoryKind.GOAL) {
+            return (directSupport || semanticSupport)
+                    && (hasGoalSignal(normalizedMessage) || hasRememberSignal(normalizedMessage));
         }
         return directSupport || semanticSupport || (hasCorrectionSignal(normalizedMessage) && keyOverlap >= 1);
     }
@@ -679,6 +846,23 @@ public final class AssistantMemoryService implements AutoCloseable {
                 "ik hou van", "ik vind", "ik speel graag", "mijn favoriete", "mijn voorkeur", "ik heb liever",
                 "ik haat", "ik vind niet leuk", "i like", "i love", "i prefer", "my favorite", "i am a fan",
                 "i hate", "i dislike", "i don't like", "i dont like"
+        );
+    }
+
+    private boolean hasInterestSignal(String message) {
+        return containsAny(message,
+                "ik ben geïnteresseerd", "ik ben geinteresseerd", "ik ben fan van", "ik speel veel", "ik doe graag",
+                "ik bouw graag", "ik verzamel graag", "interesse in", "i am interested", "i'm interested", "im interested",
+                "i am into", "i'm into", "im into", "i am a fan of", "i play a lot", "i enjoy"
+        );
+    }
+
+    private boolean hasGoalSignal(String message) {
+        return containsAny(message,
+                "mijn doel", "ik wil bouwen", "ik wil maken", "ik wil halen", "ik probeer", "ik ben bezig met",
+                "ik werk aan", "ik spaar voor", "my goal", "i want to build", "i want to make", "i want to get",
+                "i am trying", "i'm trying", "im trying", "i am working on", "i'm working on", "im working on",
+                "i am saving for", "i'm saving for", "im saving for"
         );
     }
 
@@ -741,8 +925,17 @@ public final class AssistantMemoryService implements AutoCloseable {
     }
 
     private Set<String> keyTags(String key) {
-        List<String> terms = significantWords(key.replace('_', ' ').replace('.', ' '));
-        return terms.stream().limit(6).collect(java.util.stream.Collectors.toUnmodifiableSet());
+        return significantWords(key.replace('_', ' ').replace('.', ' ')).stream()
+                .limit(6)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    private Set<String> valueTags(String value) {
+        return significantWords(value).stream()
+                .distinct()
+                .filter(term -> term.length() >= 4)
+                .limit(8)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     private void appendSection(StringBuilder output, String heading, Collection<String> values) {
@@ -827,5 +1020,8 @@ public final class AssistantMemoryService implements AutoCloseable {
         if (plugin.getLogger() != null) {
             plugin.getLogger().warning(message);
         }
+    }
+
+    private record ScoredMemory(MemoryRecord record, double score) {
     }
 }
