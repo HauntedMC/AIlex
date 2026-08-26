@@ -57,17 +57,73 @@ public final class ProactiveInterventionPolicy {
         double repetition = socialGraph == null ? 0.0D : socialGraph.repetitionPenalty(
                 source.getUniqueId(), now, settings.socialGraphWindowMillis()
         );
-        double utility = helpful * settings.helpfulWeight()
-                - privateConversation * settings.privacyCost()
-                - error * settings.errorCost()
-                - repetition * settings.repetitionCost();
+        double utility = utility(helpful, privateConversation, error, repetition, settings);
         boolean speak = broadcast || utility > settings.utilityThreshold();
         CommunityGoal goal = speak
                 ? broadcast || serverSpecific(message) ? CommunityGoal.INFORM : CommunityGoal.SUPPORT_CONVERSATION
                 : CommunityGoal.SILENCE;
-        return new InterventionDecision(
-                goal, helpful, privateConversation, error, repetition, utility, speak
+        return new InterventionDecision(goal, helpful, privateConversation, error, repetition, utility, speak);
+    }
+
+    /** Utility evaluation for non-question community goals. The trigger has already been produced by deterministic cues. */
+    public static InterventionDecision evaluateGoal(
+            CommunityGoal requestedGoal,
+            Player source,
+            boolean activePlayerConversation,
+            boolean privateOnly,
+            SocialConversationGraph socialGraph,
+            long now,
+            ProactiveChatSettings.QuestionSettings settings
+    ) {
+        if (requestedGoal == null || requestedGoal == CommunityGoal.SILENCE || source == null || settings == null) {
+            return silence();
+        }
+        double helpful = switch (requestedGoal) {
+            case HELP_NEW_PLAYER -> 0.94D;
+            case WELCOME -> 0.72D;
+            case CELEBRATE -> 0.82D;
+            case CONNECT -> 0.78D;
+            case DEFUSE -> 0.70D;
+            case FOLLOW_UP -> 0.76D;
+            case INFORM -> 0.82D;
+            case SUPPORT_CONVERSATION -> 0.68D;
+            case SILENCE -> 0.0D;
+        };
+        double privacy = privateOnly ? 0.02D : activePlayerConversation ? 0.88D : switch (requestedGoal) {
+            case CONNECT, CELEBRATE, WELCOME, HELP_NEW_PLAYER, INFORM -> 0.08D;
+            case DEFUSE -> 0.18D;
+            case FOLLOW_UP -> 0.95D;
+            case SUPPORT_CONVERSATION -> 0.30D;
+            case SILENCE -> 1.0D;
+        };
+        double error = switch (requestedGoal) {
+            case DEFUSE -> 0.22D;
+            case FOLLOW_UP -> 0.14D;
+            case INFORM, HELP_NEW_PLAYER -> 0.18D;
+            default -> 0.08D;
+        };
+        double repetition = socialGraph == null ? 0.0D : socialGraph.repetitionPenalty(
+                source.getUniqueId(), now, settings.socialGraphWindowMillis()
         );
+        double score = utility(helpful, privacy, error, repetition, settings);
+        boolean speak = privateOnly ? score > settings.utilityThreshold() - 0.10D : score > settings.utilityThreshold();
+        return new InterventionDecision(
+                speak ? requestedGoal : CommunityGoal.SILENCE,
+                helpful, privacy, error, repetition, score, speak
+        );
+    }
+
+    private static double utility(
+            double helpful,
+            double privacy,
+            double error,
+            double repetition,
+            ProactiveChatSettings.QuestionSettings settings
+    ) {
+        return helpful * settings.helpfulWeight()
+                - privacy * settings.privacyCost()
+                - error * settings.errorCost()
+                - repetition * settings.repetitionCost();
     }
 
     private static boolean serverSpecific(String message) {
