@@ -2,7 +2,7 @@ openai:
   api_key: ""
   model: "gpt-5.6-luna"
   # Default cap for direct/proactive fallback chat; assistant profiles use their own limits below.
-  max_output_tokens: 160
+  max_output_tokens: 200
   # Valid values: none, low, medium, high, xhigh, max.
   reasoning_effort: "low"
   # Player chat is not retained by the API provider.
@@ -37,15 +37,16 @@ openai:
       fast:
         model: "gpt-5.6-luna"
         reasoning_effort: "low"
-        max_output_tokens: 128
+        # FAST can still use structured JSON for memory-writing turns; leave enough room for the envelope.
+        max_output_tokens: 220
       grounded:
         model: "gpt-5.6-terra"
         reasoning_effort: "medium"
-        max_output_tokens: 300
+        max_output_tokens: 360
       deliberate:
         model: "gpt-5.6-sol"
         reasoning_effort: "high"
-        max_output_tokens: 520
+        max_output_tokens: 640
     tools:
       # Read-only capability ceiling. Player-helpful state is allowed; secrets and infrastructure internals are not.
       read_only: true
