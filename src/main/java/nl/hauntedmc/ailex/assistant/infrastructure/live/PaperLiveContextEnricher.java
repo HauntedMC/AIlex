@@ -1,5 +1,6 @@
 package nl.hauntedmc.ailex.assistant.infrastructure.live;
 
+import nl.hauntedmc.ailex.AIlexPlugin;
 import nl.hauntedmc.ailex.npc.NPC;
 
 import org.bukkit.Bukkit;
@@ -24,11 +25,11 @@ import java.util.stream.Collectors;
 /**
  * Collects rich, player-helpful Paper state without exposing network addresses, plugin/config internals or private
  * information about other players. Collection happens on the server thread and remains query-selective for expensive
- * inventory/nearby/target scans.
+ * inventory/nearby/target scans. Trusted HauntedMC feature providers can append additional safe state.
  */
 public final class PaperLiveContextEnricher {
 
-    private static final int MAX_METADATA_CHARACTERS = 8_000;
+    private static final int MAX_METADATA_CHARACTERS = 12_000;
     private static final int TARGET_DISTANCE = 16;
 
     private PaperLiveContextEnricher() {
@@ -40,7 +41,7 @@ public final class PaperLiveContextEnricher {
         }
         String text = message.toLowerCase(Locale.ROOT);
         if (!looksLikeLiveQuestion(text)) {
-            return "";
+            return collectIntegrations(player, message);
         }
         List<String> metadata = new ArrayList<>();
 
@@ -67,9 +68,25 @@ public final class PaperLiveContextEnricher {
             metadata.add("player_playtime=" + formatDuration(Duration.ofSeconds(playedTicks / 20L)));
         }
 
+        String integrations = collectIntegrations(player, message);
+        if (!integrations.isBlank()) {
+            metadata.addAll(Arrays.stream(integrations.split("\\s*\\|\\s*"))
+                    .filter(part -> !part.isBlank()).toList());
+        }
+
         String result = String.join(" | ", metadata);
         return result.length() <= MAX_METADATA_CHARACTERS
                 ? result : result.substring(0, MAX_METADATA_CHARACTERS - 1) + "…";
+    }
+
+    private static String collectIntegrations(Player player, String message) {
+        try {
+            AIlexPlugin plugin = AIlexPlugin.getPlugin();
+            AssistantContextProviderRegistry registry = plugin.getAssistantContextProviderRegistry();
+            return registry == null ? "" : registry.collect(player, message);
+        } catch (RuntimeException ignored) {
+            return "";
+        }
     }
 
     private static void appendRequesterCore(List<String> metadata, Player player) {
@@ -210,11 +227,11 @@ public final class PaperLiveContextEnricher {
         StringBuilder value = new StringBuilder(item.getType().getKey().toString()).append('x').append(item.getAmount());
         if (!item.getEnchantments().isEmpty()) {
             String enchants = item.getEnchantments().entrySet().stream()
-                    .sorted(Map.Entry.comparingByKey(java.util.Comparator.comparing(enchantment -> enchantment.getKey().toString())))
+                    .sorted(java.util.Comparator.comparing(entry -> entry.getKey().getKey().toString()))
                     .limit(6)
                     .map(entry -> entry.getKey().getKey() + "_" + entry.getValue())
                     .collect(Collectors.joining(","));
-            value.append("[").append(enchants).append(']');
+            value.append('[').append(enchants).append(']');
         }
         return value.toString();
     }
@@ -312,7 +329,8 @@ public final class PaperLiveContextEnricher {
                 "speeltijd", "weather", "weer", "time", "tijd", "light", "licht", "difficulty", "dimension",
                 "richting", "facing", "block", "blok", "looking", "kijk", "target", "nearby", "dichtbij", "mob",
                 "entity", "online", "tps", "mspt", "performance", "lag", "uptime", "version", "versie", "jij",
-                "jou", "you", "your"
+                "jou", "you", "your", "rank", "saldo", "balance", "currency", "valuta", "combat", "tagged",
+                "autopickup", "fly", "god", "claim", "plot", "friends", "vrienden", "lottery", "loterij"
         );
     }
 
