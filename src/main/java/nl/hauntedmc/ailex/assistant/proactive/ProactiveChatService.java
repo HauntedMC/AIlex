@@ -75,7 +75,7 @@ public final class ProactiveChatService {
         ProactiveChatSettings.QuestionSettings questions = settings.questions();
         Collection<? extends Player> players = onlinePlayers.get();
         boolean activeConversation = isLikelyPlayerConversation(source, message, players);
-        boolean answerQuestion = ProactiveInterventionPolicy.shouldAnswerQuestion(
+        InterventionDecision decision = ProactiveInterventionPolicy.evaluateQuestion(
                 source, message, players, activeConversation, socialGraph, now, questions
         );
         socialGraph.observe(source, message, players, now, questions.socialGraphWindowMillis());
@@ -83,9 +83,11 @@ public final class ProactiveChatService {
         if (!settings.enabled()) {
             return;
         }
-        if (answerQuestion
+        if (decision.speak()
                 && passesProbability(questions.probability())
-                && submitIfOffCooldown(source, ProactiveChatTrigger.question(message), now, settings, consumer)) {
+                && submitIfOffCooldown(
+                        source, ProactiveChatTrigger.question(message), decision.goal(), now, settings, consumer
+                )) {
             return;
         }
 
@@ -96,6 +98,7 @@ public final class ProactiveChatService {
                 && submitIfOffCooldown(
                         source,
                         ProactiveChatTrigger.collectiveReaction(collective.minimumDistinctPlayers(), message),
+                        CommunityGoal.SUPPORT_CONVERSATION,
                         now,
                         settings,
                         consumer
@@ -116,7 +119,10 @@ public final class ProactiveChatService {
                 || isWithin(lastJoinResponseMillis.get(), now, join.cooldownMillis())) {
             return;
         }
-        if (submitIfOffCooldown(player, ProactiveChatTrigger.join(player.getName(), join.prompt()), now, settings, consumer)) {
+        if (submitIfOffCooldown(
+                player, ProactiveChatTrigger.join(player.getName(), join.prompt()), CommunityGoal.WELCOME,
+                now, settings, consumer
+        )) {
             lastJoinResponseMillis.set(now);
         }
     }
@@ -140,7 +146,14 @@ public final class ProactiveChatService {
             return;
         }
         boolean hasRecentChat = now - lastPlayerMessageMillis.get() <= idle.recentChatWindowMillis();
-        submitIfOffCooldown(contextPlayer, ProactiveChatTrigger.idleConversation(hasRecentChat), now, settings, consumer);
+        submitIfOffCooldown(
+                contextPlayer,
+                ProactiveChatTrigger.idleConversation(hasRecentChat),
+                hasRecentChat ? CommunityGoal.SUPPORT_CONVERSATION : CommunityGoal.INFORM,
+                now,
+                settings,
+                consumer
+        );
     }
 
     public void recordBotResponse() {
@@ -151,9 +164,20 @@ public final class ProactiveChatService {
         return settingsSupplier.get().responseVisibility();
     }
 
+    public SocialConversationGraph.ThreadView threadView(Player player) {
+        if (player == null) {
+            return SocialConversationGraph.ThreadView.empty();
+        }
+        ProactiveChatSettings.QuestionSettings questions = settingsSupplier.get().questions();
+        return socialGraph.threadView(
+                player.getUniqueId(), currentTimeMillis.getAsLong(), questions.socialGraphWindowMillis()
+        );
+    }
+
     private boolean submitIfOffCooldown(
             Player player,
             ProactiveChatTrigger trigger,
+            CommunityGoal goal,
             long now,
             ProactiveChatSettings settings,
             TriggerConsumer consumer
@@ -163,6 +187,11 @@ public final class ProactiveChatService {
             return false;
         }
         lastProactiveRequestMillis.set(now);
+        if (player != null) {
+            socialGraph.recordAilexIntervention(
+                    player.getUniqueId(), goal, now, settings.questions().socialGraphWindowMillis()
+            );
+        }
         return true;
     }
 
