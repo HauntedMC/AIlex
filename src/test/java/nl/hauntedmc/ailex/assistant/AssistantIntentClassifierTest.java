@@ -1,6 +1,7 @@
 package nl.hauntedmc.ailex.assistant;
 
 import nl.hauntedmc.ailex.assistant.application.routing.AssistantIntentClassifier;
+import nl.hauntedmc.ailex.assistant.domain.AssistantDialogueContext;
 import nl.hauntedmc.ailex.assistant.domain.AssistantIntent;
 import nl.hauntedmc.ailex.assistant.domain.AssistantMode;
 import nl.hauntedmc.ailex.assistant.domain.AssistantSettings;
@@ -56,6 +57,38 @@ class AssistantIntentClassifierTest {
         assertEquals(AssistantMode.GROUNDED, camel.mode());
         assertEquals(AssistantIntent.GAMEPLAY_HELP, wolf.intent());
         assertEquals(AssistantMode.GROUNDED, wolf.mode());
+    }
+
+    @Test
+    void shouldUseActiveDialogueToRouteAShortFollowUp() {
+        AssistantDialogueContext dialogue = new AssistantDialogueContext(
+                true,
+                false,
+                AssistantIntent.EVENT_RECALL,
+                "wat gaat er mis haunty",
+                "De chatgame lijkt vastgelopen."
+        );
+
+        AssistantIntentClassifier.Analysis analysis = AssistantIntentClassifier.analyze("haunty?", dialogue);
+
+        assertEquals(AssistantIntent.CONTEXT_FOLLOWUP, analysis.intent());
+        assertEquals(AssistantMode.GROUNDED, analysis.mode());
+    }
+
+    @Test
+    void shouldRouteEventDiagnosticQuestionsInsideActiveDialogue() {
+        AssistantDialogueContext dialogue = new AssistantDialogueContext(
+                true,
+                true,
+                AssistantIntent.CONVERSATION,
+                "haunty?",
+                ""
+        );
+
+        AssistantIntentClassifier.Analysis analysis = AssistantIntentClassifier.analyze("wat gaat er mis", dialogue);
+
+        assertEquals(AssistantIntent.EVENT_RECALL, analysis.intent());
+        assertEquals(AssistantMode.GROUNDED, analysis.mode());
     }
 
     @Test

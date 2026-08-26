@@ -62,12 +62,14 @@ public class LLMChatListener implements Listener {
     private static final String CHAT_NEARBY_RADIUS_PATH = CHAT_PATH + ".nearby_response_radius";
     private static final String CHAT_MAX_CONCURRENT_REQUESTS_PATH = CHAT_PATH + ".max_concurrent_requests";
     private static final String CHAT_MAX_QUEUED_REQUESTS_PATH = CHAT_PATH + ".max_queued_requests";
+    private static final String CHAT_SESSION_TIMEOUT_SECONDS_PATH = CHAT_PATH + ".session_timeout_seconds";
     private static final String STANDALONE_CHAT_PATH = CHAT_PATH + ".standalone";
     private static final int STANDALONE_CHAT_ID = 0;
     private static final int DEFAULT_MAX_RESPONSES_PER_PLAYER = 20;
     private static final long DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60L * 60L;
     private static final int DEFAULT_MAX_CONCURRENT_REQUESTS = 4;
     private static final int DEFAULT_MAX_QUEUED_REQUESTS = 8;
+    private static final long DEFAULT_SESSION_TIMEOUT_SECONDS = 60L;
     private static final int DEFAULT_NEARBY_RESPONSE_RADIUS = 32;
     private static final String KNOWLEDGE_PATH = "openai.knowledge";
     private static final int DEFAULT_KNOWLEDGE_MAX_CHARACTERS = 6000;
@@ -98,6 +100,7 @@ public class LLMChatListener implements Listener {
     private final PlayerResponseRateLimiter responseRateLimiter;
     private final AssistantRequestCoordinator requestCoordinator;
     private final AssistantRequestTracer requestTracer;
+    private final AssistantConversationManager conversationManager;
     private final ChatContextStore chatContextStore;
     private final KnowledgeRepository knowledgeRepository;
     private final ProactiveChatService proactiveChatService;
@@ -119,6 +122,7 @@ public class LLMChatListener implements Listener {
         this.requestCoordinator = new AssistantRequestCoordinator(this::dispatchAsync);
         AssistantRequestTracer configuredTracer = plugin.getAssistantRequestTracer();
         this.requestTracer = configuredTracer == null ? new AssistantRequestTracer() : configuredTracer;
+        this.conversationManager = new AssistantConversationManager(System::currentTimeMillis);
         FileConfiguration initialConfig = plugin.getConfig();
         this.chatContextStore = new ChatContextStore(
                 plugin.getDataFolder(),
@@ -131,10 +135,7 @@ public class LLMChatListener implements Listener {
         this.assistantService = pluginAssistantService == null ? new AssistantService(plugin) : pluginAssistantService;
     }
 
-    /**
-     * Starts the low-frequency idle conversation check after the plugin has enabled.
-     * Repeated calls are intentionally ignored so reload-related listener setup cannot duplicate it.
-     */
+    /** Starts the low-frequency idle conversation check after the plugin has enabled. */
     public void startProactiveConversationChecks() {
         if (idleConversationTask != null) {
             return;
@@ -148,10 +149,7 @@ public class LLMChatListener implements Listener {
                 20L);
     }
 
-    /**
-     * Handle the chat event and forward player messages to AI when an NPC is mentioned.
-     * @param event the chat event
-     */
+    /** Handle the chat event without changing the server chat renderer. */
     @EventHandler(ignoreCancelled = true)
     public void onChat(AsyncChatEvent event) {
         Player source = event.getPlayer();
@@ -163,11 +161,7 @@ public class LLMChatListener implements Listener {
         forwardChatToAI(source, message);
     }
 
-    /**
-     * Forward the chat message to the AI if an NPC is mentioned
-     * @param source the chat message
-     * @param message the chat message
-     */
+    /** Forward an addressed message or a high-confidence active-session follow-up to AI. */
     void forwardChatToAI(Player source, Component message) {
         proactiveChatService.recordPlayerMessage();
         String chatMessage = PlainTextComponentSerializer.plainText().serialize(message);
@@ -191,8 +185,39 @@ public class LLMChatListener implements Listener {
             return;
         }
 
+        if (routeActiveConversationFollowUp(source, chatMessage, contextSettings, npcManager)) {
+            return;
+        }
+
         chatContextStore.recordGeneralChat(source.getName(), chatMessage, contextSettings);
         proactiveChatService.onChat(source, chatMessage, this::getOnlinePlayers, this::submitProactiveResponse);
+    }
+
+    private boolean routeActiveConversationFollowUp(
+            Player source,
+            String chatMessage,
+            ChatContextStore.ContextSettings contextSettings,
+            NpcManager npcManager
+    ) {
+        AssistantConversationManager.ActiveTarget active = conversationManager.activeTarget(
+                source.getUniqueId(), getSessionTimeoutMillis()
+        );
+        if (active == null || !conversationManager.isLikelyFollowUp(chatMessage, active.snapshot())) {
+            return false;
+        }
+        if (active.npcId() == STANDALONE_CHAT_ID && !plugin.isNpcEnabled() && isStandaloneChatEnabled()) {
+            submitStandaloneResponse(source, chatMessage, contextSettings);
+            return true;
+        }
+        if (npcManager == null) {
+            return false;
+        }
+        NPC npc = npcManager.getNPCRegistry().get(active.npcId());
+        if (npc == null || !npc.isChatEnabled() || !npc.isSpawned()) {
+            return false;
+        }
+        submitNpcRequest(source, npc, chatMessage, contextSettings);
+        return true;
     }
 
     private void submitNpcRequest(
@@ -217,14 +242,24 @@ public class LLMChatListener implements Listener {
         String sourceName = source.getName();
         UUID sourceId = source.getUniqueId();
         int npcId = npc.getId();
-        UUID requestId = requestTracer.start(sourceName, npcName, "direct");
+        AssistantConversationManager.Snapshot dialogue = conversationManager.snapshot(
+                sourceId, npcId, getSessionTimeoutMillis()
+        );
+        conversationManager.recordUser(sourceId, npcId, sourceName, chatMessage);
+        UUID requestId = requestTracer.start(sourceName, npcName, dialogue.active() ? "follow-up" : "direct");
         try {
             String systemPrompt = buildSystemPrompt(npc, chatMessage);
             String userPrompt = buildUserPrompt(npc, sourceName, chatMessage);
             PromptContext context = appendContext(userPrompt, chatMessage, source, npc, contextSettings);
             chatContextStore.recordMetadata(sourceId, npcId, context.trustedMetadata(), contextSettings);
             AssistantService.PreparedRequest assistantRequest = assistantService.prepare(
-                    source, npc, chatMessage, systemPrompt, context.prompt(), context.trustedMetadata()
+                    source,
+                    npc,
+                    chatMessage,
+                    systemPrompt,
+                    context.prompt(),
+                    context.trustedMetadata(),
+                    dialogue.asDialogueContext()
             );
             requestTracer.transition(requestId, AssistantRequestTracer.State.PREPARED, "");
             chatContextStore.recordGeneralChat(sourceName, chatMessage, contextSettings);
@@ -235,10 +270,12 @@ public class LLMChatListener implements Listener {
                     requestId, source, sourceId, npcId, npcName, npcDisplayName,
                     systemPrompt, context, assistantRequest, contextSettings
             );
+            AssistantRequestCoordinator.Priority priority = dialogue.active()
+                    ? AssistantRequestCoordinator.Priority.FOLLOW_UP : AssistantRequestCoordinator.Priority.DIRECT;
             AssistantRequestCoordinator.Submission submission = requestCoordinator.submit(
                     requestId,
                     sourceId,
-                    AssistantRequestCoordinator.Priority.DIRECT,
+                    priority,
                     work,
                     getMaximumConcurrentRequests(),
                     getMaximumQueuedRequests()
@@ -286,6 +323,7 @@ public class LLMChatListener implements Listener {
                     .append(Component.text(response, NamedTextColor.WHITE));
             chatContextStore.recordConversation(sourceId, npcId, npcName, response, contextSettings);
             chatContextStore.recordBotMemory(npcId, npcName, response, contextSettings);
+            conversationManager.recordAssistant(sourceId, npcId, npcName, response, assistantRequest.analysis().intent());
             proactiveChatService.recordBotResponse();
             Bukkit.getScheduler().runTask(plugin, () -> deliverTrackedResponse(requestId, source, result));
         } catch (Exception exception) {
@@ -310,7 +348,13 @@ public class LLMChatListener implements Listener {
         UUID sourceId = source.getUniqueId();
         String sourceName = source.getName();
         String assistantName = standaloneMention();
-        UUID requestId = requestTracer.start(sourceName, assistantName, "direct-standalone");
+        AssistantConversationManager.Snapshot dialogue = conversationManager.snapshot(
+                sourceId, STANDALONE_CHAT_ID, getSessionTimeoutMillis()
+        );
+        conversationManager.recordUser(sourceId, STANDALONE_CHAT_ID, sourceName, chatMessage);
+        UUID requestId = requestTracer.start(
+                sourceName, assistantName, dialogue.active() ? "follow-up-standalone" : "direct-standalone"
+        );
         String systemPrompt = standaloneSystemPrompt();
         String userPrompt = "Bericht van speler " + sourceName + ": \"" + chatMessage
                 + "\". Antwoord als " + assistantName + " in maximaal één korte chatregel, zonder speaker label.";
@@ -318,7 +362,13 @@ public class LLMChatListener implements Listener {
         chatContextStore.recordMetadata(sourceId, STANDALONE_CHAT_ID, context.trustedMetadata(), contextSettings);
         try {
             AssistantService.PreparedRequest assistantRequest = assistantService.prepare(
-                    source, null, chatMessage, systemPrompt, context.prompt(), context.trustedMetadata()
+                    source,
+                    null,
+                    chatMessage,
+                    systemPrompt,
+                    context.prompt(),
+                    context.trustedMetadata(),
+                    dialogue.asDialogueContext()
             );
             requestTracer.transition(requestId, AssistantRequestTracer.State.PREPARED, "");
             chatContextStore.recordGeneralChat(sourceName, chatMessage, contextSettings);
@@ -326,10 +376,12 @@ public class LLMChatListener implements Listener {
             Runnable work = () -> executeStandaloneRequest(
                     requestId, source, sourceId, assistantName, systemPrompt, context, assistantRequest, contextSettings
             );
+            AssistantRequestCoordinator.Priority priority = dialogue.active()
+                    ? AssistantRequestCoordinator.Priority.FOLLOW_UP : AssistantRequestCoordinator.Priority.DIRECT;
             AssistantRequestCoordinator.Submission submission = requestCoordinator.submit(
                     requestId,
                     sourceId,
-                    AssistantRequestCoordinator.Priority.DIRECT,
+                    priority,
                     work,
                     getMaximumConcurrentRequests(),
                     getMaximumQueuedRequests()
@@ -376,6 +428,9 @@ public class LLMChatListener implements Listener {
                     sourceId, STANDALONE_CHAT_ID, assistantName, response, contextSettings
             );
             chatContextStore.recordBotMemory(STANDALONE_CHAT_ID, assistantName, response, contextSettings);
+            conversationManager.recordAssistant(
+                    sourceId, STANDALONE_CHAT_ID, assistantName, response, assistantRequest.analysis().intent()
+            );
             proactiveChatService.recordBotResponse();
             Bukkit.getScheduler().runTask(plugin, () -> deliverTrackedResponse(requestId, source, result));
         } catch (Exception exception) {
@@ -440,12 +495,6 @@ public class LLMChatListener implements Listener {
         }.runTaskAsynchronously(plugin);
     }
 
-    /**
-     * Gives a newly joined player an occasional, deliberately restrained welcome.
-     * NPC player-info setup remains in {@code PlayerJoinListener}; this listener only owns AI behaviour.
-     *
-     * @param event the player join event
-     */
     @EventHandler(ignoreCancelled = true)
     public void onPlayerJoin(PlayerJoinEvent event) {
         proactiveChatService.onJoin(event.getPlayer(), this::submitProactiveResponse);
@@ -622,20 +671,22 @@ public class LLMChatListener implements Listener {
         return Math.clamp(config.getInt(CHAT_MAX_QUEUED_REQUESTS_PATH, DEFAULT_MAX_QUEUED_REQUESTS), 1, 64);
     }
 
+    private long getSessionTimeoutMillis() {
+        FileConfiguration config = plugin.getConfig();
+        long seconds = config == null ? DEFAULT_SESSION_TIMEOUT_SECONDS
+                : Math.clamp(config.getLong(CHAT_SESSION_TIMEOUT_SECONDS_PATH, DEFAULT_SESSION_TIMEOUT_SECONDS), 10L, 600L);
+        return TimeUnit.SECONDS.toMillis(seconds);
+    }
+
     private void sendAccessFeedback(Player source) {
-        sendConfiguredFeedback(
-                source,
-                CHAT_PATH + ".feedback.access_denied",
-                "Je kunt AIlex hier niet gebruiken."
-        );
+        sendConfiguredFeedback(source, CHAT_PATH + ".feedback.access_denied", "Je kunt AIlex hier niet gebruiken.");
     }
 
     private void sendQueuedFeedback(Player source, boolean replaced) {
         sendConfiguredFeedback(
                 source,
                 CHAT_PATH + ".feedback." + (replaced ? "queued_replaced" : "queued"),
-                replaced
-                        ? "Ik ben nog bezig; ik pak je nieuwste bericht hierna."
+                replaced ? "Ik ben nog bezig; ik pak je nieuwste bericht hierna."
                         : "Ik ben nog even bezig; ik pak je bericht hierna."
         );
     }
@@ -1117,13 +1168,9 @@ public class LLMChatListener implements Listener {
         }
 
         boolean enabled = config.getBoolean(RATE_LIMIT_ENABLED_PATH, true);
-        int maxResponses = Math.max(1, config.getInt(
-                RATE_LIMIT_MAX_RESPONSES_PATH,
-                DEFAULT_MAX_RESPONSES_PER_PLAYER
-        ));
+        int maxResponses = Math.max(1, config.getInt(RATE_LIMIT_MAX_RESPONSES_PATH, DEFAULT_MAX_RESPONSES_PER_PLAYER));
         long windowSeconds = Math.max(1L, config.getLong(
-                RATE_LIMIT_WINDOW_SECONDS_PATH,
-                DEFAULT_RATE_LIMIT_WINDOW_SECONDS
+                RATE_LIMIT_WINDOW_SECONDS_PATH, DEFAULT_RATE_LIMIT_WINDOW_SECONDS
         ));
 
         return new PlayerResponseRateLimiter.ResponseRateLimit(
@@ -1186,10 +1233,7 @@ public class LLMChatListener implements Listener {
         if (config == null || !config.getBoolean(CHAT_CONTEXT_PATH + ".enabled", true)) {
             return "";
         }
-        String instruction = config.getString(
-                CHAT_CONTEXT_PATH + ".memory_instruction",
-                DEFAULT_MEMORY_INSTRUCTION
-        );
+        String instruction = config.getString(CHAT_CONTEXT_PATH + ".memory_instruction", DEFAULT_MEMORY_INSTRUCTION);
         if (instruction == null || instruction.isBlank()) {
             return "";
         }
