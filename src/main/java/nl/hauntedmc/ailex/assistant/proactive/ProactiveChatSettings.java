@@ -40,7 +40,9 @@ public record ProactiveChatSettings(
                 ),
                 new QuestionSettings(
                         config.getBoolean(PATH + ".questions.enabled", true),
-                        probability(config.getDouble(PATH + ".questions.probability", 0.18D))
+                        probability(config.getDouble(PATH + ".questions.probability", 0.18D)),
+                        secondsToMillis(config.getLong(PATH + ".questions.conversation_window_seconds", 45L)),
+                        Math.clamp(config.getInt(PATH + ".questions.minimum_speaker_alternations", 2), 2, 6)
                 ),
                 new CollectiveSettings(
                         config.getBoolean(PATH + ".collective.enabled", true),
@@ -64,7 +66,7 @@ public record ProactiveChatSettings(
         return new ProactiveChatSettings(
                 false, "server", 120_000L,
                 new JoinSettings(false, 0.0D, 300_000L, DEFAULT_JOIN_PROMPT),
-                new QuestionSettings(false, 0.0D),
+                new QuestionSettings(false, 0.0D, 45_000L, 2),
                 new CollectiveSettings(false, DEFAULT_COLLECTIVE_TERMS, 2, 45_000L, 0.0D),
                 new IdleSettings(false, 1_800_000L, 60_000L, 0.0D, 1, 600_000L)
         );
@@ -90,7 +92,12 @@ public record ProactiveChatSettings(
     public record JoinSettings(boolean enabled, double probability, long cooldownMillis, String prompt) {
     }
 
-    public record QuestionSettings(boolean enabled, double probability) {
+    public record QuestionSettings(
+            boolean enabled,
+            double probability,
+            long conversationWindowMillis,
+            int minimumSpeakerAlternations
+    ) {
     }
 
     public record CollectiveSettings(
