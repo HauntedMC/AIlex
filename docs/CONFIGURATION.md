@@ -1,96 +1,246 @@
-# Configuration Guide
+# Configuration Guide — AIlex 1.5
 
-This guide focuses on practical setup and safe operation of AIlex.
+This guide covers the production assistant settings introduced or materially changed in AIlex 1.5. For upgrades from 1.4.x, read [MIGRATION-1.5.md](MIGRATION-1.5.md) first.
 
-## Runtime File Layout
+## Runtime files
 
-AIlex stores files in your Paper plugin data directory:
+AIlex uses the Paper plugin data directory:
 
-- `plugins/AIlex/config.yml`: movement/action tuning and OpenAI settings.
-- `plugins/AIlex/data.yml`: persisted NPC data including per-entity behavior/display properties.
+- `config.yml` — runtime configuration (`config_version: 2`).
+- `data.yml` — persisted NPC definitions/properties.
+- `assistant-memory.db` — typed Memory V2 SQLite database.
+- `.assistant-memory-v2-migrated` — one-time legacy memory migration marker when applicable.
+- `knowledge/*.md|*.txt` — reviewed server knowledge.
 
-## Core Config Keys
+Old `assistant-memory.yml` and `assistant-long-term-memory.yml` files are migration inputs only. AIlex 1.5 does not recreate them. `assistant-short-term-memory.yml` is no longer bundled.
 
-Top-level sections in `config.yml`:
+## OpenAI defaults
 
-- `openai.api_key`: API key for chat responses. Keep empty if not used.
-- `openai.model`: fallback OpenAI Responses API model for legacy/direct chat paths.
-- `openai.max_output_tokens`: hard cap for a chat reply; `120` is appropriate for one Minecraft chat line.
-- `openai.reasoning_effort`: fallback thinking budget (`none`, `low`, `medium`, `high`, `xhigh`, or `max`).
-- `openai.store_responses`: API-side response retention; leave this `false` for player chat by default.
-- `openai.request_timeout_seconds`: upstream-response deadline (3–60 seconds).
-- `openai.chat`: access, response-routing, and in-flight request controls. `requester` visibility is the safest default; use `server` only for deliberately public NPCs.
-- `openai.chat.standalone`: the mention, display name, and persona for chat-only mode. It is used when
-  `npc.enabled: false`, without creating a Citizens NPC.
-- `openai.rate_limit.feedback`: private, configurable feedback for players who reach the response limit. Its message supports `{remaining_seconds}`.
-- `openai.rate_limit.bypass_permission`: staff permission that bypasses the per-player AI response limit. The
-  default is `ailex.rate_limit.bypass`, which defaults to operators; grant it to other staff roles as needed. Leave
-  it empty to disable the bypass.
-- `openai.safety.enabled`: enables a mandatory global safety system prompt.
-- `openai.safety.system_prompt`: non-optional safety policy prompt prepended to every OpenAI request.
-- `openai.knowledge`: an operator-maintained bullet-point knowledge base. AIlex selects relevant bullets for each question before applying `max_characters`.
-- `openai.knowledge.external`: reviewed Markdown/text facts from `plugins/AIlex/knowledge/`. This is the right place for maintainable server documentation; do not put private staff or player data in it because selected text is sent to the model.
-  AIlex ships reviewed topic guides for core HauntedMC information; they are copied into this directory on first startup.
-  The shipped `README.md` is only an authoring guide and is never indexed as evidence.
-- `openai.chat_context`: bounded recent chat context. Its per-source and total character limits are input-cost controls.
-  With `persist_to_disk: true` (the default), it is restored from
-  `plugins/AIlex/assistant-short-term-memory.yml` after reloads or restarts. The file includes recent chat, per-NPC
-  conversation context, bot memory, and inspectable live metadata snapshots. Metadata is never reused as live state:
-  every new request obtains a fresh snapshot. Set it to `false` and restart the plugin to start with an empty,
-  in-memory context.
-- `openai.chat_context.metadata.only_when_relevant`: sends live Minecraft metadata only for questions where location, inventory, nearby entities, or player state can help.
-- `openai.assistant`: enables the adaptive pipeline. It routes casual chat to a fast response, retrieves local
-  knowledge for server facts, and captures a small read-only Paper/Bukkit snapshot for live questions. Stable
-  vanilla gameplay questions can use the model's general Minecraft knowledge by default.
-- `openai.assistant.routing.default_language` and `allowed_languages`: control player-facing language. The default is
-  Dutch (`nl`); AIlex detects English only when `en` is allowed, and falls back to Dutch for ambiguous or unsupported input.
-- `openai.assistant.models.fast|grounded|deliberate`: independent model, reasoning, and output-token profiles.
-  The shipped configuration uses Luna/low for casual chat, Terra/medium for grounded server facts, and Sol/high only
-  for deliberate live or support requests. Adjust these based on measured latency, quality, and cost for your server.
-- `openai.assistant.retrieval`: controls the local knowledge index and the evidence budget. Knowledge lives in
-  `knowledge/*.md`; expired articles are excluded when configured.
-- `openai.assistant.structured_output`: requires a small JSON reply contract before AIlex renders player-facing chat.
-  AIlex rejects malformed or ungrounded factual replies instead of broadcasting them.
-- `openai.assistant.verification`: validates the reply contract and confidence. Local knowledge and live Bukkit
-  snapshots enrich answers, but do not prevent the model from using its general knowledge.
-- `openai.assistant.memory`: automatically stores only explicit, non-sensitive preferences and durable facts; it
-  never stores chat transcripts. `assistant-memory.yml` stores per-player preferences, while
-  `assistant-long-term-memory.yml` stores shared server facts (such as public staff roles) and player facts. Each
-  accepted memory is written immediately with an atomic file replacement, so it survives plugin reloads and normal
-  server restarts without leaving a partially written YAML file.
-  Harmless personal interests and repeatedly mentioned topics are eligible for player memory; repeated-topic
-  detection is session-only and stores no chat transcript.
-  Both files are system-managed and can be overwritten; put maintained documentation in `openai.knowledge` or
-  `knowledge/*.md` instead. Shared facts are automatically written only by players with
-  `openai.assistant.memory.shared_write_permission` (default: `ailex.admin`); leave that setting empty to allow
-  every player to contribute shared facts.
-- `openai.assistant.observability`: emits a route and completion line for every assistant request. It records the
-  selected intent, layer, language, model, retrieval/evidence result, response classification, and latency without
-  logging prompts or chat. Set `include_response_preview: true` only when administrators need short answer previews.
-- `npc.defaults.entity.*`: default entity properties used when creating new NPCs.
-- `npc.enabled`: controls physical Citizens NPCs. Set it to `false` to skip loading and creation of all AIlex NPCs
-  while retaining mention-based assistant chat through `openai.chat.standalone`.
-- `npc.general.maxVelocity`: global NPC movement speed cap.
-- `npc.general.maxRotation`: global angular speed cap.
-- `npc.behaviour.*`: per-behaviour parameters (acceleration, slow radius, prediction time, wander tuning).
-- `npc.action.*`: stop thresholds for command actions (`movehere`, `followplayer`, `fleeplayer`, `mirrorplayer`).
+```yaml
+openai:
+  api_key: ""
+  model: "gpt-5.6-luna"
+  max_output_tokens: 120
+  reasoning_effort: "low"
+  store_responses: false
+  request_timeout_seconds: 20
+```
 
-## Entity Defaults
+`openai.model` is the fallback for direct/legacy paths. The adaptive assistant uses the independent profiles under `openai.assistant.models`.
 
-`npc.defaults.entity.*` in `config.yml` controls defaults for newly created `/ailex create` NPCs:
+Keep `store_responses: false` for normal player chat unless there is a deliberate retention requirement.
 
-- `prefix`: displayed before NPC name (nameplate + chat response prefix).
-- `tabPrefix`: optional symbol/text before prefix in tab list.
-- `tabListOrder`: specific tab order value (lower value generally pushes entries down).
-- `damageable`: whether players/world can damage the NPC.
-- `respawnOnDeath`: whether NPC auto-respawns after death.
-- `chatEnabled`: whether mention-based AI chat replies are enabled for this NPC.
-- `listedInTab`: whether NPC should appear in tab list.
-- `alwaysUseNameHologram`: Citizens name-hologram behavior.
-- `prompts.systemPrompt`: per-NPC system prompt used for LLM behavior/persona.
-- `prompts.userPromptTemplate`: per-NPC user prompt template.
+## Adaptive assistant
 
-Supported placeholders in `prompts.userPromptTemplate`:
+```yaml
+openai:
+  assistant:
+    enabled: true
+    mode: "adaptive"
+    total_deadline_seconds: 15
+    max_model_calls: 3
+    max_tool_rounds: 2
+    structured_output: true
+```
+
+Adaptive routing keeps ordinary conversation cheap while allowing stronger profiles for work that benefits from them.
+
+### Model profiles
+
+```yaml
+models:
+  fast:
+    model: "gpt-5.6-luna"
+    reasoning_effort: "low"
+    max_output_tokens: 96
+  grounded:
+    model: "gpt-5.6-terra"
+    reasoning_effort: "medium"
+    max_output_tokens: 220
+  deliberate:
+    model: "gpt-5.6-sol"
+    reasoning_effort: "high"
+    max_output_tokens: 360
+```
+
+Ordinary fast chat normally uses the plain-text path. Structured output is used when verification/memory/evidence semantics justify the extra work. Grounded work may perform a single bounded escalation to the deliberate profile if the first result is unacceptable and deadline/model-call budget remains.
+
+### Input budgets
+
+```yaml
+context:
+  max_input_tokens_fast: 1000
+  max_input_tokens_grounded: 2800
+  max_input_tokens_deliberate: 4800
+```
+
+These are ceilings, not targets. `RequiredContextPlanner` first selects the smallest useful source set; `ContextCompiler` then enforces the route budget.
+
+Increasing these values should be based on real production misses, not on the assumption that more context makes the model smarter.
+
+## Routing and language
+
+```yaml
+routing:
+  default_language: "nl"
+  allowed_languages: ["nl", "en", "de"]
+  language_detection: true
+  clarify_only_when_required: true
+```
+
+Active dialogue state is considered when routing short follow-ups so players do not have to repeat the NPC name or entire question on every turn.
+
+## Read-only live context
+
+```yaml
+tools:
+  read_only: true
+  allowed: ["knowledge", "requester", "world", "nearby", "server", "npc", "session"]
+  redact_other_players: true
+```
+
+The allowed list is a capability ceiling; it does **not** mean every source is included in every prompt. The context planner selects only what the current intent/message needs.
+
+Typical behavior:
+
+- casual conversation — no live snapshot;
+- held-item/health question — requester source;
+- location/weather question — world source;
+- nearby-player/entity question — nearby source without automatically adding global server state;
+- online-count/TPS/server-version question — server source;
+- NPC-position question — NPC source;
+- event recall — typed event memory, not a full current-world dump.
+
+The assistant does not execute commands or mutate Minecraft state.
+
+## Knowledge retrieval
+
+```yaml
+retrieval:
+  hybrid_enabled: true
+  max_chunks: 5
+  max_evidence_characters: 6500
+  query_cache_seconds: 300
+  exclude_expired: true
+```
+
+Hybrid retrieval is local. Ranking combines lexical BM25, title/command aliases, phrase matching, multilingual concept expansion and a hashed dense signal. Near-duplicate evidence is suppressed before prompt assembly.
+
+Maintained HauntedMC facts belong in `knowledge/*.md` or `.txt`. Never place API keys, private staff notes, player reports, sanctions or personal information in knowledge files because selected evidence is sent to the model.
+
+General Minecraft knowledge remains available when no local HauntedMC article is required.
+
+## Memory V2
+
+```yaml
+memory:
+  enabled: true
+  retention_days: 90
+  max_shared_facts: 128
+  max_player_facts: 24
+  shared_write_permission: "ailex.admin"
+```
+
+Durable memory is stored in `assistant-memory.db` with typed scope/kind, provenance, confidence, salience, timestamps, expiry and supersession metadata.
+
+Memory categories include preferences, player/shared facts, factual player↔NPC relationship state, episodic memories and selected events. The service rejects sensitive/invented candidates before persistence.
+
+`shared_write_permission` controls who may teach server-wide shared memory. Reviewed stable server documentation should still go in `knowledge/`, not shared player memory.
+
+### Event memory
+
+Built-in selective event recording includes session transitions, world/gamemode changes, deaths and advancements. Integrations can call `AssistantEventMemoryService.recordCustomEvent(...)` for meaningful HauntedMC events.
+
+Do not turn every Bukkit event into memory. High-volume movement, damage ticks and block events belong in live state or nowhere, not long-term assistant memory.
+
+## Raw chat context
+
+```yaml
+chat_context:
+  enabled: true
+  persist_to_disk: false
+```
+
+This is intentionally different from Memory V2.
+
+`ChatContextStore` is a bounded short-term fallback for recent server/NPC chat. In config version 2 its disk persistence is **off by default**. The 1.4→1.5 migration also turns the old default off once.
+
+If an operator explicitly sets `persist_to_disk: true` after the config is already version 2, AIlex preserves that opt-in. Durable facts/preferences/events should still use Memory V2 rather than raw transcripts.
+
+## Request reliability
+
+```yaml
+chat:
+  max_concurrent_requests: 4
+  max_queued_requests: 8
+  session_timeout_seconds: 60
+```
+
+AIlex 1.5 uses bounded priority admission:
+
+- direct player requests are admitted first;
+- active-session follow-ups are retained rather than silently discarded;
+- the newest queued turn for one busy player supersedes their older queued turn;
+- proactive traffic is rejected first and never consumes direct queue capacity;
+- when the queue is truly full the player receives configured busy feedback.
+
+Player-facing feedback lives under `openai.chat.feedback`.
+
+## Response visibility
+
+`openai.chat.response_visibility` supports the project’s configured visibility modes. Use requester/private visibility when the response may depend on player-specific context. Global/server visibility is appropriate only for intentionally public bots.
+
+`nearby_response_radius` controls nearby delivery when that mode is selected.
+
+## Rate limiting
+
+```yaml
+rate_limit:
+  enabled: true
+  max_responses_per_player: 10
+  window_seconds: 600
+  bypass_permission: "ailex.rate_limit.bypass"
+  bypass_operators: true
+```
+
+The rate limiter is independent from request admission. It controls player consumption over time; admission controls instantaneous concurrency/queue pressure.
+
+## Safety
+
+Keep `openai.safety.enabled: true` for a public server. The global safety instructions are prepended independently from NPC persona prompts and player content cannot override them.
+
+The assistant is not a moderation execution engine. Reports, punishments, purchases, refunds, account recovery, economy mutations and console commands must remain in explicit reviewed server workflows.
+
+## Observability and diagnostics
+
+```yaml
+observability:
+  enabled: true
+  include_requester_name: true
+  include_response_preview: false
+  max_response_preview_characters: 240
+```
+
+Normal diagnostic logs record routing/model/outcome/latency and context source counts without prompt text. Response previews are opt-in.
+
+Useful commands:
+
+- `/ailex ai status` — assistant counters, active traces and cumulative provider usage.
+- `/ailex ai usage` — OpenAI calls, success count, input/cached/cache-write/output tokens and cache-hit ratio.
+- `/ailex trace recent [player] [limit]` — completed/rejected/superseded/upstream-failed request traces.
+- `/ailex memory status` — typed active-memory counts.
+- `/ailex memory recent` — recent memory metadata.
+- `/ailex ai rebuild-index` — reload knowledge and memory indexes.
+
+Provider token counters reset when the OpenAI client is recreated (for example by `/ailex reload`). Treat them as a runtime-window diagnostic, not durable billing records.
+
+## NPC settings
+
+`npc.enabled: false` disables physical Citizens NPC creation/loading while allowing the configured standalone assistant mode.
+
+`npc.defaults.entity.*` controls defaults for newly created NPCs, including prefix/tab display, damageability, respawn behavior, chat enablement and persona/user-prompt templates.
+
+Supported user-prompt placeholders include:
 
 - `{player_name}`
 - `{player_display_name}`
@@ -98,54 +248,16 @@ Supported placeholders in `prompts.userPromptTemplate`:
 - `{npc_display_name}`
 - `{chat_message}`
 
-## Per-NPC Data Schema
+Movement/action tuning remains under `npc.general`, `npc.behaviour.*` and `npc.action.*`.
 
-Each NPC in `data.yml` now stores entity properties under:
+## Recommended production workflow
 
-- `npcs.<id>.entity.name`
-- `npcs.<id>.entity.properties.prefix`
-- `npcs.<id>.entity.properties.tabPrefix`
-- `npcs.<id>.entity.properties.tabListOrder`
-- `npcs.<id>.entity.properties.damageable`
-- `npcs.<id>.entity.properties.respawnOnDeath`
-- `npcs.<id>.entity.properties.chatEnabled`
-- `npcs.<id>.entity.properties.listedInTab`
-- `npcs.<id>.entity.properties.alwaysUseNameHologram`
-- `npcs.<id>.entity.properties.prompts.systemPrompt`
-- `npcs.<id>.entity.properties.prompts.userPromptTemplate`
+1. Back up `plugins/AIlex/` before upgrading or making large config changes.
+2. Keep `store_responses: false`, `chat_context.persist_to_disk: false` and safety enabled unless there is a deliberate reason otherwise.
+3. Start with shipped route/model/token budgets.
+4. Validate normal chat, follow-ups, live state, server facts and event/memory recall.
+5. Use `/ailex trace recent` for reliability failures and `/ailex ai usage` for token/cache behavior.
+6. Change one budget/model/retrieval setting at a time and compare actual behavior.
+7. Run `/ailex reload` after config changes.
 
-## Safe Change Workflow
-
-1. Back up `config.yml` before larger tuning changes.
-2. Change one behavior group at a time (e.g., only `arrive`).
-3. Run `/ailex reload` to apply updates.
-4. Validate NPC behavior with debug-visible scenarios.
-
-## OpenAI Integration Notes
-
-- Leave `openai.api_key` empty when LLM chat replies are not needed.
-- Configure active models in `openai.assistant.models.*`; `openai.model` remains the fallback for direct chat paths.
-- Keep `openai.safety.enabled: true` for production/public servers.
-- Rotate keys immediately if a key was ever committed publicly.
-- Keep prompts/responses short to reduce latency impact.
-- Prefer concise, independently useful knowledge bullets; the retrieval step matches the player's words and commands against them.
-
-## Operational Safety Notes
-
-- Avoid extreme acceleration/rotation values that cause jitter.
-- Keep action stop distances realistic to avoid oscillation.
-- Verify plugin dependencies (`Citizens`, `packetevents`) are present before startup.
-- `/ailex` management commands require `ailex.admin` (operators have it by default). Do not grant it to normal players.
-- A player can have only one active AI request and the global `max_concurrent_requests` cap prevents an API outage or chat burst from consuming unbounded threads.
-- The assistant tool boundary is read-only. It can inspect the addressed player's current Paper/Bukkit context, but it
-  never executes commands, changes NPC behavior, accesses other plugins, or performs economy/moderation actions.
-- NPC names are matched as words, so a bot called `Alex` does not trigger on `Alexander`. Players can use `@Alex` or `Alex` naturally.
-- AIlex only initializes, resets, respawns, or removes Citizens NPCs carrying its own metadata; matching names alone
-  are never treated as ownership.
-- The bot is an assistant, not an enforcement system: never let it directly execute moderation, economy, ban, rollback, whitelist, or console commands. Route those actions through reviewed staff workflows with explicit permissions and audit records.
-
-## Troubleshooting Tips
-
-- Missing NPCs after restart: verify `data.yml` and class names in stored entries.
-- NPCs not reacting: verify current movement behaviour and world/entity conditions.
-- LLM replies missing: verify `openai.api_key`, model value, and outbound network access.
+For the internal component flow and design boundaries, see [ARCHITECTURE.md](ARCHITECTURE.md).
