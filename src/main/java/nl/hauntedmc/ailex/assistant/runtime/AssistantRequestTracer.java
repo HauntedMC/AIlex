@@ -10,6 +10,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BooleanSupplier;
 
 /** Bounded request lifecycle tracing used for reliability diagnostics without logging prompt text. */
 public class AssistantRequestTracer {
@@ -29,6 +30,17 @@ public class AssistantRequestTracer {
     private static final int MAX_RECENT = 256;
     private final Map<UUID, MutableTrace> active = new ConcurrentHashMap<>();
     private final Deque<TraceSnapshot> recent = new ArrayDeque<>();
+    private final BooleanSupplier loggingEnabled;
+    private final BooleanSupplier includeRequesterName;
+
+    public AssistantRequestTracer() {
+        this(() -> true, () -> true);
+    }
+
+    public AssistantRequestTracer(BooleanSupplier loggingEnabled, BooleanSupplier includeRequesterName) {
+        this.loggingEnabled = loggingEnabled == null ? () -> true : loggingEnabled;
+        this.includeRequesterName = includeRequesterName == null ? () -> true : includeRequesterName;
+    }
 
     public UUID start(String requester, String npc, String kind) {
         UUID requestId = UUID.randomUUID();
@@ -94,10 +106,14 @@ public class AssistantRequestTracer {
     }
 
     private void log(MutableTrace trace, String detail) {
+        if (!loggingEnabled.getAsBoolean()) {
+            return;
+        }
         long ageMillis = Math.max(0L, (System.nanoTime() - trace.createdAtNanos) / 1_000_000L);
         String suffix = detail == null || detail.isBlank() ? "" : " detail=" + safe(detail);
+        String requester = includeRequesterName.getAsBoolean() ? trace.requester : "hidden";
         LoggerUtils.logInfo("[AIlex request] request=" + shortId(trace.requestId)
-                + " requester=" + trace.requester
+                + " requester=" + requester
                 + " npc=" + trace.npc
                 + " kind=" + trace.kind
                 + " state=" + trace.state.name().toLowerCase(Locale.ROOT)
