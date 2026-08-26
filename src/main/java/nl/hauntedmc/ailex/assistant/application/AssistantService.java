@@ -16,6 +16,7 @@ import nl.hauntedmc.ailex.assistant.domain.AssistantMode;
 import nl.hauntedmc.ailex.assistant.domain.AssistantReply;
 import nl.hauntedmc.ailex.assistant.domain.AssistantSettings;
 import nl.hauntedmc.ailex.assistant.infrastructure.knowledge.LocalKnowledgeIndex;
+import nl.hauntedmc.ailex.assistant.infrastructure.live.PaperLiveContextEnricher;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantMemoryService;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryCandidate;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryKind;
@@ -24,10 +25,7 @@ import nl.hauntedmc.ailex.infrastructure.openai.OpenAiResponsesClient;
 import nl.hauntedmc.ailex.npc.NPC;
 import nl.hauntedmc.ailex.util.LoggerUtils;
 
-import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -117,7 +115,7 @@ public final class AssistantService {
         RequiredContextPlanner.Plan plan = contextPlanner.plan(analysis.intent(), analysis.mode(), message, settings);
         boolean retrieveKnowledge = plan.knowledge() && settings.maxToolRounds() > 0;
         LiveSnapshot snapshot = plan.live()
-                ? LiveSnapshot.capture(plugin, player, npc, plan.liveSources(), settings)
+                ? LiveSnapshot.capture(player, npc, message, plan.liveSources())
                 : LiveSnapshot.empty();
         if (analysis.intent() == AssistantIntent.LIVE_STATE
                 && trustedLiveMetadata != null && !trustedLiveMetadata.isBlank()) {
@@ -251,7 +249,7 @@ public final class AssistantService {
             verifiedReplies.incrementAndGet();
         }
         if (!request.settings().shadowMode() && request.settings().cacheStaticAnswers()
-                && isStaticIntent(request.analysis().intent())) {
+                && isStaticIntent(request.analysis().intent()) && reply.memoryCandidates().isEmpty()) {
             if (staticReplyCache.size() >= 256) {
                 staticReplyCache.clear();
             }
@@ -737,6 +735,7 @@ public final class AssistantService {
                 + "|" + request.npcName()
                 + "|" + profile.model()
                 + "|" + Integer.toHexString(request.systemPrompt().hashCode())
+                + "|" + Integer.toHexString(request.userPrompt().hashCode())
                 + "|" + Integer.toHexString(request.memory().hashCode())
                 + "|" + Integer.toHexString(request.snapshot().asEvidence().hashCode())
                 + "|" + Integer.toHexString(evidenceFingerprint.hashCode())
@@ -892,77 +891,31 @@ public final class AssistantService {
     public record LiveSnapshot(List<String> values, Set<String> sourceIds) {
 
         private static LiveSnapshot capture(
-                AIlexPlugin plugin,
                 Player player,
                 NPC npc,
-                Set<RequiredContextPlanner.LiveSource> requested,
-                AssistantSettings settings
+                String message,
+                Set<RequiredContextPlanner.LiveSource> requested
         ) {
             if (requested == null || requested.isEmpty()) {
                 return empty();
             }
-            List<String> values = new ArrayList<>();
-            Set<String> sourceIds = new HashSet<>();
-            Location location = player.getLocation();
-
-            if (requested.contains(RequiredContextPlanner.LiveSource.WORLD)
-                    && settings.toolAllowed("world") && location.getWorld() != null) {
-                values.add("player_world=" + location.getWorld().getName());
-                values.add(String.format(Locale.ROOT, "player_position=%.0f,%.0f,%.0f",
-                        location.getX(), location.getY(), location.getZ()));
-                values.add("player_biome=" + location.getWorld().getBiome(location).getKey());
-                values.add("player_facing=" + directionFromYaw(location.getYaw()));
-                values.add("world_environment=" + location.getWorld().getEnvironment().name().toLowerCase(Locale.ROOT));
-                values.add("world_difficulty=" + location.getWorld().getDifficulty().name().toLowerCase(Locale.ROOT));
-                values.add("world_time_ticks=" + location.getWorld().getTime());
-                values.add("weather=" + (location.getWorld().isThundering()
-                        ? "thunder" : location.getWorld().hasStorm() ? "rain" : "clear"));
-                values.add("player_light=" + location.getBlock().getLightLevel());
-                sourceIds.add("live.world");
-            }
-            if (requested.contains(RequiredContextPlanner.LiveSource.REQUESTER) && settings.toolAllowed("requester")) {
-                values.add("player_gamemode=" + player.getGameMode().name().toLowerCase(Locale.ROOT));
-                values.add("player_health=" + Math.round(player.getHealth()));
-                values.add("player_food=" + player.getFoodLevel());
-                values.add("player_level=" + player.getLevel());
-                values.add("player_main_hand=" + describeItem(player.getInventory().getItemInMainHand()));
-                sourceIds.add("live.requester");
-            }
-            if (requested.contains(RequiredContextPlanner.LiveSource.INVENTORY) && settings.toolAllowed("requester")) {
-                values.add("player_main_hand=" + describeItem(player.getInventory().getItemInMainHand()));
-                values.add("player_off_hand=" + describeItem(player.getInventory().getItemInOffHand()));
-                sourceIds.add("live.inventory");
-            }
-            if (requested.contains(RequiredContextPlanner.LiveSource.SERVER)
-                    && settings.toolAllowed("server") && plugin.getServer() != null) {
-                values.add("server_players=" + plugin.getServer().getOnlinePlayers().size() + "/"
-                        + plugin.getServer().getMaxPlayers());
-                sourceIds.add("live.server");
-            }
-            if (requested.contains(RequiredContextPlanner.LiveSource.NEARBY) && settings.toolAllowed("nearby")) {
-                long nearbyPlayers = player.getNearbyEntities(24, 24, 24).stream().filter(Player.class::isInstance).count();
-                values.add("nearby_player_count=" + nearbyPlayers);
-                sourceIds.add("live.nearby");
-            }
-            if (requested.contains(RequiredContextPlanner.LiveSource.NPC)
-                    && settings.toolAllowed("npc") && npc != null && npc.isSpawned()) {
-                Location npcLocation = npc.getLastKnownLocation();
-                values.add(String.format(Locale.ROOT, "npc_position=%.0f,%.0f,%.0f",
-                        npcLocation.getX(), npcLocation.getY(), npcLocation.getZ()));
-                sourceIds.add("live.npc");
-            }
-            return new LiveSnapshot(List.copyOf(values), Set.copyOf(sourceIds));
+            String metadata = PaperLiveContextEnricher.collect(player, npc, message, requested);
+            return fromMetadata(metadata, requested);
         }
 
         private static LiveSnapshot empty() {
             return new LiveSnapshot(List.of(), Set.of());
         }
 
-        private LiveSnapshot withContext(String metadata, Set<RequiredContextPlanner.LiveSource> requested) {
+        private static LiveSnapshot fromMetadata(
+                String metadata,
+                Set<RequiredContextPlanner.LiveSource> requested
+        ) {
             if (metadata == null || metadata.isBlank()) {
-                return this;
+                return empty();
             }
             List<String> relevant = new ArrayList<>();
+            Set<String> ids = new HashSet<>();
             for (String rawPart : metadata.split("\\s*\\|\\s*")) {
                 String part = rawPart.replaceAll("\\s+", " ").trim();
                 if (part.isBlank()) {
@@ -972,16 +925,60 @@ public final class AssistantService {
                 String key = separator < 0 ? part : part.substring(0, separator).trim().toLowerCase(Locale.ROOT);
                 if (requested == null || requested.isEmpty() || metadataKeyAllowed(key, requested)) {
                     relevant.add(part);
+                    String sourceId = sourceIdForKey(key);
+                    if (!sourceId.isBlank()) {
+                        ids.add(sourceId);
+                    }
                 }
             }
-            if (relevant.isEmpty()) {
+            return relevant.isEmpty()
+                    ? empty()
+                    : new LiveSnapshot(List.copyOf(relevant.stream().distinct().toList()), Set.copyOf(ids));
+        }
+
+        private LiveSnapshot withContext(String metadata, Set<RequiredContextPlanner.LiveSource> requested) {
+            LiveSnapshot additional = fromMetadata(metadata, requested);
+            if (additional.isBlank()) {
                 return this;
             }
             List<String> enriched = new ArrayList<>(values);
-            enriched.addAll(relevant);
+            enriched.addAll(additional.values());
             Set<String> ids = new HashSet<>(sourceIds);
+            ids.addAll(additional.sourceIds());
             ids.add("live.context");
-            return new LiveSnapshot(List.copyOf(enriched), Set.copyOf(ids));
+            return new LiveSnapshot(
+                    List.copyOf(enriched.stream().distinct().toList()),
+                    Set.copyOf(ids)
+            );
+        }
+
+        private static String sourceIdForKey(String key) {
+            if (key.startsWith("target_")) {
+                return "live.target";
+            }
+            if (key.startsWith("player_inventory_") || key.startsWith("player_armor")
+                    || key.startsWith("player_selected_hotbar")) {
+                return "live.inventory";
+            }
+            if (key.startsWith("player_biome") || key.startsWith("player_position")
+                    || key.startsWith("player_facing") || key.startsWith("player_light")
+                    || key.startsWith("player_block") || key.startsWith("block_below")
+                    || key.startsWith("world_") || key.equals("weather")) {
+                return "live.world";
+            }
+            if (key.startsWith("server_")) {
+                return "live.server";
+            }
+            if (key.startsWith("nearby_")) {
+                return "live.nearby";
+            }
+            if (key.startsWith("bot_") || key.startsWith("npc_")) {
+                return "live.npc";
+            }
+            if (key.startsWith("player_")) {
+                return "live.requester";
+            }
+            return "";
         }
 
         private static boolean metadataKeyAllowed(
@@ -992,7 +989,7 @@ public final class AssistantService {
                 return requested.contains(RequiredContextPlanner.LiveSource.TARGET);
             }
             if (key.startsWith("player_inventory_") || key.startsWith("player_armor")
-                    || key.startsWith("player_off_hand") || key.startsWith("player_selected_hotbar")) {
+                    || key.startsWith("player_selected_hotbar")) {
                 return requested.contains(RequiredContextPlanner.LiveSource.INVENTORY)
                         || requested.contains(RequiredContextPlanner.LiveSource.REQUESTER);
             }
@@ -1021,27 +1018,16 @@ public final class AssistantService {
             return false;
         }
 
-        private static String describeItem(ItemStack item) {
-            if (item == null || item.getType() == null || item.getType() == Material.AIR
-                    || item.getType() == Material.CAVE_AIR || item.getType() == Material.VOID_AIR) {
-                return "empty";
-            }
-            return item.getType().getKey() + "x" + item.getAmount();
-        }
-
-        private static String directionFromYaw(float yaw) {
-            String[] directions = {
-                    "south", "southwest", "west", "northwest", "north", "northeast", "east", "southeast"
-            };
-            return directions[Math.floorMod(Math.round(yaw / 45.0F), directions.length)];
-        }
-
         private boolean isBlank() {
             return values.isEmpty();
         }
 
         private String asEvidence() {
-            return String.join(" | ", values);
+            if (values.isEmpty()) {
+                return "";
+            }
+            String ids = sourceIds.stream().sorted().collect(Collectors.joining(","));
+            return (ids.isBlank() ? "" : "evidence_ids=" + ids + "\n") + String.join(" | ", values);
         }
     }
 }
