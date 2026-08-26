@@ -5,6 +5,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import nl.hauntedmc.ailex.AIlexPlugin;
 import nl.hauntedmc.ailex.assistant.application.AssistantService;
+import nl.hauntedmc.ailex.assistant.domain.AssistantDialogueContext;
 import nl.hauntedmc.ailex.assistant.domain.AssistantReply;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantEventMemoryService;
 import nl.hauntedmc.ailex.assistant.proactive.ProactiveChatService;
@@ -219,9 +220,6 @@ public final class AssistantChatController implements AutoCloseable {
                     configuration.maximumConcurrentRequests(),
                     configuration.maximumQueuedRequests()
             );
-            if (submission.accepted()) {
-                recordAcceptedInteraction(sourceId, target);
-            }
             handleSubmission(source, requestId, submission);
         } catch (RuntimeException exception) {
             requestTracer.transition(requestId, AssistantRequestTracer.State.UPSTREAM_FAILED, "prepare");
@@ -262,7 +260,7 @@ public final class AssistantChatController implements AutoCloseable {
         chatContextStore.recordBotMemory(target.id(), source.getName(), message, contextSettings);
     }
 
-    private void recordAcceptedInteraction(UUID sourceId, AssistantChatTarget target) {
+    private void recordCompletedInteraction(UUID sourceId, AssistantChatTarget target) {
         AssistantEventMemoryService eventMemory = plugin.getAssistantEventMemoryService();
         if (eventMemory != null) {
             eventMemory.recordInteraction(sourceId, String.valueOf(target.id()));
@@ -298,6 +296,7 @@ public final class AssistantChatController implements AutoCloseable {
                 return;
             }
 
+            recordCompletedInteraction(sourceId, target);
             chatContextStore.recordConversation(sourceId, target.id(), target.name(), response, contextSettings);
             chatContextStore.recordBotMemory(target.id(), target.name(), response, contextSettings);
             conversationManager.recordAssistant(
@@ -324,13 +323,13 @@ public final class AssistantChatController implements AutoCloseable {
                 + " in exact één korte, gewone chatregel, zonder speaker label.";
         AssistantService.PreparedRequest prepared;
         try {
-            prepared = assistantService.prepare(
+            prepared = publicProactiveRequest(assistantService.prepare(
                     contextPlayer,
                     target.npc(),
                     trigger.context(),
                     target.systemPrompt(),
                     prompt
-            );
+            ));
         } catch (RuntimeException exception) {
             LoggerUtils.logError("Could not prepare proactive assistant chat: " + exception.getMessage());
             return false;
@@ -350,6 +349,32 @@ public final class AssistantChatController implements AutoCloseable {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Proactive responses can be broadcast publicly, so they must never receive one player's private memory, live
+     * requester state or direct-dialogue history. Reviewed knowledge retrieval remains available through the prepared
+     * request, while the model-facing player-specific context is removed before asynchronous generation.
+     */
+    private AssistantService.PreparedRequest publicProactiveRequest(AssistantService.PreparedRequest prepared) {
+        return new AssistantService.PreparedRequest(
+                prepared.playerId(),
+                prepared.playerName(),
+                prepared.npcName(),
+                prepared.npcMemoryId(),
+                prepared.message(),
+                prepared.systemPrompt(),
+                prepared.userPrompt(),
+                prepared.analysis(),
+                prepared.settings(),
+                prepared.contextPlan(),
+                prepared.retrieveKnowledge(),
+                new AssistantService.LiveSnapshot(java.util.List.of(), java.util.Set.of()),
+                "",
+                AssistantDialogueContext.empty(),
+                false,
+                prepared.preparedAtNanos()
+        );
     }
 
     private void executeProactiveRequest(
