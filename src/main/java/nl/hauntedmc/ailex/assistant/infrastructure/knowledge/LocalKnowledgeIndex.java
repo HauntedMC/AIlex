@@ -148,6 +148,11 @@ public final class LocalKnowledgeIndex {
         return selected;
     }
 
+    /** Source-compatible discovery entry point used by the assistant orchestration. */
+    public List<KnowledgeChunk> discover(String requesterSeed, AssistantSettings settings) {
+        return discover(settings, requesterSeed);
+    }
+
     /** Open-ended corpus discovery intentionally avoids pretending a vague prompt is a lexical query. */
     public List<KnowledgeChunk> discover(AssistantSettings settings, String requesterSeed) {
         List<KnowledgeChunk> eligible = chunks.stream().filter(chunk -> eligible(chunk, settings)).toList();
@@ -172,6 +177,11 @@ public final class LocalKnowledgeIndex {
 
     public boolean learnedSemanticAvailable() {
         return embeddingProvider != null && embeddingProvider.available() && !semanticVectors.isEmpty();
+    }
+
+    /** Compatibility name retained for status/diagnostic callers. */
+    public boolean learnedSemanticRetrievalAvailable() {
+        return learnedSemanticAvailable();
     }
 
     private List<ScoredChunk> lexicalRanking(

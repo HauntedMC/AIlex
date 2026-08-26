@@ -22,6 +22,11 @@ openai:
       allowed_languages: ["nl", "en", "de"]
       language_detection: true
       clarify_only_when_required: true
+      # Learned need prediction refines ambiguous requests after deterministic policy routing.
+      semantic:
+        enabled: true
+        minimum_similarity: 0.42
+        minimum_margin: 0.025
     context:
       # Hard ceilings, not targets. ContextCompiler selects only useful sources and can use more space when needed.
       max_input_tokens_fast: 3000
@@ -44,6 +49,10 @@ openai:
       enabled: true
       planner_model: "gpt-5.6-luna"
       max_tool_calls_per_round: 2
+    actions:
+      # The model can only propose these low-risk NPC actions; deterministic validation remains authoritative.
+      enabled: true
+      allowed: ["FOLLOW_REQUESTER", "COME_HERE", "STOP_MOVING"]
     models:
       fast:
         model: "gpt-5.6-luna"
@@ -78,6 +87,14 @@ openai:
       max_context_characters: 8000
       # Only trusted staff may turn player statements into network-wide learned facts.
       shared_write_permission: "ailex.admin"
+      retrieval:
+        # Associative graph activation is fused with lexical/salience/recency memory ranking.
+        graph_enabled: true
+        graph_weight: 0.35
+      consolidation:
+        # Evidence-grounded deterministic event→episode consolidation; no per-message LLM reflection pass.
+        enabled: true
+        interval_minutes: 15
       storage:
         # sqlite is self-contained. mysql provides one shared identity across multiple AIlex runtimes.
         backend: "sqlite"
@@ -136,6 +153,12 @@ openai:
       minimum_speaker_alternations: 2
       social_graph_window_seconds: 180
       strong_pair_score: 2.5
+      utility:
+        threshold: 0.25
+        helpful_weight: 1.25
+        privacy_cost: 1.20
+        error_cost: 0.75
+        repetition_cost: 0.85
     collective:
       enabled: true
       terms: ["gg", "wp", "well played", "welkom", "welcome", "congrats", "gefeliciteerd", "nice"]

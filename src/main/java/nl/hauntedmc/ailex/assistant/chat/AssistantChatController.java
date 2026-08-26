@@ -4,6 +4,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import nl.hauntedmc.ailex.AIlexPlugin;
+import nl.hauntedmc.ailex.assistant.action.AssistantActionService;
 import nl.hauntedmc.ailex.assistant.application.AssistantService;
 import nl.hauntedmc.ailex.assistant.domain.AssistantDialogueContext;
 import nl.hauntedmc.ailex.assistant.domain.AssistantReply;
@@ -42,6 +43,7 @@ public final class AssistantChatController implements AutoCloseable {
 
     private final AIlexPlugin plugin;
     private final AssistantService assistantService;
+    private final AssistantActionService assistantActionService;
     private final AssistantChatConfiguration configuration;
     private final PlayerResponseRateLimiter responseRateLimiter;
     private final AssistantRequestCoordinator requestCoordinator;
@@ -54,6 +56,7 @@ public final class AssistantChatController implements AutoCloseable {
     public AssistantChatController(AIlexPlugin plugin) {
         this.plugin = plugin;
         this.assistantService = plugin.getAssistantService();
+        this.assistantActionService = new AssistantActionService(plugin);
         this.configuration = new AssistantChatConfiguration(plugin::getConfig);
         this.responseRateLimiter = new PlayerResponseRateLimiter(
                 configuration::responseRateLimit,
@@ -284,8 +287,9 @@ public final class AssistantChatController implements AutoCloseable {
             }
 
             String response;
+            AssistantReply reply = null;
             if (prepared.settings().enabled()) {
-                AssistantReply reply = assistantService.respond(prepared);
+                reply = assistantService.respond(prepared);
                 response = String.join("\n", reply.lines());
             } else {
                 response = client.getChatResponse(target.systemPrompt(), prepared.userPrompt());
@@ -306,7 +310,15 @@ public final class AssistantChatController implements AutoCloseable {
 
             Component result = FormatterUtils.serializer.deserialize(target.displayName() + ": ")
                     .append(Component.text(response, NamedTextColor.WHITE));
-            Bukkit.getScheduler().runTask(plugin, () -> deliverTrackedResponse(requestId, source, result));
+            AssistantReply completedReply = reply;
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (completedReply != null && target.npc() != null && !completedReply.actionProposals().isEmpty()) {
+                    assistantActionService.validateAndExecute(
+                            source, target.npc(), prepared.message(), completedReply.actionProposals()
+                    );
+                }
+                deliverTrackedResponse(requestId, source, result);
+            });
         } catch (Exception exception) {
             LoggerUtils.logError("Could not complete assistant chat request: " + exception.getMessage());
             failUpstream(requestId, source, "exception");

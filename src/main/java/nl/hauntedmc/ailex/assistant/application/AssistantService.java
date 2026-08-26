@@ -5,6 +5,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import nl.hauntedmc.ailex.AIlexPlugin;
+import nl.hauntedmc.ailex.assistant.action.AssistantActionProposal;
+import nl.hauntedmc.ailex.assistant.action.AssistantActionType;
 import nl.hauntedmc.ailex.assistant.application.agent.AssistantReadAgent;
 import nl.hauntedmc.ailex.assistant.application.agent.AssistantReadAgent.AgentEnrichment;
 import nl.hauntedmc.ailex.assistant.application.context.AssistantLiveCapturePolicy;
@@ -14,6 +16,7 @@ import nl.hauntedmc.ailex.assistant.application.inference.AssistantGenerationPol
 import nl.hauntedmc.ailex.assistant.application.inference.AssistantGroundingPolicy;
 import nl.hauntedmc.ailex.assistant.application.reliability.AssistantCircuitBreaker;
 import nl.hauntedmc.ailex.assistant.application.routing.AssistantIntentClassifier;
+import nl.hauntedmc.ailex.assistant.application.routing.SemanticNeedPlanner;
 import nl.hauntedmc.ailex.assistant.domain.AssistantDialogueContext;
 import nl.hauntedmc.ailex.assistant.domain.AssistantIntent;
 import nl.hauntedmc.ailex.assistant.domain.AssistantMode;
@@ -23,6 +26,7 @@ import nl.hauntedmc.ailex.assistant.infrastructure.knowledge.LocalKnowledgeIndex
 import nl.hauntedmc.ailex.assistant.infrastructure.live.PaperLiveContextEnricher;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantExperienceMemoryService;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantMemoryService;
+import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantRelationshipMemoryService;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryCandidate;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryKind;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryRecord;
@@ -57,7 +61,9 @@ public final class AssistantService {
     private final LocalKnowledgeIndex knowledgeIndex;
     private final AssistantMemoryService memoryService;
     private final AssistantExperienceMemoryService experienceMemory;
+    private final AssistantRelationshipMemoryService relationshipMemory;
     private final AssistantReadAgent readAgent;
+    private volatile SemanticNeedPlanner semanticNeedPlanner;
     private final ContextCompiler contextCompiler = new ContextCompiler();
     private final RequiredContextPlanner contextPlanner = new RequiredContextPlanner();
     private final AtomicLong replies = new AtomicLong();
@@ -67,6 +73,7 @@ public final class AssistantService {
     private final AtomicLong agentToolCalls = new AtomicLong();
     private final AtomicLong agentPlannerInputTokens = new AtomicLong();
     private final AtomicLong agentPlannerOutputTokens = new AtomicLong();
+    private final AtomicLong semanticRefinements = new AtomicLong();
     private final Map<String, AssistantCircuitBreaker> circuitBreakers = new ConcurrentHashMap<>();
     private final Map<String, AssistantReply> staticReplyCache = new ConcurrentHashMap<>();
 
@@ -75,7 +82,10 @@ public final class AssistantService {
         this.knowledgeIndex = new LocalKnowledgeIndex(plugin);
         this.memoryService = plugin.getAssistantMemoryService();
         this.experienceMemory = new AssistantExperienceMemoryService(memoryService);
+        this.relationshipMemory = new AssistantRelationshipMemoryService(memoryService);
         this.readAgent = new AssistantReadAgent(plugin, knowledgeIndex, memoryService, experienceMemory);
+        this.semanticNeedPlanner = new SemanticNeedPlanner(knowledgeIndex.semanticEmbeddingProvider());
+        Thread.ofVirtual().name("AIlex-SemanticRouter-Warmup").start(semanticNeedPlanner::warm);
     }
 
     public PreparedRequest prepare(Player player, NPC npc, String message, String systemPrompt, String userPrompt) {
@@ -157,6 +167,7 @@ public final class AssistantService {
 
     /** Performs retrieval-aware generation with bounded information seeking and one quality escalation when affordable. */
     public AssistantReply respond(PreparedRequest request) {
+        request = refineRequestSemantically(request);
         AssistantSettings.ModelProfile initialProfile = request.settings().profileFor(request.analysis().mode());
         if (!request.settings().enabled()) {
             return complete(request, initialProfile, AssistantReply.unavailable(), 0, 0, "assistant-disabled");
@@ -263,7 +274,7 @@ public final class AssistantService {
         }
         if (enrichment.context().isBlank() && !request.settings().shadowMode()
                 && request.settings().cacheStaticAnswers() && isStaticIntent(request.analysis().intent())
-                && reply.memoryCandidates().isEmpty()) {
+                && reply.memoryCandidates().isEmpty() && reply.actionProposals().isEmpty()) {
             if (staticReplyCache.size() >= 256) {
                 staticReplyCache.clear();
             }
@@ -276,6 +287,56 @@ public final class AssistantService {
         return complete(
                 request, completedProfile, reply, modelCalls, evidence.size(),
                 completedProfile == initialProfile ? "accepted" : "accepted-escalated"
+        );
+    }
+
+    private PreparedRequest refineRequestSemantically(PreparedRequest request) {
+        if (request == null || !request.settings().enabled() || request.analysis().mode() == AssistantMode.HANDOFF
+                || !plugin.getConfig().getBoolean("openai.assistant.routing.semantic.enabled", true)) {
+            return request;
+        }
+        SemanticNeedPlanner planner = semanticNeedPlanner;
+        double minimumSimilarity = Math.clamp(plugin.getConfig().getDouble(
+                "openai.assistant.routing.semantic.minimum_similarity", 0.42D
+        ), 0.0D, 1.0D);
+        double minimumMargin = Math.clamp(plugin.getConfig().getDouble(
+                "openai.assistant.routing.semantic.minimum_margin", 0.025D
+        ), 0.0D, 0.5D);
+        SemanticNeedPlanner.Decision decision = planner.refine(
+                request.message(), request.analysis(), request.contextPlan(), request.settings(),
+                minimumSimilarity, minimumMargin
+        );
+        if (!decision.semanticallyRefined()) {
+            return request;
+        }
+        RequiredContextPlanner.Plan refinedPlan = planner.mergePlan(
+                request.contextPlan(), decision, request.settings()
+        );
+        AssistantIntentClassifier.Analysis refinedAnalysis = new AssistantIntentClassifier.Analysis(
+                decision.intent(), request.settings().resolveMode(decision.mode()), request.analysis().language()
+        );
+        String memory = request.memory();
+        UUID playerId = UUID.fromString(request.playerId());
+        if (memoryService != null && request.settings().toolAllowed("session")
+                && refinedPlan.durableMemory() && memory.isBlank()) {
+            memory = memoryContext(playerId, request.npcMemoryId(), request.message(), refinedPlan.eventMemory());
+        }
+        if (relationshipMemory != null && request.settings().toolAllowed("session")
+                && (refinedPlan.durableMemory() || decision.intent() == AssistantIntent.CONTEXT_FOLLOWUP
+                || request.dialogueContext().active())) {
+            String relationship = relationshipMemory.promptContext(playerId, request.npcMemoryId());
+            if (!relationship.isBlank()) {
+                memory = memory.isBlank()
+                        ? "[Relationship continuity]\n" + relationship
+                        : memory + "\n\n[Relationship continuity]\n" + relationship;
+            }
+        }
+        semanticRefinements.incrementAndGet();
+        return new PreparedRequest(
+                request.playerId(), request.playerName(), request.npcName(), request.npcMemoryId(), request.message(),
+                request.systemPrompt(), request.userPrompt(), refinedAnalysis, request.settings(), refinedPlan,
+                refinedPlan.knowledge(), request.snapshot(), memory, request.dialogueContext(),
+                request.canWriteSharedMemory(), request.preparedAtNanos()
         );
     }
 
@@ -331,6 +392,8 @@ public final class AssistantService {
 
     public void reload() {
         knowledgeIndex.reload();
+        semanticNeedPlanner = new SemanticNeedPlanner(knowledgeIndex.semanticEmbeddingProvider());
+        Thread.ofVirtual().name("AIlex-SemanticRouter-Warmup").start(semanticNeedPlanner::warm);
         if (memoryService != null) {
             memoryService.reload();
         }
@@ -348,7 +411,8 @@ public final class AssistantService {
                 + ", agent_planner_calls=" + agentPlannerCalls.get()
                 + ", agent_tool_calls=" + agentToolCalls.get()
                 + ", agent_planner_input_tokens=" + agentPlannerInputTokens.get()
-                + ", agent_planner_output_tokens=" + agentPlannerOutputTokens.get();
+                + ", agent_planner_output_tokens=" + agentPlannerOutputTokens.get()
+                + ", semantic_refinements=" + semanticRefinements.get();
     }
 
     public void recordDirectResponse(PreparedRequest request, String response) {
@@ -603,7 +667,10 @@ public final class AssistantService {
                 + "candidate with scope=player or shared, kind=preference|fact|opinion|interest|goal, a stable semantic key, "
                 + "value, and operation=upsert. Use operation=forget only when explicitly requested. Shared candidates are "
                 + "server facts only and permission-gated after generation. Do not save transcripts, secrets, contact details, "
-                + "real-world locations, precise Minecraft coordinates, reports, sanctions, inferred traits or other-player data.";
+                + "real-world locations, precise Minecraft coordinates, reports, sanctions, inferred traits or other-player data. "
+                + "Only when the player explicitly asks this physical NPC to follow them, come here, or stop moving, you may "
+                + "emit one matching action_proposals item. An action proposal is not authority: deterministic server code "
+                + "will independently validate it. Otherwise action_proposals must be empty.";
     }
 
     private AssistantReply parseStructuredReply(String raw, PreparedRequest request) {
@@ -694,9 +761,28 @@ public final class AssistantService {
                     }
                 }
             }
+            List<AssistantActionProposal> actionProposals = new ArrayList<>();
+            JsonArray actions = object.getAsJsonArray("action_proposals");
+            if (actions != null) {
+                for (JsonElement element : actions) {
+                    if (!element.isJsonObject()) {
+                        return AssistantReply.invalid();
+                    }
+                    JsonObject action = element.getAsJsonObject();
+                    String type = getString(action, "type").toUpperCase(Locale.ROOT);
+                    try {
+                        AssistantActionType actionType = AssistantActionType.valueOf(type);
+                        if (actionProposals.size() < 2) {
+                            actionProposals.add(new AssistantActionProposal(actionType, getString(action, "reason")));
+                        }
+                    } catch (IllegalArgumentException exception) {
+                        return AssistantReply.invalid();
+                    }
+                }
+            }
             return new AssistantReply(
                     safeLines, Set.copyOf(sources), confidence, handoff, List.copyOf(memoryCandidates),
-                    Map.copyOf(claimEvidence), !safeLines.isEmpty()
+                    List.copyOf(actionProposals), Map.copyOf(claimEvidence), !safeLines.isEmpty()
             );
         } catch (RuntimeException ignored) {
             return AssistantReply.invalid();
@@ -905,6 +991,24 @@ public final class AssistantService {
         memoryCandidates.add("items", memoryItem);
         properties.add("memory_candidates", memoryCandidates);
 
+        JsonObject actionProposals = new JsonObject();
+        actionProposals.addProperty("type", "array");
+        JsonObject actionItem = new JsonObject();
+        actionItem.addProperty("type", "object");
+        JsonObject actionProperties = new JsonObject();
+        actionProperties.add("type", enumProperty("FOLLOW_REQUESTER", "COME_HERE", "STOP_MOVING"));
+        JsonObject actionReason = new JsonObject();
+        actionReason.addProperty("type", "string");
+        actionProperties.add("reason", actionReason);
+        actionItem.add("properties", actionProperties);
+        JsonArray actionRequired = new JsonArray();
+        actionRequired.add("type");
+        actionRequired.add("reason");
+        actionItem.add("required", actionRequired);
+        actionItem.addProperty("additionalProperties", false);
+        actionProposals.add("items", actionItem);
+        properties.add("action_proposals", actionProposals);
+
         schema.add("properties", properties);
         JsonArray required = new JsonArray();
         required.add("lines");
@@ -913,6 +1017,7 @@ public final class AssistantService {
         required.add("claim_evidence");
         required.add("handoff");
         required.add("memory_candidates");
+        required.add("action_proposals");
         schema.add("required", required);
         schema.addProperty("additionalProperties", false);
         format.add("schema", schema);
