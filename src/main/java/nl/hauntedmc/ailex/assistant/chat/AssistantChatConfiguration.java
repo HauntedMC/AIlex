@@ -38,7 +38,7 @@ public final class AssistantChatConfiguration {
     }
 
     public long sessionTimeoutMillis() {
-        return TimeUnit.SECONDS.toMillis(integer(CHAT + ".session_timeout_seconds", 60, 10, 600));
+        return TimeUnit.SECONDS.toMillis(integer(CHAT + ".session_timeout_seconds", 300, 30, 1_800));
     }
 
     public String responseVisibility() {
@@ -98,25 +98,28 @@ public final class AssistantChatConfiguration {
         return new ChatContextStore.ContextSettings(
                 bool(CONTEXT + ".enabled", true),
                 bool(CONTEXT + ".persist_to_disk", false),
-                integer(CONTEXT + ".max_message_characters", 360, 80, 2_000),
+                integer(CONTEXT + ".max_message_characters", 720, 80, 2_000),
                 bool(CONTEXT + ".include_timestamps", true),
                 string(CONTEXT + ".timestamp_format", "HH:mm:ss"),
-                history("general_chat", 120, 3_600, 1_800),
-                history("conversation", 40, 7_200, 2_400),
-                history("bot_memory", 60, 10_800, 1_800),
-                integer(CONTEXT + ".max_context_characters", 7_000, 500, 16_000)
+                history("general_chat", 160, 3_600, 3_000),
+                history("conversation", 80, 21_600, 6_000),
+                history("bot_memory", 100, 21_600, 4_000),
+                integer(CONTEXT + ".max_context_characters", 14_000, 1_000, 32_000)
         );
     }
 
     private ChatContextStore.HistorySettings history(
-            String section, int defaultMessages, int defaultAgeSeconds, int defaultContextCharacters
+            String section,
+            int defaultMessages,
+            int defaultAgeSeconds,
+            int defaultContextCharacters
     ) {
         String path = CONTEXT + '.' + section;
         return new ChatContextStore.HistorySettings(
                 bool(path + ".enabled", true),
                 integer(path + ".max_messages", defaultMessages, 1, 500),
                 TimeUnit.SECONDS.toMillis(integer(path + ".max_age_seconds", defaultAgeSeconds, 10, 86_400)),
-                integer(path + ".max_context_characters", defaultContextCharacters, 100, 8_000)
+                integer(path + ".max_context_characters", defaultContextCharacters, 100, 16_000)
         );
     }
 
