@@ -27,7 +27,7 @@ public class ConfigHandler {
 
     public static ConfigHandler getInstance() {
         if (instance == null) {
-            throw new IllegalStateException("AilexLogger is not initialized. Call init() first.");
+            throw new IllegalStateException("ConfigHandler is not initialized. Call init() first.");
         }
         return instance;
     }
