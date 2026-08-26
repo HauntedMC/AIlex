@@ -32,23 +32,26 @@ class ContextCompilerTest {
         assertTrue(compiled.estimatedTokens() <= 1_220);
         assertTrue(compiled.prompt().contains("Current request"));
         assertTrue(compiled.prompt().contains("Trusted live Minecraft context"));
-        assertTrue(compiled.prompt().contains("Saved assistant memory"));
+        assertTrue(compiled.prompt().contains("Relevant saved assistant memory"));
     }
 
     @Test
-    void shouldPrioritiseActiveDialogueBeforeLargeHistoricalChat() {
+    void shouldUseTheMultiTurnDialogueWindowBeforeHistoricalChat() {
         ContextCompiler compiler = new ContextCompiler();
         AssistantDialogueContext dialogue = new AssistantDialogueContext(
                 true,
                 false,
                 AssistantIntent.EVENT_RECALL,
                 "wat gaat er mis haunty",
-                "De vorige ronde lijkt vastgelopen."
+                "De vorige ronde lijkt vastgelopen.",
+                "user(remymine): weet je nog welke ronde?\n"
+                        + "assistant(Haunty): Ja, de Regen-ronde.\n"
+                        + "user(remymine): waarom liep die vast?"
         );
 
         ContextCompiler.CompiledContext compiled = compiler.compile(
                 AssistantMode.GROUNDED,
-                700,
+                1_200,
                 "Bericht van speler: waarom?",
                 dialogue,
                 "",
@@ -58,7 +61,8 @@ class ContextCompilerTest {
         );
 
         assertTrue(compiled.prompt().contains("previous_intent=event_recall"));
-        assertTrue(compiled.prompt().contains("wat gaat er mis haunty"));
+        assertTrue(compiled.prompt().contains("Regen-ronde"));
+        assertTrue(compiled.prompt().contains("waarom liep die vast"));
         assertTrue(compiled.tokensBySource().containsKey("dialogue"));
     }
 
@@ -69,7 +73,7 @@ class ContextCompilerTest {
 
         ContextCompiler.CompiledContext compiled = compiler.compile(
                 AssistantMode.FAST,
-                320,
+                512,
                 "Current request",
                 AssistantDialogueContext.empty(),
                 "",
