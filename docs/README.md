@@ -1,27 +1,39 @@
 # AIlex Docs
 
-This folder is the practical guide for running, maintaining, and contributing to AIlex.
+This folder is the practical guide for running, upgrading, maintaining and contributing to AIlex.
 
-## Start Here
+## Start here
 
-If you run the plugin:
+For server operators:
 
-- [Configuration](CONFIGURATION.md): setup, tuning, and safe runtime changes.
-- [Architecture](ARCHITECTURE.md): how NPC lifecycle, movement, and actions are structured.
+- [AIlex 1.5 Migration](MIGRATION-1.5.md) — required reading when upgrading from 1.4.x.
+- [Configuration](CONFIGURATION.md) — production settings, Memory V2, model/token budgets and diagnostics.
+- [Architecture](ARCHITECTURE.md) — request reliability, conversation state, context planning, retrieval, memory and inference flow.
 
-If you contribute code:
+For contributors:
 
-- [Development](DEVELOPMENT.md): local setup and day-to-day workflow.
-- [Testing](TESTING.md): test strategy and local validation commands.
-- [Contributing Guide](../CONTRIBUTING.md): pull request expectations.
+- [Development](DEVELOPMENT.md) — local setup and day-to-day workflow.
+- [Testing](TESTING.md) — test strategy and local validation commands.
+- [Contributing Guide](../CONTRIBUTING.md) — pull request expectations.
 
-## Release Notes
+## AIlex 1.5 operational checks
 
-Releases are tag-driven.
+After upgrading, verify:
 
-Typical flow:
+```text
+/ailex ai status
+/ailex ai usage
+/ailex memory status
+/ailex trace recent
+```
 
-1. Ensure CI is green on your target branch.
-2. Bump version and create a release tag:
-   - `scripts/bump-version.sh patch`
-3. Push branch + tag and monitor the release workflow.
+Then test one direct NPC question, a short follow-up without repeating the NPC name, one current-state question and one server-fact question.
+
+## Release flow
+
+Releases are tag-driven:
+
+1. Ensure lint and tests are green on the target branch.
+2. Confirm migration/config documentation matches the shipped defaults.
+3. Bump/tag the release using the project release workflow.
+4. Push branch + tag and monitor the release workflow.

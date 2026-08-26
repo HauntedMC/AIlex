@@ -59,7 +59,8 @@ class AssistantServiceTest {
         assertTrue(reply.handoff().isBlank());
         ArgumentCaptor<String> systemPrompt = ArgumentCaptor.forClass(String.class);
         verify(client).getStructuredChatResponse(systemPrompt.capture(), anyString(), any(JsonObject.class), any());
-        assertTrue(systemPrompt.getValue().contains("never a limit on your capabilities"));
+        assertTrue(systemPrompt.getValue().contains("Use general Minecraft knowledge when appropriate"));
+        assertTrue(systemPrompt.getValue().contains("Never invent a custom or time-sensitive HauntedMC fact"));
     }
 
     @Test

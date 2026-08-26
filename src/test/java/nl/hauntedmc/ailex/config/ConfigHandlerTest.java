@@ -15,7 +15,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -37,7 +39,7 @@ class ConfigHandlerTest {
     void shouldInitializeAndExposeConfiguration() {
         JavaPlugin plugin = mock(JavaPlugin.class);
         YamlConfiguration configuration = new YamlConfiguration();
-        String defaultsYaml = "openai:\n  api_key: \"\"\n";
+        String defaultsYaml = "config_version: 2\nopenai:\n  api_key: \"\"\n";
         when(plugin.getConfig()).thenReturn(configuration);
         when(plugin.getResource("config.yml")).thenAnswer(
                 invocation -> new ByteArrayInputStream(defaultsYaml.getBytes(StandardCharsets.UTF_8))
@@ -46,13 +48,15 @@ class ConfigHandlerTest {
         ConfigHandler.init(plugin);
 
         assertEquals(configuration, ConfigHandler.getInstance().getConfig());
+        assertEquals(2, configuration.getInt("config_version"));
     }
 
     @Test
     void reloadShouldRefreshPluginConfigAndLog() {
         JavaPlugin plugin = mock(JavaPlugin.class);
         FileConfiguration configuration = new YamlConfiguration();
-        String defaultsYaml = "openai:\n  api_key: \"\"\n";
+        configuration.set("config_version", 2);
+        String defaultsYaml = "config_version: 2\nopenai:\n  api_key: \"\"\n";
         when(plugin.getConfig()).thenReturn(configuration);
         when(plugin.getResource("config.yml")).thenAnswer(
                 invocation -> new ByteArrayInputStream(defaultsYaml.getBytes(StandardCharsets.UTF_8))
@@ -98,10 +102,12 @@ class ConfigHandlerTest {
     void initShouldAddMissingKeysAndRemoveObsoleteKeys() {
         JavaPlugin plugin = mock(JavaPlugin.class);
         YamlConfiguration configuration = new YamlConfiguration();
+        configuration.set("config_version", 2);
         configuration.set("openai.model", "gpt-4.1-mini");
         configuration.set("obsolete.value", true);
 
-        String defaultsYaml = "openai:\n"
+        String defaultsYaml = "config_version: 2\n"
+                + "openai:\n"
                 + "  api_key: \"\"\n"
                 + "  model: \"gpt-4.1-mini\"\n"
                 + "npc:\n"
@@ -119,5 +125,45 @@ class ConfigHandlerTest {
         assertEquals("", configuration.getString("openai.api_key"));
         assertEquals("<grey>[Speler]", configuration.getString("npc.defaults.entity.prefix"));
         assertEquals(false, configuration.contains("obsolete.value"));
+    }
+
+    @Test
+    void shouldDisableLegacyRawTranscriptPersistenceDuringV1ToV2Migration() {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        YamlConfiguration configuration = new YamlConfiguration();
+        configuration.set("openai.chat_context.persist_to_disk", true);
+        String defaultsYaml = "config_version: 2\n"
+                + "openai:\n"
+                + "  chat_context:\n"
+                + "    persist_to_disk: false\n";
+        when(plugin.getConfig()).thenReturn(configuration);
+        when(plugin.getResource("config.yml")).thenAnswer(
+                invocation -> new ByteArrayInputStream(defaultsYaml.getBytes(StandardCharsets.UTF_8))
+        );
+
+        ConfigHandler.init(plugin);
+
+        assertEquals(2, configuration.getInt("config_version"));
+        assertFalse(configuration.getBoolean("openai.chat_context.persist_to_disk"));
+    }
+
+    @Test
+    void shouldPreserveExplicitV2RawTranscriptOptIn() {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        YamlConfiguration configuration = new YamlConfiguration();
+        configuration.set("config_version", 2);
+        configuration.set("openai.chat_context.persist_to_disk", true);
+        String defaultsYaml = "config_version: 2\n"
+                + "openai:\n"
+                + "  chat_context:\n"
+                + "    persist_to_disk: false\n";
+        when(plugin.getConfig()).thenReturn(configuration);
+        when(plugin.getResource("config.yml")).thenAnswer(
+                invocation -> new ByteArrayInputStream(defaultsYaml.getBytes(StandardCharsets.UTF_8))
+        );
+
+        ConfigHandler.init(plugin);
+
+        assertTrue(configuration.getBoolean("openai.chat_context.persist_to_disk"));
     }
 }

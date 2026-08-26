@@ -38,6 +38,41 @@ class LocalKnowledgeIndexTest {
     }
 
     @Test
+    void shouldExpandKnownConceptsAcrossDutchAndEnglish() {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        YamlConfiguration config = new YamlConfiguration();
+        config.set("openai.knowledge.enabled", true);
+        config.set("openai.knowledge.prompt", "Official facts\n"
+                + "- ECONOMY: Check your balance with /balance.\n"
+                + "- VOTING: Daily voting gives rewards.");
+        when(plugin.getConfig()).thenReturn(config);
+
+        List<LocalKnowledgeIndex.KnowledgeChunk> results = new LocalKnowledgeIndex(plugin).search(
+                "Waar zie ik mijn saldo?", AssistantSettings.defaults()
+        );
+
+        assertFalse(results.isEmpty());
+        assertTrue(results.getFirst().text().contains("/balance"));
+    }
+
+    @Test
+    void shouldSuppressNearDuplicateEvidenceChunks() {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        YamlConfiguration config = new YamlConfiguration();
+        config.set("openai.knowledge.enabled", true);
+        config.set("openai.knowledge.prompt", "- CLAIMS: Use /claim to protect your build.\n"
+                + "- CLAIMS: Use /claim to protect your build.\n"
+                + "- CLAIMS: Use /claim to protect your build.");
+        when(plugin.getConfig()).thenReturn(config);
+
+        List<LocalKnowledgeIndex.KnowledgeChunk> results = new LocalKnowledgeIndex(plugin).search(
+                "hoe protect ik mijn claim", AssistantSettings.defaults()
+        );
+
+        assertEquals(1, results.size());
+    }
+
+    @Test
     void shouldIgnoreKnowledgeWhenQueryHasNoUsefulTerms() {
         JavaPlugin plugin = mock(JavaPlugin.class);
         YamlConfiguration config = new YamlConfiguration();

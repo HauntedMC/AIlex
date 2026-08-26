@@ -55,6 +55,18 @@ class MainCommandTest {
     }
 
     @Test
+    void suggestShouldIncludeAssistantUsageDiagnostic() {
+        AIlexPlugin plugin = mock(AIlexPlugin.class);
+        MainCommand command = new MainCommand(plugin);
+
+        Collection<String> suggestions = tabComplete(command, mock(CommandSender.class), new String[]{"ai", ""});
+
+        assertTrue(suggestions.contains("status"));
+        assertTrue(suggestions.contains("usage"));
+        assertTrue(suggestions.contains("rebuild-index"));
+    }
+
+    @Test
     void suggestShouldReturnNpcIdsForIdBasedSubcommands() {
         AIlexPlugin plugin = mock(AIlexPlugin.class);
         NpcManager npcManager = mock(NpcManager.class);

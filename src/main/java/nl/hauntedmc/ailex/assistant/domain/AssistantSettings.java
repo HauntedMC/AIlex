@@ -15,6 +15,7 @@ public record AssistantSettings(
         ModelProfile fastProfile, ModelProfile groundedProfile, ModelProfile deliberateProfile,
         boolean readOnlyTools, Set<String> allowedTools, boolean redactOtherPlayers,
         int maxLinesFast, int maxLinesGrounded, int maxLinesDeliberate, int maxLineCharacters,
+        int maxInputTokensFast, int maxInputTokensGrounded, int maxInputTokensDeliberate,
         boolean structuredOutput, boolean verificationEnabled, String minimumConfidence,
         boolean externalKnowledgeEnabled, int externalMaxFiles, int externalMaxCharacters,
         boolean circuitBreakerEnabled, boolean cacheStaticAnswers, boolean shadowMode,
@@ -55,6 +56,9 @@ public record AssistantSettings(
                 Math.clamp(config.getInt(PATH + ".delivery.max_lines_grounded", 2), 1, 3),
                 Math.clamp(config.getInt(PATH + ".delivery.max_lines_deliberate", 3), 1, 3),
                 Math.clamp(config.getInt(PATH + ".delivery.max_line_characters", 220), 80, 300),
+                Math.clamp(config.getInt(PATH + ".context.max_input_tokens_fast", 1000), 256, 8000),
+                Math.clamp(config.getInt(PATH + ".context.max_input_tokens_grounded", 2800), 512, 12000),
+                Math.clamp(config.getInt(PATH + ".context.max_input_tokens_deliberate", 4800), 1024, 20000),
                 config.getBoolean(PATH + ".structured_output", true),
                 config.getBoolean(PATH + ".verification.enabled", true),
                 config.getString(PATH + ".verification.minimum_confidence", "medium"),
@@ -78,7 +82,8 @@ public record AssistantSettings(
                 new ModelProfile("gpt-5.6-terra", "medium", 320),
                 new ModelProfile("gpt-5.6-sol", "high", 480),
                 true, Set.of("knowledge", "requester", "world", "nearby", "server", "npc", "session"), true,
-                1, 2, 3, 220, true, true, "medium", true, 20, 30000, true, true, false,
+                1, 2, 3, 220, 1000, 2800, 4800,
+                true, true, "medium", true, 20, 30000, true, true, false,
                 true, true, false, 240);
     }
 
@@ -102,7 +107,6 @@ public record AssistantSettings(
         if (configuredLanguages.isEmpty()) {
             allowed.add("en");
         }
-        // Dutch is always supported and remains the safe fallback for unknown languages.
         allowed.add("nl");
         return Set.copyOf(allowed);
     }
@@ -127,6 +131,14 @@ public record AssistantSettings(
             case FAST -> maxLinesFast;
             case GROUNDED, HANDOFF -> maxLinesGrounded;
             case DELIBERATE -> maxLinesDeliberate;
+        };
+    }
+
+    public int maxInputTokens(AssistantMode mode) {
+        return switch (mode) {
+            case FAST, HANDOFF -> maxInputTokensFast;
+            case GROUNDED -> maxInputTokensGrounded;
+            case DELIBERATE -> maxInputTokensDeliberate;
         };
     }
 

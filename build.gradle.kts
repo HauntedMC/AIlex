@@ -1,4 +1,5 @@
 import io.papermc.paperweight.userdev.ReobfArtifactConfiguration
+import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.api.plugins.quality.Checkstyle
 import org.gradle.testing.jacoco.tasks.JacocoReport
 
@@ -12,7 +13,7 @@ plugins {
 
 
 group = "nl.hauntedmc.ailex"
-version = "1.4.0"
+version = "1.5.0"
 description = "AIlex"
 
 repositories {
@@ -23,6 +24,9 @@ repositories {
     maven("https://repo.codemc.io/repository/maven-releases/")
 }
 
+// Only dependencies in this configuration are embedded in AIlex.jar. Paper/Citizens remain server-provided.
+val bundled by configurations.creating
+
 dependencies {
     paperweight.paperDevBundle("26.2.build.118-stable")
     implementation("net.kyori:adventure-api:5.2.0")
@@ -30,12 +34,19 @@ dependencies {
     implementation("net.citizensnpcs:citizens-main:2.0.43-SNAPSHOT")
     compileOnly("com.github.retrooper:packetevents-spigot:2.13.0")
 
+    // Memory V2 uses local SQLite/WAL. Embed only the JDBC driver itself; Paper already supplies shared logging APIs.
+    compileOnly("org.xerial:sqlite-jdbc:3.53.2.1")
+    bundled("org.xerial:sqlite-jdbc:3.53.2.1") {
+        isTransitive = false
+    }
+
     testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("org.mockito:mockito-junit-jupiter:5.23.0")
     testImplementation("org.mockito:mockito-inline:5.2.0")
     testImplementation("com.github.retrooper:packetevents-spigot:2.13.0")
+    testImplementation("org.xerial:sqlite-jdbc:3.53.2.1")
 }
 
 java {
@@ -60,6 +71,9 @@ tasks.processResources {
 
 tasks.jar {
     archiveFileName.set("AIlex.jar")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(bundled.map { dependency -> if (dependency.isDirectory) dependency else zipTree(dependency) })
+    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
 }
 
 tasks.test {
