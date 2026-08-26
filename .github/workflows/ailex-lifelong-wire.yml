@@ -1,0 +1,34 @@
+name: AIlex Lifelong Runtime Wiring
+
+on:
+  push:
+    branches:
+      - feat/ailex-lifelong-social-agent
+    paths:
+      - .github/ailex-upgrade/apply.py
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: feat/ailex-lifelong-social-agent
+          fetch-depth: 0
+
+      - name: Apply audited runtime wiring
+        run: python .github/ailex-upgrade/apply.py
+
+      - name: Commit generated wiring
+        run: |
+          rm -f .github/ailex-upgrade/apply.py .github/workflows/ailex-lifelong-wire.yml
+          rmdir .github/ailex-upgrade 2>/dev/null || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: wire lifelong cognitive runtime"
+          git push origin HEAD:feat/ailex-lifelong-social-agent
