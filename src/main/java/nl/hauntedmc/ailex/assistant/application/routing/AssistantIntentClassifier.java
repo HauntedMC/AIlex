@@ -38,7 +38,7 @@ public final class AssistantIntentClassifier {
     );
     private static final Set<String> EVENT_WORDS = Set.of(
             "gebeurde", "gebeurd", "mis", "bug", "bugged", "fout", "probleem", "vorige", "eerder", "net",
-            "happened", "wrong", "bugged", "problem", "before", "earlier"
+            "happened", "wrong", "problem", "before", "earlier"
     );
     private static final Set<String> UNSAFE_WORDS = Set.of(
             "exploit", "dupe", "xray", "hack", "cheat", "dox", "doxx", "groom", "zelfmoord", "suicide"
