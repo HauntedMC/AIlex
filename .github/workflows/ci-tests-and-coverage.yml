@@ -31,8 +31,8 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Run tests and generate coverage report
-        run: ./gradlew --no-daemon test jacocoTestReport
+      - name: Run tests and enforce coverage
+        run: ./gradlew --no-daemon test jacocoTestReport jacocoTestCoverageVerification
 
       - name: Upload test report
         if: always()

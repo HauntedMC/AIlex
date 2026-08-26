@@ -16,14 +16,28 @@ class RequiredContextPlannerTest {
     private final RequiredContextPlanner planner = new RequiredContextPlanner();
 
     @Test
-    void casualConversationShouldNotCaptureWorldOrKnowledge() {
+    void casualConversationShouldNotCaptureUnneededLongTermContext() {
         RequiredContextPlanner.Plan plan = planner.plan(
                 AssistantIntent.CONVERSATION, AssistantMode.FAST, "hey alles goed?", AssistantSettings.defaults()
         );
 
         assertFalse(plan.knowledge());
+        assertFalse(plan.durableMemory());
         assertFalse(plan.eventMemory());
         assertTrue(plan.liveSources().isEmpty());
+    }
+
+    @Test
+    void personalizedConversationShouldRetrieveDurableMemory() {
+        RequiredContextPlanner.Plan plan = planner.plan(
+                AssistantIntent.CONVERSATION,
+                AssistantMode.FAST,
+                "wat zou je mij aanraden voor mijn project?",
+                AssistantSettings.defaults()
+        );
+
+        assertTrue(plan.durableMemory());
+        assertFalse(plan.knowledge());
     }
 
     @Test
@@ -41,7 +55,7 @@ class RequiredContextPlannerTest {
     }
 
     @Test
-    void heldItemQuestionShouldUseCompactRequesterStateWithoutFullInventoryScan() {
+    void heldItemQuestionShouldUseCompactRequesterStateWithoutDurableProfile() {
         RequiredContextPlanner.Plan plan = planner.plan(
                 AssistantIntent.LIVE_STATE,
                 AssistantMode.GROUNDED,
@@ -51,6 +65,7 @@ class RequiredContextPlannerTest {
 
         assertEquals(Set.of(RequiredContextPlanner.LiveSource.REQUESTER), plan.liveSources());
         assertFalse(plan.liveSources().contains(RequiredContextPlanner.LiveSource.INVENTORY));
+        assertFalse(plan.durableMemory());
     }
 
     @Test
@@ -63,6 +78,7 @@ class RequiredContextPlannerTest {
         );
 
         assertEquals(Set.of(RequiredContextPlanner.LiveSource.REQUESTER), plan.liveSources());
+        assertFalse(plan.durableMemory());
     }
 
     @Test
@@ -91,7 +107,7 @@ class RequiredContextPlannerTest {
     }
 
     @Test
-    void serverFactShouldRetrieveKnowledgeWithoutLiveSnapshot() {
+    void serverFactShouldRetrieveKnowledgeAndSharedMemoryWithoutLiveSnapshot() {
         RequiredContextPlanner.Plan plan = planner.plan(
                 AssistantIntent.SERVER_FACT,
                 AssistantMode.GROUNDED,
@@ -100,6 +116,7 @@ class RequiredContextPlannerTest {
         );
 
         assertTrue(plan.knowledge());
+        assertTrue(plan.durableMemory());
         assertFalse(plan.live());
     }
 }

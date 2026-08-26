@@ -22,20 +22,24 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * Local hybrid knowledge index. Query retrieval combines BM25, exact command/title signals, multilingual concept
- * expansion, a compact dense projection, phrase matching and redundancy suppression. Open-ended discovery uses a
- * separate diversity sampler so requests such as "tell me a fun fact" do not fail merely because the query has no
- * useful lexical terms.
+ * Local hybrid knowledge index. Exact commands and server terminology remain lexical-first, while learned embeddings
+ * supply real semantic/paraphrase recall. Ranking fuses BM25, exact/title/alias signals, multilingual concept expansion,
+ * neural cosine similarity and reciprocal-rank evidence before redundancy suppression.
  */
 public final class LocalKnowledgeIndex {
 
     private static final Pattern TOKEN_SEPARATOR = Pattern.compile("[^\\p{L}\\p{N}/+]+");
-    private static final int DENSE_DIMENSIONS = 256;
+    private static final double MINIMUM_SEMANTIC_SIMILARITY = 0.20D;
+    private static final double SEMANTIC_WEIGHT = 2.4D;
+    private static final double RRF_WEIGHT = 8.0D;
+    private static final double RRF_K = 60.0D;
     private static final Set<String> STOP_WORDS = Set.of(
             "aan", "als", "and", "are", "bij", "can", "dan", "dat", "de", "die", "dit", "een",
             "en", "for", "hauntedmc", "haunty", "het", "hoe", "ik", "in", "is", "je", "met",
@@ -45,12 +49,30 @@ public final class LocalKnowledgeIndex {
     private static final Map<String, Set<String>> CONCEPTS = conceptMap();
 
     private final JavaPlugin plugin;
+    private final boolean managedEmbeddingProvider;
+    private volatile SemanticEmbeddingProvider embeddingProvider;
+    private final AtomicBoolean semanticWarmupRunning = new AtomicBoolean();
     private volatile List<KnowledgeChunk> chunks = List.of();
     private volatile Map<String, Integer> documentFrequency = Map.of();
     private final Map<String, CachedSearch> searchCache = new ConcurrentHashMap<>();
+    private final Map<String, double[]> semanticVectors = new ConcurrentHashMap<>();
 
     public LocalKnowledgeIndex(JavaPlugin plugin) {
+        this(plugin, null, true);
+    }
+
+    LocalKnowledgeIndex(JavaPlugin plugin, SemanticEmbeddingProvider embeddingProvider) {
+        this(plugin, embeddingProvider, false);
+    }
+
+    private LocalKnowledgeIndex(
+            JavaPlugin plugin,
+            SemanticEmbeddingProvider embeddingProvider,
+            boolean managedEmbeddingProvider
+    ) {
         this.plugin = plugin;
+        this.managedEmbeddingProvider = managedEmbeddingProvider;
+        this.embeddingProvider = managedEmbeddingProvider ? new OpenAiEmbeddingProvider(plugin) : embeddingProvider;
         reload();
     }
 
@@ -67,7 +89,16 @@ public final class LocalKnowledgeIndex {
         }
         chunks = List.copyOf(loaded);
         documentFrequency = buildDocumentFrequency(chunks);
+        semanticVectors.clear();
+        if (managedEmbeddingProvider) {
+            embeddingProvider = new OpenAiEmbeddingProvider(plugin);
+        } else if (embeddingProvider instanceof OpenAiEmbeddingProvider provider) {
+            provider.clearCache();
+        }
         searchCache.clear();
+        if (managedEmbeddingProvider) {
+            warmSemanticIndexAsync();
+        }
     }
 
     /** Query-focused retrieval for concrete server/gameplay questions. */
@@ -79,28 +110,42 @@ public final class LocalKnowledgeIndex {
         if (cached != null && cached.isFresh(settings.queryCacheSeconds())) {
             return cached.results();
         }
-
-        List<String> baseTokens = tokenize(query);
-        if (chunks.isEmpty() || baseTokens.isEmpty()) {
+        if (chunks.isEmpty() || normalizedQuery.isBlank()) {
             return List.of();
         }
+
+        List<String> baseTokens = tokenize(query);
         List<String> queryTokens = settings.hybridRetrieval() ? expandConcepts(baseTokens) : baseTokens;
-        double[] queryVector = settings.hybridRetrieval() ? denseVector(queryTokens) : new double[0];
+        List<KnowledgeChunk> candidates = chunks.stream()
+                .filter(chunk -> !settings.excludeExpired() || !chunk.expired())
+                .toList();
         int documentCount = chunks.size();
         double averageLength = chunks.stream().mapToInt(chunk -> chunk.tokens().size()).average().orElse(1.0D);
-        List<ScoredChunk> scored = new ArrayList<>();
 
-        for (KnowledgeChunk chunk : chunks) {
-            if (settings.excludeExpired() && chunk.expired()) {
+        Map<String, Double> lexical = new HashMap<>();
+        for (KnowledgeChunk chunk : candidates) {
+            double score = bm25(chunk, queryTokens, documentCount, averageLength);
+            score += lexicalBoost(chunk, normalizedQuery, baseTokens);
+            lexical.put(chunk.id(), score);
+        }
+
+        Map<String, Double> semantic = settings.hybridRetrieval()
+                ? semanticScores(normalizedQuery, candidates)
+                : Map.of();
+        Map<String, Integer> lexicalRanks = ranks(lexical);
+        Map<String, Integer> semanticRanks = ranks(semantic);
+        List<ScoredChunk> scored = new ArrayList<>();
+        for (KnowledgeChunk chunk : candidates) {
+            double lexicalScore = lexical.getOrDefault(chunk.id(), 0.0D);
+            double semanticScore = semantic.getOrDefault(chunk.id(), 0.0D);
+            boolean lexicalMatch = !baseTokens.isEmpty() && lexicalScore > minimumScore(baseTokens);
+            boolean semanticMatch = semanticScore >= MINIMUM_SEMANTIC_SIMILARITY;
+            if (!lexicalMatch && !semanticMatch) {
                 continue;
             }
-            double score = bm25(chunk, queryTokens, documentCount, averageLength);
-            if (settings.hybridRetrieval()) {
-                score += hybridBoost(chunk, normalizedQuery, baseTokens, queryVector);
-            }
-            if (score > minimumScore(baseTokens)) {
-                scored.add(new ScoredChunk(chunk, score));
-            }
+            double fused = lexicalScore + Math.max(0.0D, semanticScore) * SEMANTIC_WEIGHT
+                    + rrf(lexicalRanks.get(chunk.id())) + rrf(semanticRanks.get(chunk.id()));
+            scored.add(new ScoredChunk(chunk, fused));
         }
         scored.sort(Comparator.comparingDouble(ScoredChunk::score).reversed()
                 .thenComparing(scoredChunk -> scoredChunk.chunk().id()));
@@ -145,6 +190,96 @@ public final class LocalKnowledgeIndex {
 
     public int size() {
         return chunks.size();
+    }
+
+    public boolean learnedSemanticRetrievalAvailable() {
+        return embeddingProvider != null && embeddingProvider.available();
+    }
+
+    private Map<String, Double> semanticScores(String query, List<KnowledgeChunk> candidates) {
+        SemanticEmbeddingProvider provider = embeddingProvider;
+        if (provider == null || !provider.available() || candidates.isEmpty()) {
+            return Map.of();
+        }
+        if (managedEmbeddingProvider && semanticVectors.isEmpty()) {
+            warmSemanticIndexAsync();
+            return Map.of();
+        }
+        if (!managedEmbeddingProvider) {
+            fillMissingSemanticVectors(provider, candidates);
+        } else {
+            warmSemanticIndexAsync();
+        }
+        List<double[]> queryResult = provider.embed(List.of(query));
+        if (queryResult.size() != 1) {
+            return Map.of();
+        }
+        Map<String, Double> scores = new HashMap<>();
+        double[] queryVector = queryResult.getFirst();
+        for (KnowledgeChunk chunk : candidates) {
+            double[] vector = semanticVectors.get(chunk.id());
+            if (vector != null) {
+                scores.put(chunk.id(), cosine(queryVector, vector));
+            }
+        }
+        return Map.copyOf(scores);
+    }
+
+    private void warmSemanticIndexAsync() {
+        SemanticEmbeddingProvider provider = embeddingProvider;
+        if (!managedEmbeddingProvider || provider == null || !provider.available() || chunks.isEmpty()
+                || semanticVectors.size() >= chunks.size() || !semanticWarmupRunning.compareAndSet(false, true)) {
+            return;
+        }
+        List<KnowledgeChunk> snapshot = chunks;
+        CompletableFuture.runAsync(() -> {
+            try {
+                fillMissingSemanticVectors(provider, snapshot);
+            } finally {
+                semanticWarmupRunning.set(false);
+            }
+        });
+    }
+
+    private void fillMissingSemanticVectors(
+            SemanticEmbeddingProvider provider,
+            List<KnowledgeChunk> candidates
+    ) {
+        List<KnowledgeChunk> missing = candidates.stream()
+                .filter(chunk -> !semanticVectors.containsKey(chunk.id()))
+                .toList();
+        if (missing.isEmpty()) {
+            return;
+        }
+        List<String> texts = missing.stream().map(this::embeddingText).toList();
+        List<double[]> vectors = provider.embed(texts);
+        if (vectors.size() != missing.size() || provider != embeddingProvider) {
+            return;
+        }
+        for (int index = 0; index < missing.size(); index++) {
+            semanticVectors.put(missing.get(index).id(), vectors.get(index));
+        }
+    }
+
+    private String embeddingText(KnowledgeChunk chunk) {
+        return "title: " + chunk.title() + "\ncategory: " + chunk.category() + "\naliases: "
+                + String.join(", ", chunk.aliases()) + "\n" + chunk.text();
+    }
+
+    private Map<String, Integer> ranks(Map<String, Double> scores) {
+        List<Map.Entry<String, Double>> ranked = scores.entrySet().stream()
+                .sorted(Map.Entry.<String, Double>comparingByValue().reversed()
+                        .thenComparing(Map.Entry::getKey))
+                .toList();
+        Map<String, Integer> result = new HashMap<>();
+        for (int index = 0; index < ranked.size(); index++) {
+            result.put(ranked.get(index).getKey(), index + 1);
+        }
+        return Map.copyOf(result);
+    }
+
+    private double rrf(Integer rank) {
+        return rank == null ? 0.0D : RRF_WEIGHT / (RRF_K + rank);
     }
 
     private void cache(String key, List<KnowledgeChunk> selected, AssistantSettings settings) {
@@ -194,7 +329,6 @@ public final class LocalKnowledgeIndex {
             }
         }
 
-        // If strict diversity left capacity unused, fill remaining slots by score while still suppressing duplicates.
         if (selected.size() < maximumChunks) {
             for (ScoredChunk candidate : scored) {
                 KnowledgeChunk chunk = candidate.chunk();
@@ -232,12 +366,7 @@ public final class LocalKnowledgeIndex {
         return score;
     }
 
-    private double hybridBoost(
-            KnowledgeChunk chunk,
-            String normalizedQuery,
-            List<String> baseTokens,
-            double[] queryVector
-    ) {
+    private double lexicalBoost(KnowledgeChunk chunk, String normalizedQuery, List<String> baseTokens) {
         String title = chunk.title().toLowerCase(Locale.ROOT);
         String body = chunk.text().toLowerCase(Locale.ROOT);
         double boost = 0.0D;
@@ -255,8 +384,6 @@ public final class LocalKnowledgeIndex {
         if (normalizedQuery.length() >= 8 && body.contains(normalizedQuery)) {
             boost += 4.0D;
         }
-        double denseSimilarity = cosine(queryVector, denseVector(chunk.tokens()));
-        boost += Math.max(0.0D, denseSimilarity) * 3.2D;
         if ("official".equals(chunk.authority())) {
             boost += 0.25D;
         }
@@ -307,29 +434,6 @@ public final class LocalKnowledgeIndex {
             }
         }
         return List.copyOf(expanded);
-    }
-
-    private double[] denseVector(List<String> tokens) {
-        double[] vector = new double[DENSE_DIMENSIONS];
-        if (tokens.isEmpty()) {
-            return vector;
-        }
-        for (int index = 0; index < tokens.size(); index++) {
-            addFeature(vector, tokens.get(index), 1.0D);
-            if (index + 1 < tokens.size()) {
-                addFeature(vector, tokens.get(index) + '|' + tokens.get(index + 1), 0.65D);
-            }
-            if (index + 2 < tokens.size()) {
-                addFeature(vector, tokens.get(index) + '|' + tokens.get(index + 2), 0.25D);
-            }
-        }
-        return vector;
-    }
-
-    private void addFeature(double[] vector, String feature, double weight) {
-        int hash = feature.hashCode();
-        int bucket = Math.floorMod(hash, vector.length);
-        vector[bucket] += (hash & 1) == 0 ? weight : -weight;
     }
 
     private double cosine(double[] left, double[] right) {
@@ -501,7 +605,9 @@ public final class LocalKnowledgeIndex {
         List<String> aliases = tokenize(metadata.getOrDefault("aliases", ""));
         boolean expired = isExpired(metadata.get("expires"));
         String category = cleanMetadata(metadata.getOrDefault("category", "general"));
-        String authority = cleanMetadata(metadata.getOrDefault("authority", source.equals("config.knowledge") ? "official" : "reviewed"));
+        String authority = cleanMetadata(metadata.getOrDefault(
+                "authority", source.equals("config.knowledge") ? "official" : "reviewed"
+        ));
         return new DocumentParts(id, title, aliases, body, expired, category, authority);
     }
 

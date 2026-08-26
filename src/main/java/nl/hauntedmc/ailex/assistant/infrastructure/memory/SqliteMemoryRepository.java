@@ -119,27 +119,61 @@ public final class SqliteMemoryRepository implements MemoryRepository {
     }
 
     @Override
+    public synchronized List<MemoryRecord> loadTimeline(String subjectId, String relationId, String key, int limit) {
+        requireConnection();
+        int maximum = Math.clamp(limit, 1, 128);
+        String subject = clean(subjectId);
+        String relation = clean(relationId);
+        String memoryKey = clean(key);
+        String sql = "SELECT * FROM memory_records WHERE (? = '' OR subject_id = ?) "
+                + "AND (? = '' OR relation_id = ?) AND (? = '' OR memory_key = ?) "
+                + "ORDER BY last_confirmed DESC LIMIT ?";
+        List<MemoryRecord> records = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, subject);
+            statement.setString(2, subject);
+            statement.setString(3, relation);
+            statement.setString(4, relation);
+            statement.setString(5, memoryKey);
+            statement.setString(6, memoryKey);
+            statement.setInt(7, maximum);
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    records.add(read(result));
+                }
+            }
+            return List.copyOf(records);
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Could not load assistant memory timeline", exception);
+        }
+    }
+
+    @Override
+    public synchronized List<MemoryRecord> loadChangedSince(long sinceEpochMillis, int limit) {
+        requireConnection();
+        String sql = "SELECT * FROM memory_records WHERE last_confirmed > ? OR expires_at > ? "
+                + "ORDER BY CASE WHEN expires_at > last_confirmed THEN expires_at ELSE last_confirmed END ASC LIMIT ?";
+        List<MemoryRecord> records = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, sinceEpochMillis);
+            statement.setLong(2, sinceEpochMillis);
+            statement.setInt(3, Math.clamp(limit, 1, 2_048));
+            try (ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    records.add(read(result));
+                }
+            }
+            return List.copyOf(records);
+        } catch (SQLException exception) {
+            throw new IllegalStateException("Could not load assistant memory changes", exception);
+        }
+    }
+
+    @Override
     public synchronized void upsert(MemoryRecord record) {
         requireConnection();
         try (PreparedStatement statement = connection.prepareStatement(UPSERT)) {
-            int index = 1;
-            statement.setString(index++, record.id());
-            statement.setString(index++, record.scope().name());
-            statement.setString(index++, record.subjectId());
-            statement.setString(index++, record.relationId());
-            statement.setString(index++, record.kind().name());
-            statement.setString(index++, record.key());
-            statement.setString(index++, record.value());
-            statement.setDouble(index++, record.confidence());
-            statement.setDouble(index++, record.salience());
-            statement.setString(index++, record.sourceType());
-            statement.setString(index++, record.sourceId());
-            statement.setLong(index++, record.firstObserved());
-            statement.setLong(index++, record.lastConfirmed());
-            statement.setLong(index++, record.occurredAt());
-            statement.setLong(index++, record.expiresAt());
-            statement.setString(index++, record.supersedes());
-            statement.setString(index, String.join(",", record.tags()));
+            bind(statement, record);
             statement.executeUpdate();
         } catch (SQLException exception) {
             throw new IllegalStateException("Could not persist assistant memory", exception);
@@ -173,6 +207,27 @@ public final class SqliteMemoryRepository implements MemoryRepository {
         }
     }
 
+    private void bind(PreparedStatement statement, MemoryRecord record) throws SQLException {
+        int index = 1;
+        statement.setString(index++, record.id());
+        statement.setString(index++, record.scope().name());
+        statement.setString(index++, record.subjectId());
+        statement.setString(index++, record.relationId());
+        statement.setString(index++, record.kind().name());
+        statement.setString(index++, record.key());
+        statement.setString(index++, record.value());
+        statement.setDouble(index++, record.confidence());
+        statement.setDouble(index++, record.salience());
+        statement.setString(index++, record.sourceType());
+        statement.setString(index++, record.sourceId());
+        statement.setLong(index++, record.firstObserved());
+        statement.setLong(index++, record.lastConfirmed());
+        statement.setLong(index++, record.occurredAt());
+        statement.setLong(index++, record.expiresAt());
+        statement.setString(index++, record.supersedes());
+        statement.setString(index, String.join(",", record.tags()));
+    }
+
     private MemoryRecord read(ResultSet result) throws SQLException {
         Set<String> tags = Arrays.stream(result.getString("tags").split(","))
                 .map(String::trim)
@@ -197,6 +252,10 @@ public final class SqliteMemoryRepository implements MemoryRepository {
                 result.getString("supersedes"),
                 tags
         );
+    }
+
+    private String clean(String value) {
+        return value == null ? "" : value.replaceAll("\\s+", " ").trim();
     }
 
     private void requireConnection() {

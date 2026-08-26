@@ -11,6 +11,32 @@ public interface MemoryRepository extends AutoCloseable {
     /** Loads records that are still active at the supplied epoch-millis clock. */
     List<MemoryRecord> loadActive(long now);
 
+    /** Loads historical versions for temporal questions, newest-first and bounded by the requested limit. */
+    List<MemoryRecord> loadTimeline(String subjectId, String relationId, String key, int limit);
+
+    /**
+     * Legacy wall-clock change view. Shared repositories should implement sequence-based changes below instead; this
+     * default remains for storage implementations compiled against the 1.7 transition API.
+     */
+    default List<MemoryRecord> loadChangedSince(long sinceEpochMillis, int limit) {
+        return List.of();
+    }
+
+    /** Monotonic repository-owned change cursor. Wall-clock timestamps are not safe cross-runtime cursors. */
+    default long latestChangeSequence() {
+        return 0L;
+    }
+
+    /** Loads ordered shared changes strictly after the supplied cursor. */
+    default List<SharedChange> loadChangesAfter(long sequence, int limit) {
+        return List.of();
+    }
+
+    /** Whether this repository is shared between simultaneously running AIlex instances. */
+    default boolean shared() {
+        return false;
+    }
+
     /** Inserts or replaces one immutable memory version. */
     void upsert(MemoryRecord record);
 
@@ -19,4 +45,14 @@ public interface MemoryRepository extends AutoCloseable {
 
     @Override
     void close();
+
+    /** One ordered shared-memory mutation. */
+    record SharedChange(long sequence, MemoryRecord record) {
+        public SharedChange {
+            sequence = Math.max(0L, sequence);
+            if (record == null) {
+                throw new IllegalArgumentException("record is required");
+            }
+        }
+    }
 }

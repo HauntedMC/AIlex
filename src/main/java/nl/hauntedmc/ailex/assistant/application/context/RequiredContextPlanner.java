@@ -23,9 +23,12 @@ public final class RequiredContextPlanner {
             default -> false;
         };
 
+        // Long-term memory is not a default prompt attachment. Explicit recall/contextual work gets it automatically;
+        // ordinary conversation/gameplay only gets it when personalization can materially improve the response.
         boolean durableMemory = settings.toolAllowed("session") && switch (effectiveIntent) {
-            case SAFETY, SUPPORT -> false;
-            default -> true;
+            case MEMORY_RECALL, EVENT_RECALL, CONTEXT_FOLLOWUP, SERVER_FACT -> true;
+            case CONVERSATION, GAMEPLAY_HELP -> personalizationSignal(text);
+            case LIVE_STATE, KNOWLEDGE_DISCOVERY, SAFETY, SUPPORT -> false;
         };
         boolean eventMemory = settings.toolAllowed("session") && effectiveIntent == AssistantIntent.EVENT_RECALL;
 
@@ -62,6 +65,16 @@ public final class RequiredContextPlanner {
             }
         }
         return new Plan(knowledge, durableMemory, eventMemory, Set.copyOf(live));
+    }
+
+    private boolean personalizationSignal(String text) {
+        return containsAny(text,
+                "mijn ", "mij ", "mezelf", "voor mij", "over mij", "wat zal ik", "wat moet ik", "wat raad je",
+                "advies", "aanraden", "aanbevel", "suggest", "recommend", "for me", "about me", "my ", "me ",
+                "what should i", "what do you suggest", "what would you recommend", "remember", "onthoud",
+                "vergeet", "forget", "vorige keer", "last time", "eerder", "previously", "mijn project",
+                "my project", "mijn doel", "my goal", "favoriet", "favorite", "voorkeur", "prefer"
+        );
     }
 
     private boolean requesterSignal(String text) {

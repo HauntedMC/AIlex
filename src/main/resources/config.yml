@@ -14,7 +14,8 @@ openai:
     mode: "adaptive"
     total_deadline_seconds: 15
     max_model_calls: 3
-    max_tool_rounds: 2
+    # One bounded information-seeking round leaves budget for the answer and a grounded escalation when necessary.
+    max_tool_rounds: 1
     structured_output: true
     routing:
       default_language: "nl"
@@ -27,12 +28,22 @@ openai:
       max_input_tokens_grounded: 9000
       max_input_tokens_deliberate: 18000
     retrieval:
-      # Local hybrid retrieval: BM25 + aliases/phrases + multilingual concepts + compact dense similarity.
+      # Hybrid retrieval fuses lexical/BM25 precision with learned semantic recall and diversity suppression.
       hybrid_enabled: true
       max_chunks: 10
       max_evidence_characters: 24000
       query_cache_seconds: 300
       exclude_expired: true
+      semantic_embeddings:
+        enabled: true
+        model: "text-embedding-3-small"
+        dimensions: 512
+        timeout_seconds: 8
+    agent:
+      # A bounded planner may request additional read-only evidence. It can never execute server mutations.
+      enabled: true
+      planner_model: "gpt-5.6-luna"
+      max_tool_calls_per_round: 2
     models:
       fast:
         model: "gpt-5.6-luna"
@@ -61,13 +72,21 @@ openai:
       max_lines_deliberate: 4
       max_line_characters: 240
     memory:
-      # Typed semantic and episodic memory is persisted to assistant-memory.db using SQLite/WAL.
       enabled: true
       max_shared_facts: 1024
       max_player_memories: 256
       max_context_characters: 8000
       # Only trusted staff may turn player statements into network-wide learned facts.
       shared_write_permission: "ailex.admin"
+      storage:
+        # sqlite is self-contained. mysql provides one shared identity across multiple AIlex runtimes.
+        backend: "sqlite"
+        shared_sync_seconds: 5
+        mysql:
+          jdbc_url: ""
+          username: ""
+          password: ""
+          table_prefix: "ailex_"
     reliability:
       circuit_breaker_enabled: true
       cache_static_answers: true
@@ -112,10 +131,11 @@ openai:
     questions:
       enabled: true
       probability: 0.3
-      # AIlex tracks a tiny in-memory speaker window to avoid interrupting player-to-player conversations.
-      # Explicit broadcast questions such as "weet iemand...?" remain eligible even during active conversation.
+      # Two complementary transient signals prevent AIlex from intruding into player-to-player dialogue.
       conversation_window_seconds: 45
       minimum_speaker_alternations: 2
+      social_graph_window_seconds: 180
+      strong_pair_score: 2.5
     collective:
       enabled: true
       terms: ["gg", "wp", "well played", "welkom", "welcome", "congrats", "gefeliciteerd", "nice"]

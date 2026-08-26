@@ -6,8 +6,11 @@ import nl.hauntedmc.ailex.assistant.application.AssistantService;
 import nl.hauntedmc.ailex.assistant.domain.AssistantReply;
 import nl.hauntedmc.ailex.infrastructure.openai.OpenAiResponsesClient;
 
+import org.bukkit.GameMode;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -46,7 +49,8 @@ class AssistantServiceTest {
         when(client.getStructuredChatResponse(anyString(), anyString(), any(JsonObject.class), any()))
                 .thenReturn("""
                         {"lines":["Geef een wolf botten tot hij hartjes toont; dan is hij getemd."],
-                        "confidence":"high","evidence_ids":[],"handoff":"","memory_candidates":[]}
+                        "confidence":"high","evidence_ids":[],"claim_evidence":[],
+                        "handoff":"","memory_candidates":[]}
                         """);
 
         AssistantService service = new AssistantService(plugin);
@@ -68,19 +72,25 @@ class AssistantServiceTest {
         AIlexPlugin plugin = mock(AIlexPlugin.class);
         OpenAiResponsesClient client = mock(OpenAiResponsesClient.class);
         Player player = mock(Player.class);
+        PlayerInventory inventory = mock(PlayerInventory.class);
         YamlConfiguration config = new YamlConfiguration();
         config.set("openai.assistant.enabled", true);
         config.set("openai.assistant.observability.enabled", false);
         config.set("openai.assistant.tools.read_only", true);
-        config.set("openai.assistant.tools.allowed", List.of());
+        config.set("openai.assistant.tools.allowed", List.of("requester"));
         when(plugin.getConfig()).thenReturn(config);
         when(plugin.getOpenAiResponsesClient()).thenReturn(client);
         when(player.getUniqueId()).thenReturn(UUID.randomUUID());
         when(player.getName()).thenReturn("remymine");
+        when(player.getGameMode()).thenReturn(GameMode.SURVIVAL);
+        when(player.getInventory()).thenReturn(inventory);
+        when(inventory.getStorageContents()).thenReturn(new ItemStack[0]);
         when(client.getStructuredChatResponse(anyString(), anyString(), any(JsonObject.class), any()))
                 .thenReturn("""
                         {"lines":["Je houdt een diamond_sword vast."],"confidence":"high",
-                        "evidence_ids":["live.context"],"handoff":"","memory_candidates":[]}
+                        "evidence_ids":["live.requester"],
+                        "claim_evidence":[{"line_index":0,"evidence_ids":["live.requester"]}],
+                        "handoff":"","memory_candidates":[]}
                         """);
 
         AssistantService service = new AssistantService(plugin);

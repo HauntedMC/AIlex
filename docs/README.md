@@ -1,11 +1,11 @@
 # AIlex Docs
 
-This folder contains the practical guides for running, configuring, maintaining and contributing to AIlex.
+This folder contains the current operating, architecture, testing and contribution guides for AIlex 1.7.
 
 ## Server operators
 
-- [Configuration](CONFIGURATION.md) — assistant models, context budgets, live-data capabilities, knowledge, memory, proactive chat and diagnostics.
-- [Architecture](ARCHITECTURE.md) — request reliability, dialogue state, context planning, retrieval, memory, live integrations and inference flow.
+- [Configuration](CONFIGURATION.md) — adaptive models, neural retrieval, typed bounded read tools, memory backends, proactive intervention and diagnostics.
+- [Architecture](ARCHITECTURE.md) — deterministic-first cognition, memory claims/events/episodes/edges, temporal truth, hybrid retrieval, evidence packets, verified experience and the read-only capability boundary.
 
 Useful production checks:
 
@@ -16,17 +16,21 @@ Useful production checks:
 /ailex trace recent
 ```
 
-A basic operational test should cover a direct NPC question, a multi-turn follow-up, a live-state question such as the current biome or held item, a server-knowledge question, an open-ended fact request, a remembered preference/correction, and a proactive public question while ensuring AIlex stays out of a player-to-player conversation.
+A representative operational test should include: direct conversation, a multi-turn follow-up, safe live state, a custom feature-state question, exact HauntedMC knowledge, a semantic paraphrase, open-ended discovery, remembered/corrected/forgotten information, historical memory recall, and proactive public chat while AIlex stays out of player-to-player conversation.
+
+For multi-runtime deployments, also verify shared-memory propagation, corrections and tombstones across two servers. If MySQL is configured, `shared_memory=false` is an operational fault rather than a second authoritative local identity.
 
 ## Contributors
 
-- [Development](DEVELOPMENT.md) — local setup and day-to-day workflow.
-- [Testing](TESTING.md) — test strategy and local validation commands.
+- [Development](DEVELOPMENT.md) — architecture rules and day-to-day workflow.
+- [Testing](TESTING.md) — AIlexBench, deterministic regressions, neural retrieval, memory/grounding/tool/social tests, JaCoCo floors and production smoke checks.
 - [Contributing Guide](../CONTRIBUTING.md) — pull request expectations.
 
 ## Release flow
 
-1. Ensure lint and tests are green on the target branch.
-2. Confirm configuration and architecture documentation match the shipped behavior.
-3. Create the release using the project release workflow.
-4. Monitor the release workflow and verify the produced artifact.
+1. Run the full build and inspect CI status.
+2. Confirm `AIlexBench` and focused cognitive regressions pass.
+3. Confirm the JaCoCo line/branch regression floors pass in the PR workflow.
+4. Confirm configuration, architecture and testing docs match the shipped behavior.
+5. Smoke-test embeddings/read-agent behavior and, when enabled, shared MySQL memory in a disposable environment.
+6. Create the release using the project release workflow and verify the produced artifact.

@@ -14,7 +14,7 @@ public final class ProactiveChatService {
     private final Supplier<ProactiveChatSettings> settingsSupplier;
     private final LongSupplier currentTimeMillis;
     private final CollectiveReactionTracker collectiveTracker = new CollectiveReactionTracker();
-    private final ConversationParticipationTracker conversationTracker = new ConversationParticipationTracker();
+    private final SocialConversationGraph socialGraph = new SocialConversationGraph();
     private final AtomicLong lastBotMessageMillis;
     private final AtomicLong lastPlayerMessageMillis;
     private final AtomicLong lastProactiveRequestMillis = new AtomicLong(Long.MIN_VALUE);
@@ -44,14 +44,23 @@ public final class ProactiveChatService {
             Collection<? extends Player> onlinePlayers
     ) {
         ProactiveChatSettings.QuestionSettings questions = settingsSupplier.get().questions();
-        return conversationTracker.isLikelyConversation(
+        long now = currentTimeMillis.getAsLong();
+        boolean trackedConversation = socialGraph.isLikelyConversation(
                 source,
                 message,
                 onlinePlayers,
-                currentTimeMillis.getAsLong(),
+                now,
                 questions.conversationWindowMillis(),
                 questions.minimumSpeakerAlternations()
         );
+        if (trackedConversation || GeneralQuestionDetector.hasBroadcastCue(message)) {
+            return trackedConversation;
+        }
+        return source != null
+                && SocialConversationGraph.looksContextualReply(message)
+                && socialGraph.hasStrongRecentConnection(
+                        source.getUniqueId(), now, questions.socialGraphWindowMillis(), questions.strongPairScore()
+                );
     }
 
     public void onChat(
@@ -65,21 +74,16 @@ public final class ProactiveChatService {
         ProactiveChatSettings settings = settingsSupplier.get();
         ProactiveChatSettings.QuestionSettings questions = settings.questions();
         Collection<? extends Player> players = onlinePlayers.get();
-        boolean activeConversation = conversationTracker.isLikelyConversation(
-                source,
-                message,
-                players,
-                now,
-                questions.conversationWindowMillis(),
-                questions.minimumSpeakerAlternations()
+        boolean activeConversation = isLikelyPlayerConversation(source, message, players);
+        boolean answerQuestion = ProactiveInterventionPolicy.shouldAnswerQuestion(
+                source, message, players, activeConversation, socialGraph, now, questions
         );
-        conversationTracker.record(source, message, now, questions.conversationWindowMillis());
+        socialGraph.observe(source, message, players, now, questions.socialGraphWindowMillis());
 
         if (!settings.enabled()) {
             return;
         }
-        if (questions.enabled()
-                && GeneralQuestionDetector.isGeneralQuestion(message, source, players, activeConversation)
+        if (answerQuestion
                 && passesProbability(questions.probability())
                 && submitIfOffCooldown(source, ProactiveChatTrigger.question(message), now, settings, consumer)) {
             return;
