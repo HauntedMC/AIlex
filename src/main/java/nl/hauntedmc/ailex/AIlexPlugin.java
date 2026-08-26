@@ -39,9 +39,8 @@ public class AIlexPlugin extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
         saveBuiltInKnowledge();
-        // assistant-memory.yml / assistant-long-term-memory.yml are legacy migration inputs in 1.5.0.
-        // Existing files are imported automatically by Memory V2; new installs use SQLite directly.
-        saveResource("assistant-short-term-memory.yml", false);
+        // Memory V2 creates assistant-memory.db itself. Existing 1.4 YAML files in the data folder are
+        // migration inputs only and are intentionally never recreated or overwritten by 1.5.
 
         ConfigHandler.init(this);
         DataHandler.init(this);
