@@ -25,7 +25,10 @@ public final class AssistantIntentClassifier {
             "health", "gezondheid", "leven", "honger", "food", "item", "hand", "holding", "vasthoud", "vast",
             "level", "xp", "ervaring", "experience", "effect", "armor", "armour", "pantser", "gespeeld",
             "inventory", "inventaris", "offhand", "equipment", "uitrusting", "saturation", "air", "lucht",
-            "fire", "brand", "flying", "vliegen", "swimming", "zwemmen", "sprinting", "rennen"
+            "fire", "brand", "flying", "vliegen", "swimming", "zwemmen", "sprinting", "rennen",
+            "rank", "balance", "saldo", "money", "geld", "currency", "valuta", "credits", "crowns", "essence",
+            "claim", "claims", "combattag", "combat-tag", "tagged", "autopickup", "fly", "god", "vanish",
+            "queue", "lottery", "loterij", "friends", "vrienden", "perk", "perks"
     );
     private static final Set<String> WORLD_STATE_WORDS = Set.of(
             "biome", "bioom", "coord", "coords", "coördinaten", "positie", "position", "location", "locatie", "weer",
@@ -123,8 +126,8 @@ public final class AssistantIntentClassifier {
         }
         boolean currentSelfReference = containsAnyPhrase(
                 message,
-                "mijn ", "my ", "heb ik", "ik heb", "houd ik", "hou ik", "am i", "i have", "i'm ", "im ",
-                "bij mij", "for me"
+                "mijn ", "my ", "heb ik", "ik heb", "ben ik", "am i", "i have", "i'm ", "im ",
+                "houd ik", "hou ik", "bij mij", "for me"
         );
         if (currentSelfReference && containsAny(message, PLAYER_STATE_WORDS)) {
             return true;
