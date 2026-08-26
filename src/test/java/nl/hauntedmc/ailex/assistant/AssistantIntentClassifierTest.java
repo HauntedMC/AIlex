@@ -50,6 +50,14 @@ class AssistantIntentClassifierTest {
     }
 
     @Test
+    void shouldRouteWorldAndDimensionQuestionsAsLive() {
+        assertEquals(AssistantIntent.LIVE_STATE,
+                AssistantIntentClassifier.analyze("In welke world ben ik?").intent());
+        assertEquals(AssistantIntent.LIVE_STATE,
+                AssistantIntentClassifier.analyze("What dimension am I in?").intent());
+    }
+
+    @Test
     void shouldRouteCurrentHauntedMcFeatureStateToLiveProviders() {
         assertEquals(AssistantIntent.LIVE_STATE,
                 AssistantIntentClassifier.analyze("Wat is mijn rank?").intent());
@@ -106,7 +114,8 @@ class AssistantIntentClassifierTest {
                 false,
                 AssistantIntent.EVENT_RECALL,
                 "wat gaat er mis haunty",
-                "De chatgame lijkt vastgelopen."
+                "De chatgame lijkt vastgelopen.",
+                ""
         );
 
         AssistantIntentClassifier.Analysis analysis = AssistantIntentClassifier.analyze("haunty?", dialogue);
@@ -122,6 +131,7 @@ class AssistantIntentClassifierTest {
                 true,
                 AssistantIntent.CONVERSATION,
                 "haunty?",
+                "",
                 ""
         );
 
