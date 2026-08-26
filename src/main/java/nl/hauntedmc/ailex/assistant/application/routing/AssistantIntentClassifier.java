@@ -18,22 +18,27 @@ public final class AssistantIntentClassifier {
             "support", "betaling", "betaal", "refund", "chargeback", "aankoop", "purchase", "2fa",
             "wachtwoord", "password", "ban", "appeal", "report", "ticket", "unban"
     );
-    private static final Set<String> LIVE_WORDS = Set.of(
-            "waar", "hier", "dichtbij", "nearby", "near", "biome", "bioom", "coord", "coords", "coördinaten",
-            "positie", "location", "locatie", "weer", "weather", "online", "spelers", "players", "tps",
-            "mspt", "performance", "lag", "ping", "latency", "health", "gezondheid", "honger", "food", "item",
-            "hand", "holding", "vasthoud", "vast", "kijk", "facing", "richting", "level", "xp", "ervaring",
-            "experience", "effect", "armor", "armour", "pantser", "light", "licht", "difficulty", "moeilijkheid",
-            "environment", "omgeving", "dimension", "dimensie", "version", "versie", "uptime", "playtime",
-            "speeltijd", "gespeeld"
+    private static final Set<String> STRONG_LIVE_WORDS = Set.of(
+            "online", "tps", "mspt", "ping", "latency", "uptime", "performance", "lag", "playtime", "speeltijd"
     );
+    private static final Set<String> PLAYER_STATE_WORDS = Set.of(
+            "health", "gezondheid", "leven", "honger", "food", "item", "hand", "holding", "vasthoud", "vast",
+            "level", "xp", "ervaring", "experience", "effect", "armor", "armour", "pantser", "gespeeld"
+    );
+    private static final Set<String> WORLD_STATE_WORDS = Set.of(
+            "biome", "bioom", "coord", "coords", "coördinaten", "positie", "location", "locatie", "weer",
+            "weather", "time", "tijd", "light", "licht", "difficulty", "moeilijkheid", "environment", "omgeving",
+            "dimension", "dimensie", "facing", "richting"
+    );
+    private static final Set<String> LOCAL_CUES = Set.of("hier", "here", "dichtbij", "nearby", "near");
     private static final Set<String> SERVER_WORDS = Set.of(
             "rank", "elite", "legend", "supreme", "claim", "regels", "rules", "vote", "stem",
             "store", "winkel", "warp", "command", "commando", "server", "hauntedmc"
     );
     private static final Set<String> GAMEPLAY_WORDS = Set.of(
             "minecraft", "kameel", "camel", "wolf", "tem", "temt", "tammen", "tame", "craft", "recept", "recipe",
-            "redstone", "enchant", "betover", "potion", "drank", "mob", "farm", "bouwen", "build"
+            "redstone", "enchant", "betover", "potion", "drank", "mob", "farm", "bouwen", "build", "diamond",
+            "diamonds", "ore", "erts"
     );
     private static final Set<String> MEMORY_WORDS = Set.of(
             "onthoud", "onthouden", "herinner", "herinneren", "remember", "remembered", "weet", "wist"
@@ -69,14 +74,16 @@ public final class AssistantIntentClassifier {
         if (context.active() && containsAny(normalized, EVENT_WORDS)) {
             return new Analysis(AssistantIntent.EVENT_RECALL, AssistantMode.GROUNDED, language);
         }
-        if (containsAny(normalized, LIVE_WORDS) || containsLivePhrase(normalized)) {
-            return new Analysis(AssistantIntent.LIVE_STATE, AssistantMode.DELIBERATE, language);
+        if (isLiveStateQuestion(normalized)) {
+            // Live-state answers are evidence-oriented but normally simple; Terra is enough unless validation escalates.
+            return new Analysis(AssistantIntent.LIVE_STATE, AssistantMode.GROUNDED, language);
         }
         if (containsAny(normalized, SERVER_WORDS) || normalized.contains("/")) {
             return new Analysis(AssistantIntent.SERVER_FACT, AssistantMode.GROUNDED, language);
         }
-        if (normalized.contains("hoe ") || normalized.contains("how ") || normalized.contains("waarom")
-                || normalized.contains("why ") || normalized.contains("help") || containsAny(normalized, GAMEPLAY_WORDS)) {
+        if (normalized.contains("hoe ") || normalized.contains("how ") || normalized.startsWith("waar ")
+                || normalized.startsWith("where ") || normalized.contains("waarom") || normalized.contains("why ")
+                || normalized.contains("help") || containsAny(normalized, GAMEPLAY_WORDS)) {
             return new Analysis(AssistantIntent.GAMEPLAY_HELP, AssistantMode.GROUNDED, language);
         }
         if (context.active() && isContextualFollowUp(normalized, context)) {
@@ -90,8 +97,38 @@ public final class AssistantIntentClassifier {
         return new Analysis(AssistantIntent.CONVERSATION, AssistantMode.FAST, language);
     }
 
+    private static boolean isLiveStateQuestion(String message) {
+        if (containsAny(message, STRONG_LIVE_WORDS) || containsLivePhrase(message)) {
+            return true;
+        }
+        boolean currentSelfReference = containsAnyPhrase(
+                message,
+                "mijn ", "my ", "heb ik", "ik heb", "houd ik", "hou ik", "am i", "i have", "i'm ", "im "
+        );
+        if (currentSelfReference && containsAny(message, PLAYER_STATE_WORDS)) {
+            return true;
+        }
+        if (containsAny(message, LOCAL_CUES) && containsAny(message, WORLD_STATE_WORDS)) {
+            return true;
+        }
+        return containsAnyPhrase(
+                message,
+                "waar ben ik", "waar sta ik", "where am i", "where do i stand",
+                "waar sta je", "waar ben jij", "where are you", "wat doe je", "what are you doing"
+        );
+    }
+
     private static boolean containsLivePhrase(String message) {
-        return message.contains("om me heen") || message.contains("around me") || message.contains("near me");
+        return containsAnyPhrase(message, "om me heen", "around me", "near me");
+    }
+
+    private static boolean containsAnyPhrase(String message, String... phrases) {
+        for (String phrase : phrases) {
+            if (message.contains(phrase)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isContextualFollowUp(String message, AssistantDialogueContext context) {
