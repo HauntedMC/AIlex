@@ -31,9 +31,10 @@ public final class AssistantIntentClassifier {
             "queue", "lottery", "loterij", "friends", "vrienden", "perk", "perks"
     );
     private static final Set<String> WORLD_STATE_WORDS = Set.of(
-            "biome", "bioom", "coord", "coords", "coördinaten", "positie", "position", "location", "locatie", "weer",
-            "weather", "time", "tijd", "light", "licht", "difficulty", "moeilijkheid", "environment", "omgeving",
-            "dimension", "dimensie", "facing", "richting", "block", "blok", "target", "kijk", "looking"
+            "world", "wereld", "biome", "bioom", "coord", "coords", "coördinaten", "positie", "position", "location",
+            "locatie", "weer", "weather", "time", "tijd", "light", "licht", "difficulty", "moeilijkheid",
+            "environment", "omgeving", "dimension", "dimensie", "facing", "richting", "height", "hoogte", "block",
+            "blok", "target", "kijk", "looking"
     );
     private static final Set<String> LOCAL_CUES = Set.of("hier", "here", "dichtbij", "nearby", "near", "nu", "now");
     private static final Set<String> SERVER_WORDS = Set.of(
@@ -129,7 +130,8 @@ public final class AssistantIntentClassifier {
                 "mijn ", "my ", "heb ik", "ik heb", "ben ik", "am i", "i have", "i'm ", "im ",
                 "houd ik", "hou ik", "bij mij", "for me"
         );
-        if (currentSelfReference && containsAny(message, PLAYER_STATE_WORDS)) {
+        if (currentSelfReference
+                && (containsAny(message, PLAYER_STATE_WORDS) || containsAny(message, WORLD_STATE_WORDS))) {
             return true;
         }
         if (containsAny(message, LOCAL_CUES) && containsAny(message, WORLD_STATE_WORDS)) {
@@ -138,7 +140,8 @@ public final class AssistantIntentClassifier {
         if (containsAnyPhrase(message,
                 "welk bioom", "welke biome", "welke bioom", "what biome", "which biome",
                 "welk blok", "welke block", "what block", "which block", "waar kijk ik", "what am i looking at",
-                "welke kant kijk", "which way am i facing", "what direction am i facing")) {
+                "welke kant kijk", "which way am i facing", "what direction am i facing",
+                "welke wereld", "welk world", "what world", "which world", "welke dimensie", "what dimension")) {
             return true;
         }
         return containsAnyPhrase(
