@@ -6,9 +6,11 @@ AIlex 1.5 separates Minecraft chat ingress, conversational state, request admiss
 
 ```text
 Paper AsyncChatEvent
-  -> LLMChatListener / mention resolution
-  -> AssistantConversationManager
-  -> AssistantRequestCoordinator + AssistantRequestTracer
+  -> AssistantChatListener (thin Paper adapter)
+  -> AssistantChatController
+       -> AssistantMentionMatcher / WorkingContextPolicy
+       -> AssistantConversationManager
+       -> AssistantRequestCoordinator + AssistantRequestTracer
   -> AssistantService.prepare()
        -> AssistantIntentClassifier
        -> RequiredContextPlanner
