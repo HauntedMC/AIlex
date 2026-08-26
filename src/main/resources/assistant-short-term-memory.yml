@@ -1,8 +1,0 @@
-# System-managed short-term assistant context. It is restored after normal server restarts and plugin reloads.
-# It contains recent chat plus live metadata snapshots. Do not store staff notes, reports, or secrets here.
-# Set openai.chat_context.persist_to_disk to false to stop updates and restart the plugin to clear this context.
-saved_at: 0
-general_chat: []
-conversations: {}
-bot_memory: {}
-metadata: {}
