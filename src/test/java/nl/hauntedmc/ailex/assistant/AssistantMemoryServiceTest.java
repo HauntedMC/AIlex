@@ -151,24 +151,24 @@ class AssistantMemoryServiceTest {
         memory.rememberCandidate(
                 first,
                 "first",
-                new MemoryCandidate("player", "preference", "answer_style", "kort", "upsert"),
+                new MemoryCandidate("player", "preference", "answer_style", "korte antwoorden", "upsert"),
                 "Ik heb liever korte antwoorden.",
                 false
         );
         memory.rememberCandidate(
                 second,
                 "second",
-                new MemoryCandidate("player", "preference", "answer_style", "uitgebreid", "upsert"),
+                new MemoryCandidate("player", "preference", "answer_style", "uitgebreide antwoorden", "upsert"),
                 "Ik heb liever uitgebreide antwoorden.",
                 false
         );
 
         String firstSummary = memory.summary(first);
         String secondSummary = memory.summary(second);
-        assertTrue(firstSummary.contains("answer_style=kort"));
-        assertFalse(firstSummary.contains("uitgebreid"));
-        assertTrue(secondSummary.contains("answer_style=uitgebreid"));
-        assertFalse(secondSummary.contains("answer_style=kort"));
+        assertTrue(firstSummary.contains("answer_style=korte antwoorden"));
+        assertFalse(firstSummary.contains("uitgebreide antwoorden"));
+        assertTrue(secondSummary.contains("answer_style=uitgebreide antwoorden"));
+        assertFalse(secondSummary.contains("answer_style=korte antwoorden"));
         memory.close();
     }
 
@@ -376,6 +376,33 @@ class AssistantMemoryServiceTest {
         assertTrue(summary.contains("interaction_count=4"));
         assertTrue(summary.contains("Regen chatgame"));
         assertFalse(memory.search(playerId, "haunty", "regen", Set.of(MemoryKind.EVENT), 3).isEmpty());
+        memory.close();
+    }
+
+    @Test
+    void shouldNotExposePlayerOwnedEventThroughTheSameNpcToAnotherPlayer() {
+        UUID owner = UUID.randomUUID();
+        UUID other = UUID.randomUUID();
+        AssistantMemoryService memory = memoryService(dataDirectory.toFile());
+
+        assertNotNull(memory.rememberTrusted(
+                MemoryScope.EVENT,
+                owner.toString(),
+                "haunty",
+                MemoryKind.EVENT,
+                "chatgame.win.privacy",
+                "Owner won the private test chatgame",
+                1.0D,
+                0.9D,
+                "test",
+                "chatgame",
+                System.currentTimeMillis(),
+                Duration.ofDays(7),
+                Set.of("chatgame")
+        ));
+
+        assertFalse(memory.search(owner, "haunty", "private test", Set.of(MemoryKind.EVENT), 4).isEmpty());
+        assertTrue(memory.search(other, "haunty", "private test", Set.of(MemoryKind.EVENT), 4).isEmpty());
         memory.close();
     }
 
