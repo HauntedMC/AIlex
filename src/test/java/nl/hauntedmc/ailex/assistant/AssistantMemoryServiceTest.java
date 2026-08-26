@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -145,6 +146,18 @@ class AssistantMemoryServiceTest {
         assertTrue(memory.summary(playerId).contains("HauntedMC has Survival."));
         assertTrue(memory.summary(playerId).contains("likes building farms"));
         assertTrue(new File(dataFolder, ".assistant-memory-v2-migrated").isFile());
+        memory.close();
+    }
+
+    @Test
+    void shouldNotMarkLegacyMigrationCompleteWhenSqliteFallsBackToMemory() throws Exception {
+        Path invalidDataFolder = dataDirectory.resolve("not-a-directory");
+        Files.writeString(invalidDataFolder, "blocks child database path");
+
+        AssistantMemoryService memory = memoryService(invalidDataFolder.toFile());
+
+        assertFalse(new File(invalidDataFolder.toFile(), ".assistant-memory-v2-migrated").isFile());
+        assertFalse(new File(invalidDataFolder.toFile(), "assistant-memory.db").isFile());
         memory.close();
     }
 
