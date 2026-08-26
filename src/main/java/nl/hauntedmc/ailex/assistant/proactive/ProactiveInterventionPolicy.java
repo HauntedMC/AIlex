@@ -7,8 +7,6 @@ import java.util.Collection;
 /** Deterministic utility policy for deciding whether proactive participation creates net community value. */
 public final class ProactiveInterventionPolicy {
 
-    private static final double SPEAK_THRESHOLD = 0.25D;
-
     private ProactiveInterventionPolicy() {
     }
 
@@ -59,11 +57,11 @@ public final class ProactiveInterventionPolicy {
         double repetition = socialGraph == null ? 0.0D : socialGraph.repetitionPenalty(
                 source.getUniqueId(), now, settings.socialGraphWindowMillis()
         );
-        double utility = helpful * 1.25D
-                - privateConversation * 1.20D
-                - error * 0.75D
-                - repetition * 0.85D;
-        boolean speak = broadcast || utility > SPEAK_THRESHOLD;
+        double utility = helpful * settings.helpfulWeight()
+                - privateConversation * settings.privacyCost()
+                - error * settings.errorCost()
+                - repetition * settings.repetitionCost();
+        boolean speak = broadcast || utility > settings.utilityThreshold();
         CommunityGoal goal = speak
                 ? broadcast || serverSpecific(message) ? CommunityGoal.INFORM : CommunityGoal.SUPPORT_CONVERSATION
                 : CommunityGoal.SILENCE;
