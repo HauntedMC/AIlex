@@ -39,7 +39,7 @@ class RequiredContextPlannerTest {
     @Test
     void heldItemQuestionShouldRequestOnlyRequesterLiveState() {
         RequiredContextPlanner.Plan plan = planner.plan(
-                AssistantIntent.LIVE_STATE, AssistantMode.DELIBERATE, "wat heb ik in mijn hand?", AssistantSettings.defaults()
+                AssistantIntent.LIVE_STATE, AssistantMode.GROUNDED, "wat heb ik in mijn hand?", AssistantSettings.defaults()
         );
 
         assertEquals(
@@ -51,11 +51,20 @@ class RequiredContextPlannerTest {
     @Test
     void nearbyQuestionShouldNotAutomaticallyCaptureServerState() {
         RequiredContextPlanner.Plan plan = planner.plan(
-                AssistantIntent.LIVE_STATE, AssistantMode.DELIBERATE, "welke spelers zijn dichtbij?", AssistantSettings.defaults()
+                AssistantIntent.LIVE_STATE, AssistantMode.GROUNDED, "welke spelers zijn dichtbij?", AssistantSettings.defaults()
         );
 
         assertTrue(plan.liveSources().contains(RequiredContextPlanner.LiveSource.NEARBY));
         assertFalse(plan.liveSources().contains(RequiredContextPlanner.LiveSource.SERVER));
+    }
+
+    @Test
+    void lagQuestionShouldRequestServerPerformanceOnly() {
+        RequiredContextPlanner.Plan plan = planner.plan(
+                AssistantIntent.LIVE_STATE, AssistantMode.GROUNDED, "heeft de server lag?", AssistantSettings.defaults()
+        );
+
+        assertEquals(java.util.Set.of(RequiredContextPlanner.LiveSource.SERVER), plan.liveSources());
     }
 
     @Test
