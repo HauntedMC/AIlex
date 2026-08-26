@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import nl.hauntedmc.ailex.AIlexPlugin;
 import nl.hauntedmc.ailex.assistant.application.context.ContextCompiler;
+import nl.hauntedmc.ailex.assistant.application.inference.AssistantGenerationPolicy;
 import nl.hauntedmc.ailex.assistant.application.reliability.AssistantCircuitBreaker;
 import nl.hauntedmc.ailex.assistant.application.routing.AssistantIntentClassifier;
 import nl.hauntedmc.ailex.assistant.domain.AssistantDialogueContext;
@@ -127,73 +128,96 @@ public final class AssistantService {
         return prepared;
     }
 
-    /** Performs retrieval-aware generation and rejects replies that are not grounded as required. */
+    /** Performs retrieval-aware generation with a cheap fast path and bounded capability escalation. */
     public AssistantReply respond(PreparedRequest request) {
-        AssistantSettings.ModelProfile profile = request.settings().profileFor(request.analysis().mode());
+        AssistantSettings.ModelProfile initialProfile = request.settings().profileFor(request.analysis().mode());
         if (!request.settings().enabled()) {
-            return complete(request, profile, AssistantReply.unavailable(), 0, 0, "assistant-disabled");
+            return complete(request, initialProfile, AssistantReply.unavailable(), 0, 0, "assistant-disabled");
         }
         if (!request.settings().readOnlyTools() || request.settings().maxModelCalls() < 1) {
-            return complete(request, profile, fallbackFor(request, "policy"), 0, 0, "policy-fallback");
+            return complete(request, initialProfile, fallbackFor(request, "policy"), 0, 0, "policy-fallback");
         }
         if (request.analysis().mode() == AssistantMode.HANDOFF) {
-            return complete(request, profile, fallbackFor(request, "policy"), 0, 0, "safety-handoff");
+            return complete(request, initialProfile, fallbackFor(request, "policy"), 0, 0, "safety-handoff");
         }
-        AssistantCircuitBreaker circuitBreaker = circuitBreakers.computeIfAbsent(
-                profile.model(), ignored -> new AssistantCircuitBreaker()
+        AssistantCircuitBreaker initialBreaker = circuitBreakers.computeIfAbsent(
+                initialProfile.model(), ignored -> new AssistantCircuitBreaker()
         );
-        if (!circuitBreaker.allowsRequest(request.settings().circuitBreakerEnabled())) {
+        if (!initialBreaker.allowsRequest(request.settings().circuitBreakerEnabled())) {
             fallbacks.incrementAndGet();
-            return complete(request, profile, fallbackFor(request, "upstream-unavailable"), 0, 0,
+            return complete(request, initialProfile, fallbackFor(request, "upstream-unavailable"), 0, 0,
                     "circuit-open");
         }
         OpenAiResponsesClient client = plugin.getOpenAiResponsesClient();
         if (client == null) {
-            return complete(request, profile, AssistantReply.unavailable(), 0, 0, "client-unavailable");
+            return complete(request, initialProfile, AssistantReply.unavailable(), 0, 0, "client-unavailable");
         }
 
-        String cacheKey = cacheKey(request, profile);
+        String cacheKey = cacheKey(request, initialProfile);
         if (request.settings().cacheStaticAnswers() && isStaticIntent(request.analysis().intent())) {
             AssistantReply cached = staticReplyCache.get(cacheKey);
             if (cached != null) {
-                return complete(request, profile, cached, 0, 0, "cache-hit");
+                return complete(request, initialProfile, cached, 0, 0, "cache-hit");
             }
         }
+
         List<LocalKnowledgeIndex.KnowledgeChunk> evidence = request.retrieveKnowledge()
                 ? knowledgeIndex.search(request.message(), request.settings()) : List.of();
         String prompt = buildPrompt(request, evidence);
-        AssistantReply reply;
-        int modelCalls = 0;
-        if (request.settings().structuredOutput()) {
-            reply = AssistantReply.invalid();
-            for (int attempt = 0; attempt < request.settings().maxModelCalls()
-                    && !reply.valid() && remainingDuration(request).compareTo(Duration.ofSeconds(1)) >= 0; attempt++) {
-                String retryInstruction = attempt == 0 ? ""
-                        : "\n\nThe previous output was invalid. Return the required JSON only.";
-                modelCalls++;
-                reply = parseStructuredReply(client.getStructuredChatResponse(
-                        buildSystemPrompt(request), prompt + retryInstruction,
-                        responseSchema(), requestOptions(request, profile)), request);
+        boolean structured = AssistantGenerationPolicy.useStructuredOutput(
+                request.settings().structuredOutput(), request.analysis().mode(), request.analysis().intent(), request.message()
+        );
+        int primaryCallBudget = structured ? Math.min(2, request.settings().maxModelCalls()) : 1;
+        GenerationAttempt primary = generate(
+                client, request, initialProfile, prompt, structured, primaryCallBudget
+        );
+        AssistantReply reply = primary.reply();
+        int modelCalls = primary.modelCalls();
+        AssistantSettings.ModelProfile completedProfile = initialProfile;
+        boolean acceptable = isAcceptable(reply, request, evidence);
+
+        if (!acceptable && AssistantGenerationPolicy.mayEscalate(
+                request.analysis().mode(), modelCalls, request.settings().maxModelCalls(), remainingDuration(request).toMillis()
+        )) {
+            AssistantSettings.ModelProfile escalationProfile = request.settings().deliberateProfile();
+            AssistantCircuitBreaker escalationBreaker = circuitBreakers.computeIfAbsent(
+                    escalationProfile.model(), ignored -> new AssistantCircuitBreaker()
+            );
+            if (escalationBreaker.allowsRequest(request.settings().circuitBreakerEnabled())) {
+                GenerationAttempt escalation = generate(
+                        client,
+                        request,
+                        escalationProfile,
+                        prompt + "\n\n[Escalation]\nThe previous grounded attempt could not be verified. Re-evaluate carefully.",
+                        true,
+                        1
+                );
+                modelCalls += escalation.modelCalls();
+                if (isAcceptable(escalation.reply(), request, evidence)) {
+                    reply = escalation.reply();
+                    acceptable = true;
+                    completedProfile = escalationProfile;
+                    escalationBreaker.recordSuccess();
+                } else {
+                    escalationBreaker.recordFailure(request.settings().circuitBreakerEnabled());
+                }
             }
-        } else {
-            modelCalls++;
-            reply = AssistantReply.fromPlainText(client.getChatResponse(
-                    buildSystemPrompt(request), prompt, requestOptions(request, profile)
-            ));
         }
-        if (!isAcceptable(reply, request, evidence)) {
-            circuitBreaker.recordFailure(request.settings().circuitBreakerEnabled());
+
+        if (!acceptable) {
+            initialBreaker.recordFailure(request.settings().circuitBreakerEnabled());
             fallbacks.incrementAndGet();
-            return complete(request, profile, fallbackFor(request, "unverified"), modelCalls, evidence.size(),
+            return complete(request, completedProfile, fallbackFor(request, "unverified"), modelCalls, evidence.size(),
                     "unverified");
         }
         if (remainingDuration(request).isZero() || remainingDuration(request).isNegative()) {
-            circuitBreaker.recordFailure(request.settings().circuitBreakerEnabled());
+            initialBreaker.recordFailure(request.settings().circuitBreakerEnabled());
             fallbacks.incrementAndGet();
-            return complete(request, profile, fallbackFor(request, "deadline"), modelCalls, evidence.size(),
+            return complete(request, completedProfile, fallbackFor(request, "deadline"), modelCalls, evidence.size(),
                     "deadline");
         }
-        circuitBreaker.recordSuccess();
+
+        initialBreaker.recordSuccess();
         replies.incrementAndGet();
         if (!request.settings().shadowMode() && memoryService != null && !reply.memoryCandidates().isEmpty()) {
             java.util.UUID playerId = java.util.UUID.fromString(request.playerId());
@@ -212,10 +236,41 @@ public final class AssistantService {
             staticReplyCache.put(cacheKey, reply);
         }
         if (request.settings().shadowMode()) {
-            logOutcome(request, profile, reply, modelCalls, evidence.size(), "shadow");
+            logOutcome(request, completedProfile, reply, modelCalls, evidence.size(), "shadow");
             return AssistantReply.invalid();
         }
-        return complete(request, profile, reply, modelCalls, evidence.size(), "accepted");
+        return complete(request, completedProfile, reply, modelCalls, evidence.size(),
+                completedProfile == initialProfile ? "accepted" : "accepted-escalated");
+    }
+
+    private GenerationAttempt generate(
+            OpenAiResponsesClient client,
+            PreparedRequest request,
+            AssistantSettings.ModelProfile profile,
+            String prompt,
+            boolean structured,
+            int maximumCalls
+    ) {
+        if (!structured) {
+            if (maximumCalls < 1 || remainingDuration(request).compareTo(Duration.ofSeconds(1)) < 0) {
+                return new GenerationAttempt(AssistantReply.invalid(), 0);
+            }
+            String raw = client.getChatResponse(buildSystemPrompt(request), prompt, requestOptions(request, profile));
+            return new GenerationAttempt(AssistantReply.fromPlainText(raw), 1);
+        }
+
+        AssistantReply reply = AssistantReply.invalid();
+        int calls = 0;
+        for (int attempt = 0; attempt < maximumCalls
+                && !reply.valid() && remainingDuration(request).compareTo(Duration.ofSeconds(1)) >= 0; attempt++) {
+            String retryInstruction = attempt == 0 ? ""
+                    : "\n\nThe previous output was invalid. Return the required JSON only.";
+            calls++;
+            reply = parseStructuredReply(client.getStructuredChatResponse(
+                    buildSystemPrompt(request), prompt + retryInstruction,
+                    responseSchema(), requestOptions(request, profile)), request);
+        }
+        return new GenerationAttempt(reply, calls);
     }
 
     public void reload() {
@@ -494,7 +549,7 @@ public final class AssistantService {
     ) {
         return new OpenAiResponsesClient.RequestOptions(
                 profile.model(), profile.maxOutputTokens(), profile.reasoningEffort(), remainingDuration(request),
-                safetyIdentifier(request.playerId()), "ailex-assistant-" + profile.model(), "low"
+                safetyIdentifier(request.playerId()), "ailex-v1.5:" + request.npcName() + ':' + profile.model(), "low"
         );
     }
 
@@ -588,6 +643,9 @@ public final class AssistantService {
                 "openai.assistant.memory.shared_write_permission", "ailex.admin"
         );
         return permission == null || permission.isBlank() || player.hasPermission(permission.trim());
+    }
+
+    private record GenerationAttempt(AssistantReply reply, int modelCalls) {
     }
 
     /** Prepared data that may safely cross from Bukkit's main thread to an async worker. */

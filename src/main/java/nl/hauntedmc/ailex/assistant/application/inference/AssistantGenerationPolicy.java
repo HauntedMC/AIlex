@@ -1,0 +1,49 @@
+package nl.hauntedmc.ailex.assistant.application.inference;
+
+import nl.hauntedmc.ailex.assistant.domain.AssistantIntent;
+import nl.hauntedmc.ailex.assistant.domain.AssistantMode;
+
+import java.util.Locale;
+
+/** Cheap deterministic inference policy so model calls are reserved for work that benefits from them. */
+public final class AssistantGenerationPolicy {
+
+    private AssistantGenerationPolicy() {
+    }
+
+    public static boolean useStructuredOutput(
+            boolean structuredOutputEnabled,
+            AssistantMode mode,
+            AssistantIntent intent,
+            String playerMessage
+    ) {
+        if (!structuredOutputEnabled) {
+            return false;
+        }
+        if (mode != AssistantMode.FAST) {
+            return true;
+        }
+        return hasDurableMemorySignal(playerMessage) || intent == AssistantIntent.MEMORY_RECALL
+                || intent == AssistantIntent.EVENT_RECALL;
+    }
+
+    public static boolean hasDurableMemorySignal(String message) {
+        String normalized = message == null ? "" : message.toLowerCase(Locale.ROOT);
+        return normalized.contains("onthoud")
+                || normalized.contains("remember")
+                || normalized.contains("ik hou van")
+                || normalized.contains("ik vind ")
+                || normalized.contains("mijn favoriete")
+                || normalized.contains("ik speel graag")
+                || normalized.contains("i like ")
+                || normalized.contains("i love ")
+                || normalized.contains("i prefer ")
+                || normalized.contains("my favorite");
+    }
+
+    public static boolean mayEscalate(AssistantMode mode, int modelCalls, int maximumModelCalls, long remainingMillis) {
+        return mode == AssistantMode.GROUNDED
+                && modelCalls < maximumModelCalls
+                && remainingMillis >= 2_000L;
+    }
+}
