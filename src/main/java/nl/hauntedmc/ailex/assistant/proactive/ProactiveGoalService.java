@@ -1,11 +1,9 @@
 package nl.hauntedmc.ailex.assistant.proactive;
 
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantMemoryService;
-import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantRelationshipMemoryService;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryKind;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryRecord;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryScope;
-import nl.hauntedmc.ailex.assistant.infrastructure.memory.RelationshipProfile;
 
 import org.bukkit.entity.Player;
 
@@ -28,12 +26,10 @@ public final class ProactiveGoalService {
     private static final long FOLLOW_UP_COOLDOWN = Duration.ofDays(3).toMillis();
 
     private final AssistantMemoryService memory;
-    private final AssistantRelationshipMemoryService relationships;
     private final Map<UUID, Long> lastFollowUpByPlayer = new ConcurrentHashMap<>();
 
     public ProactiveGoalService(AssistantMemoryService memory) {
         this.memory = memory;
-        this.relationships = new AssistantRelationshipMemoryService(memory);
     }
 
     public Optional<ProactiveChatTrigger> chatTrigger(
@@ -58,11 +54,8 @@ public final class ProactiveGoalService {
         if (celebrationCue(text)) {
             return Optional.of(ProactiveChatTrigger.celebrate(source.getName(), message));
         }
-        if (helpCue(text)) {
-            RelationshipProfile profile = relationships.profile(source.getUniqueId(), "0");
-            if (!profile.knownPlayer() || profile.interactionCount() < 5) {
-                return Optional.of(ProactiveChatTrigger.newPlayerHelp(source.getName(), message));
-            }
+        if (helpCue(text) && interactionCount(source.getUniqueId()) < 5) {
+            return Optional.of(ProactiveChatTrigger.newPlayerHelp(source.getName(), message));
         }
         return Optional.empty();
     }
@@ -90,8 +83,7 @@ public final class ProactiveGoalService {
             return Optional.empty();
         }
         MemoryRecord record = goal.get();
-        String summary = record.key() + '=' + record.value();
-        return Optional.of(ProactiveChatTrigger.followUp(player.getName(), summary));
+        return Optional.of(ProactiveChatTrigger.followUp(player.getName(), record.key() + '=' + record.value()));
     }
 
     public void recordFollowUpDelivered(Player player, long now) {
@@ -100,10 +92,30 @@ public final class ProactiveGoalService {
         }
     }
 
+    private int interactionCount(UUID playerId) {
+        if (memory == null || playerId == null) {
+            return 0;
+        }
+        String id = playerId.toString();
+        return memory.activeSnapshot().stream()
+                .filter(record -> record.scope() == MemoryScope.PLAYER_NPC && record.subjectId().equals(id))
+                .filter(record -> record.kind() == MemoryKind.RELATIONSHIP && record.key().equals("interaction_count"))
+                .mapToInt(record -> safeInteger(record.value()))
+                .sum();
+    }
+
+    private int safeInteger(String value) {
+        try {
+            return Math.max(0, Integer.parseInt(value));
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
+    }
+
     private boolean helpCue(String text) {
-        return text.endsWith("?") && (containsAny(text,
+        return text.endsWith("?") && containsAny(text,
                 "hoe werkt", "waar vind", "wat moet ik", "hoe begin", "kan iemand helpen", "help", "how do i",
-                "where do i", "where can i", "what should i", "how can i", "can someone help", "anyone help"));
+                "where do i", "where can i", "what should i", "how can i", "can someone help", "anyone help");
     }
 
     private boolean connectCue(String text) {
