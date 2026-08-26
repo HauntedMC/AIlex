@@ -98,7 +98,7 @@ public final class AssistantRelationshipMemoryService {
             case EVENT -> record.subjectId().equals(playerId)
                     && (record.relationId().isBlank() || record.relationId().equals(npcId));
             case NPC -> record.subjectId().equals(npcId) && record.tags().contains("experience");
-            case SHARED -> false;
+            case GLOBAL, WORLD, SESSION -> false;
         };
     }
 
