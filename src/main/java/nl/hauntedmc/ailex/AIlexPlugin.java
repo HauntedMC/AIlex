@@ -4,6 +4,7 @@ import nl.hauntedmc.ailex.command.MainCommand;
 import nl.hauntedmc.ailex.config.ConfigHandler;
 import nl.hauntedmc.ailex.config.DataHandler;
 import nl.hauntedmc.ailex.listener.llm.LLMChatListener;
+import nl.hauntedmc.ailex.listener.llm.AssistantRequestTracer;
 import nl.hauntedmc.ailex.listener.citizens.NPCDeathListener;
 import nl.hauntedmc.ailex.listener.citizens.NPCSpawnListener;
 import nl.hauntedmc.ailex.listener.player.PlayerJoinListener;
@@ -33,6 +34,7 @@ public class AIlexPlugin extends JavaPlugin {
     private OpenAiResponsesClient openAiResponsesClient;
     private AssistantMemoryService assistantMemoryService;
     private AssistantService assistantService;
+    private AssistantRequestTracer assistantRequestTracer;
 
     /**
      * Called when the plugin is enabled
@@ -50,6 +52,7 @@ public class AIlexPlugin extends JavaPlugin {
         // Initialize different parts of the plugin
         ConfigHandler.init(this);
         DataHandler.init(this);
+        assistantRequestTracer = new AssistantRequestTracer();
         openAiResponsesClient = new OpenAiResponsesClient(this);
         assistantMemoryService = new AssistantMemoryService(this);
         assistantService = new AssistantService(this);
@@ -169,6 +172,11 @@ public class AIlexPlugin extends JavaPlugin {
     /** Returns automatically managed assistant memory. */
     public AssistantMemoryService getAssistantMemoryService() {
         return assistantMemoryService;
+    }
+
+    /** Returns the bounded assistant request trace registry. */
+    public AssistantRequestTracer getAssistantRequestTracer() {
+        return assistantRequestTracer;
     }
 
     /**

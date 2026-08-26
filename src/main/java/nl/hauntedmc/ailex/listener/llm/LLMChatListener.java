@@ -61,11 +61,13 @@ public class LLMChatListener implements Listener {
     private static final String CHAT_RESPONSE_VISIBILITY_PATH = CHAT_PATH + ".response_visibility";
     private static final String CHAT_NEARBY_RADIUS_PATH = CHAT_PATH + ".nearby_response_radius";
     private static final String CHAT_MAX_CONCURRENT_REQUESTS_PATH = CHAT_PATH + ".max_concurrent_requests";
+    private static final String CHAT_MAX_QUEUED_REQUESTS_PATH = CHAT_PATH + ".max_queued_requests";
     private static final String STANDALONE_CHAT_PATH = CHAT_PATH + ".standalone";
     private static final int STANDALONE_CHAT_ID = 0;
     private static final int DEFAULT_MAX_RESPONSES_PER_PLAYER = 20;
     private static final long DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60L * 60L;
     private static final int DEFAULT_MAX_CONCURRENT_REQUESTS = 4;
+    private static final int DEFAULT_MAX_QUEUED_REQUESTS = 8;
     private static final int DEFAULT_NEARBY_RESPONSE_RADIUS = 32;
     private static final String KNOWLEDGE_PATH = "openai.knowledge";
     private static final int DEFAULT_KNOWLEDGE_MAX_CHARACTERS = 6000;
@@ -94,7 +96,8 @@ public class LLMChatListener implements Listener {
 
     private final AIlexPlugin plugin;
     private final PlayerResponseRateLimiter responseRateLimiter;
-    private final ChatRequestGate requestGate;
+    private final AssistantRequestCoordinator requestCoordinator;
+    private final AssistantRequestTracer requestTracer;
     private final ChatContextStore chatContextStore;
     private final KnowledgeRepository knowledgeRepository;
     private final ProactiveChatService proactiveChatService;
@@ -113,7 +116,9 @@ public class LLMChatListener implements Listener {
     public LLMChatListener(AIlexPlugin plugin) {
         this.plugin = plugin;
         this.responseRateLimiter = new PlayerResponseRateLimiter(this::getResponseRateLimit, System::currentTimeMillis);
-        this.requestGate = new ChatRequestGate();
+        this.requestCoordinator = new AssistantRequestCoordinator(this::dispatchAsync);
+        AssistantRequestTracer configuredTracer = plugin.getAssistantRequestTracer();
+        this.requestTracer = configuredTracer == null ? new AssistantRequestTracer() : configuredTracer;
         FileConfiguration initialConfig = plugin.getConfig();
         this.chatContextStore = new ChatContextStore(
                 plugin.getDataFolder(),
@@ -165,108 +170,19 @@ public class LLMChatListener implements Listener {
      */
     void forwardChatToAI(Player source, Component message) {
         proactiveChatService.recordPlayerMessage();
-        NpcManager npcManager = plugin.getNpcManager();
-        if (npcManager == null) {
-            return;
-        }
-
-        // Get the chat message from the component
         String chatMessage = PlainTextComponentSerializer.plainText().serialize(message);
         ChatContextStore.ContextSettings contextSettings = getChatContextSettings();
+        NpcManager npcManager = plugin.getNpcManager();
 
-        // If an NPC is mentioned in the message forward chat to AI
-        for (NPC npc : npcManager.getNPCRegistry().values()) {
-            if (!npc.isChatEnabled() || !npc.isSpawned()) {
-                continue;
-            }
-
-            String npcName = npc.getName();
-            if (isNpcMentioned(chatMessage, npcName)) {
-                if (!mayUseChat(source)) {
-                    chatContextStore.recordGeneralChat(source.getName(), chatMessage, contextSettings);
+        if (npcManager != null) {
+            for (NPC npc : npcManager.getNPCRegistry().values()) {
+                if (!npc.isChatEnabled() || !npc.isSpawned()) {
+                    continue;
+                }
+                if (isNpcMentioned(chatMessage, npc.getName())) {
+                    submitNpcRequest(source, npc, chatMessage, contextSettings);
                     return;
                 }
-                if (!responseRateLimiter.tryAcquire(source.getUniqueId(), bypassesResponseRateLimit(source))) {
-                    sendRateLimitFeedback(source);
-                    chatContextStore.recordGeneralChat(source.getName(), chatMessage, contextSettings);
-                    return;
-                }
-                if (!requestGate.tryAcquire(source.getUniqueId(), getMaximumConcurrentRequests())) {
-                    chatContextStore.recordGeneralChat(source.getName(), chatMessage, contextSettings);
-                    return;
-                }
-
-                UUID sourceId = source.getUniqueId();
-                try {
-                    String npcDisplayName = npc.getDisplayName();
-                    String sourceName = source.getName();
-                    int npcId = npc.getId();
-                    String systemPrompt = buildSystemPrompt(npc, chatMessage);
-                    String userPrompt = buildUserPrompt(npc, sourceName, chatMessage);
-                    PromptContext context = appendContext(
-                            userPrompt,
-                            chatMessage,
-                            source,
-                            npc,
-                            contextSettings
-                    );
-                    chatContextStore.recordMetadata(sourceId, npcId, context.trustedMetadata(), contextSettings);
-                    AssistantService.PreparedRequest assistantRequest = assistantService.prepare(
-                            source, npc, chatMessage, systemPrompt, context.prompt(), context.trustedMetadata()
-                    );
-                    chatContextStore.recordGeneralChat(sourceName, chatMessage, contextSettings);
-                    chatContextStore.recordConversation(
-                            sourceId,
-                            npcId,
-                            sourceName,
-                            chatMessage,
-                            contextSettings
-                    );
-                    chatContextStore.recordBotMemory(npcId, sourceName, chatMessage, contextSettings);
-                    new BukkitRunnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            OpenAiResponsesClient openAiClient = plugin.getOpenAiResponsesClient();
-                            if (openAiClient == null) {
-                                return;
-                            }
-                            String response;
-                            if (assistantRequest.settings().enabled()) {
-                                AssistantReply assistantReply = assistantService.respond(assistantRequest);
-                                response = String.join("\n", assistantReply.lines());
-                            } else {
-                                response = openAiClient.getChatResponse(systemPrompt, context.prompt());
-                                assistantService.recordDirectResponse(assistantRequest, response);
-                            }
-                            if (response == null || response.isBlank()) {
-                                return;
-                            }
-                            Component result = FormatterUtils.serializer.deserialize(npcDisplayName + ": ")
-                                    .append(Component.text(response, NamedTextColor.WHITE));
-
-                            chatContextStore.recordConversation(
-                                    sourceId,
-                                    npcId,
-                                    npcName,
-                                    response,
-                                    contextSettings
-                            );
-                            chatContextStore.recordBotMemory(npcId, npcName, response, contextSettings);
-                            proactiveChatService.recordBotResponse();
-                            Bukkit.getScheduler().runTask(plugin, () -> deliverResponse(source, result));
-                        } catch (Exception e) {
-                            LoggerUtils.logError(e.getMessage());
-                        } finally {
-                            requestGate.release(sourceId);
-                        }
-                    }
-                    }.runTaskAsynchronously(plugin);
-                } catch (RuntimeException e) {
-                    requestGate.release(sourceId);
-                    LoggerUtils.logError("Could not prepare AI chat request: " + e.getMessage());
-                }
-                return;
             }
         }
 
@@ -279,10 +195,15 @@ public class LLMChatListener implements Listener {
         proactiveChatService.onChat(source, chatMessage, this::getOnlinePlayers, this::submitProactiveResponse);
     }
 
-    /** Handles mention-based assistant chat when physical Citizens NPCs are disabled. */
-    private void submitStandaloneResponse(Player source, String chatMessage, ChatContextStore.ContextSettings contextSettings) {
+    private void submitNpcRequest(
+            Player source,
+            NPC npc,
+            String chatMessage,
+            ChatContextStore.ContextSettings contextSettings
+    ) {
         if (!mayUseChat(source)) {
             chatContextStore.recordGeneralChat(source.getName(), chatMessage, contextSettings);
+            sendAccessFeedback(source);
             return;
         }
         if (!responseRateLimiter.tryAcquire(source.getUniqueId(), bypassesResponseRateLimit(source))) {
@@ -290,7 +211,98 @@ public class LLMChatListener implements Listener {
             chatContextStore.recordGeneralChat(source.getName(), chatMessage, contextSettings);
             return;
         }
-        if (!requestGate.tryAcquire(source.getUniqueId(), getMaximumConcurrentRequests())) {
+
+        String npcDisplayName = npc.getDisplayName();
+        String npcName = npc.getName();
+        String sourceName = source.getName();
+        UUID sourceId = source.getUniqueId();
+        int npcId = npc.getId();
+        UUID requestId = requestTracer.start(sourceName, npcName, "direct");
+        try {
+            String systemPrompt = buildSystemPrompt(npc, chatMessage);
+            String userPrompt = buildUserPrompt(npc, sourceName, chatMessage);
+            PromptContext context = appendContext(userPrompt, chatMessage, source, npc, contextSettings);
+            chatContextStore.recordMetadata(sourceId, npcId, context.trustedMetadata(), contextSettings);
+            AssistantService.PreparedRequest assistantRequest = assistantService.prepare(
+                    source, npc, chatMessage, systemPrompt, context.prompt(), context.trustedMetadata()
+            );
+            requestTracer.transition(requestId, AssistantRequestTracer.State.PREPARED, "");
+            chatContextStore.recordGeneralChat(sourceName, chatMessage, contextSettings);
+            chatContextStore.recordConversation(sourceId, npcId, sourceName, chatMessage, contextSettings);
+            chatContextStore.recordBotMemory(npcId, sourceName, chatMessage, contextSettings);
+
+            Runnable work = () -> executeDirectRequest(
+                    requestId, source, sourceId, npcId, npcName, npcDisplayName,
+                    systemPrompt, context, assistantRequest, contextSettings
+            );
+            AssistantRequestCoordinator.Submission submission = requestCoordinator.submit(
+                    requestId,
+                    sourceId,
+                    AssistantRequestCoordinator.Priority.DIRECT,
+                    work,
+                    getMaximumConcurrentRequests(),
+                    getMaximumQueuedRequests()
+            );
+            handleSubmission(source, requestId, submission);
+        } catch (RuntimeException exception) {
+            requestTracer.transition(requestId, AssistantRequestTracer.State.UPSTREAM_FAILED, "prepare");
+            LoggerUtils.logError("Could not prepare AI chat request: " + exception.getMessage());
+            sendFailureFeedback(source);
+        }
+    }
+
+    private void executeDirectRequest(
+            UUID requestId,
+            Player source,
+            UUID sourceId,
+            int npcId,
+            String npcName,
+            String npcDisplayName,
+            String systemPrompt,
+            PromptContext context,
+            AssistantService.PreparedRequest assistantRequest,
+            ChatContextStore.ContextSettings contextSettings
+    ) {
+        requestTracer.transition(requestId, AssistantRequestTracer.State.STARTED, "");
+        try {
+            OpenAiResponsesClient openAiClient = plugin.getOpenAiResponsesClient();
+            if (openAiClient == null) {
+                failUpstream(requestId, source, "client-unavailable");
+                return;
+            }
+            String response;
+            if (assistantRequest.settings().enabled()) {
+                AssistantReply assistantReply = assistantService.respond(assistantRequest);
+                response = String.join("\n", assistantReply.lines());
+            } else {
+                response = openAiClient.getChatResponse(systemPrompt, context.prompt());
+                assistantService.recordDirectResponse(assistantRequest, response);
+            }
+            if (response == null || response.isBlank()) {
+                failUpstream(requestId, source, "blank-response");
+                return;
+            }
+            Component result = FormatterUtils.serializer.deserialize(npcDisplayName + ": ")
+                    .append(Component.text(response, NamedTextColor.WHITE));
+            chatContextStore.recordConversation(sourceId, npcId, npcName, response, contextSettings);
+            chatContextStore.recordBotMemory(npcId, npcName, response, contextSettings);
+            proactiveChatService.recordBotResponse();
+            Bukkit.getScheduler().runTask(plugin, () -> deliverTrackedResponse(requestId, source, result));
+        } catch (Exception exception) {
+            LoggerUtils.logError("Could not complete AI chat request: " + exception.getMessage());
+            failUpstream(requestId, source, "exception");
+        }
+    }
+
+    /** Handles mention-based assistant chat when physical Citizens NPCs are disabled. */
+    private void submitStandaloneResponse(Player source, String chatMessage, ChatContextStore.ContextSettings contextSettings) {
+        if (!mayUseChat(source)) {
+            chatContextStore.recordGeneralChat(source.getName(), chatMessage, contextSettings);
+            sendAccessFeedback(source);
+            return;
+        }
+        if (!responseRateLimiter.tryAcquire(source.getUniqueId(), bypassesResponseRateLimit(source))) {
+            sendRateLimitFeedback(source);
             chatContextStore.recordGeneralChat(source.getName(), chatMessage, contextSettings);
             return;
         }
@@ -298,6 +310,7 @@ public class LLMChatListener implements Listener {
         UUID sourceId = source.getUniqueId();
         String sourceName = source.getName();
         String assistantName = standaloneMention();
+        UUID requestId = requestTracer.start(sourceName, assistantName, "direct-standalone");
         String systemPrompt = standaloneSystemPrompt();
         String userPrompt = "Bericht van speler " + sourceName + ": \"" + chatMessage
                 + "\". Antwoord als " + assistantName + " in maximaal één korte chatregel, zonder speaker label.";
@@ -307,45 +320,124 @@ public class LLMChatListener implements Listener {
             AssistantService.PreparedRequest assistantRequest = assistantService.prepare(
                     source, null, chatMessage, systemPrompt, context.prompt(), context.trustedMetadata()
             );
+            requestTracer.transition(requestId, AssistantRequestTracer.State.PREPARED, "");
             chatContextStore.recordGeneralChat(sourceName, chatMessage, contextSettings);
             chatContextStore.recordConversation(sourceId, STANDALONE_CHAT_ID, sourceName, chatMessage, contextSettings);
-            new BukkitRunnable() {
-                @Override
-                public void run() {
-                    try {
-                        OpenAiResponsesClient openAiClient = plugin.getOpenAiResponsesClient();
-                        if (openAiClient == null) {
-                            return;
-                        }
-                        String response;
-                        if (assistantRequest.settings().enabled()) {
-                            response = String.join("\n", assistantService.respond(assistantRequest).lines());
-                        } else {
-                            response = openAiClient.getChatResponse(systemPrompt, context.prompt());
-                            assistantService.recordDirectResponse(assistantRequest, response);
-                        }
-                        if (response == null || response.isBlank()) {
-                            return;
-                        }
-                        Component result = FormatterUtils.serializer.deserialize(standaloneDisplayName() + ": ")
-                                .append(Component.text(response, NamedTextColor.WHITE));
-                        chatContextStore.recordConversation(
-                                sourceId, STANDALONE_CHAT_ID, assistantName, response, contextSettings
-                        );
-                        chatContextStore.recordBotMemory(STANDALONE_CHAT_ID, assistantName, response, contextSettings);
-                        proactiveChatService.recordBotResponse();
-                        Bukkit.getScheduler().runTask(plugin, () -> deliverResponse(source, result));
-                    } catch (Exception exception) {
-                        LoggerUtils.logError("Could not complete standalone AI chat: " + exception.getMessage());
-                    } finally {
-                        requestGate.release(sourceId);
-                    }
-                }
-            }.runTaskAsynchronously(plugin);
+            Runnable work = () -> executeStandaloneRequest(
+                    requestId, source, sourceId, assistantName, systemPrompt, context, assistantRequest, contextSettings
+            );
+            AssistantRequestCoordinator.Submission submission = requestCoordinator.submit(
+                    requestId,
+                    sourceId,
+                    AssistantRequestCoordinator.Priority.DIRECT,
+                    work,
+                    getMaximumConcurrentRequests(),
+                    getMaximumQueuedRequests()
+            );
+            handleSubmission(source, requestId, submission);
         } catch (RuntimeException exception) {
-            requestGate.release(sourceId);
+            requestTracer.transition(requestId, AssistantRequestTracer.State.UPSTREAM_FAILED, "prepare");
             LoggerUtils.logError("Could not prepare standalone AI chat: " + exception.getMessage());
+            sendFailureFeedback(source);
         }
+    }
+
+    private void executeStandaloneRequest(
+            UUID requestId,
+            Player source,
+            UUID sourceId,
+            String assistantName,
+            String systemPrompt,
+            PromptContext context,
+            AssistantService.PreparedRequest assistantRequest,
+            ChatContextStore.ContextSettings contextSettings
+    ) {
+        requestTracer.transition(requestId, AssistantRequestTracer.State.STARTED, "");
+        try {
+            OpenAiResponsesClient openAiClient = plugin.getOpenAiResponsesClient();
+            if (openAiClient == null) {
+                failUpstream(requestId, source, "client-unavailable");
+                return;
+            }
+            String response;
+            if (assistantRequest.settings().enabled()) {
+                response = String.join("\n", assistantService.respond(assistantRequest).lines());
+            } else {
+                response = openAiClient.getChatResponse(systemPrompt, context.prompt());
+                assistantService.recordDirectResponse(assistantRequest, response);
+            }
+            if (response == null || response.isBlank()) {
+                failUpstream(requestId, source, "blank-response");
+                return;
+            }
+            Component result = FormatterUtils.serializer.deserialize(standaloneDisplayName() + ": ")
+                    .append(Component.text(response, NamedTextColor.WHITE));
+            chatContextStore.recordConversation(
+                    sourceId, STANDALONE_CHAT_ID, assistantName, response, contextSettings
+            );
+            chatContextStore.recordBotMemory(STANDALONE_CHAT_ID, assistantName, response, contextSettings);
+            proactiveChatService.recordBotResponse();
+            Bukkit.getScheduler().runTask(plugin, () -> deliverTrackedResponse(requestId, source, result));
+        } catch (Exception exception) {
+            LoggerUtils.logError("Could not complete standalone AI chat: " + exception.getMessage());
+            failUpstream(requestId, source, "exception");
+        }
+    }
+
+    private void handleSubmission(
+            Player source,
+            UUID requestId,
+            AssistantRequestCoordinator.Submission submission
+    ) {
+        if (submission.supersededRequestId() != null) {
+            requestTracer.transition(
+                    submission.supersededRequestId(), AssistantRequestTracer.State.SUPERSEDED, "newer-direct-request"
+            );
+        }
+        switch (submission.disposition()) {
+            case STARTED -> { }
+            case QUEUED -> {
+                requestTracer.transition(requestId, AssistantRequestTracer.State.QUEUED, "waiting-for-capacity");
+                sendQueuedFeedback(source, false);
+            }
+            case QUEUED_REPLACED -> {
+                requestTracer.transition(requestId, AssistantRequestTracer.State.QUEUED, "replaced-older-queued-request");
+                sendQueuedFeedback(source, true);
+            }
+            case REJECTED_BUSY, REJECTED_FULL -> {
+                requestTracer.transition(requestId, AssistantRequestTracer.State.REJECTED,
+                        submission.disposition().name().toLowerCase(Locale.ROOT));
+                sendBusyFeedback(source);
+            }
+        }
+    }
+
+    private void deliverTrackedResponse(UUID requestId, Player source, Component result) {
+        if (!source.isOnline()) {
+            requestTracer.transition(requestId, AssistantRequestTracer.State.DELIVERY_FAILED, "requester-offline");
+            return;
+        }
+        try {
+            deliverResponse(source, result);
+            requestTracer.transition(requestId, AssistantRequestTracer.State.COMPLETED, "delivered");
+        } catch (RuntimeException exception) {
+            requestTracer.transition(requestId, AssistantRequestTracer.State.DELIVERY_FAILED, "delivery-exception");
+            LoggerUtils.logError("Could not deliver AI response: " + exception.getMessage());
+        }
+    }
+
+    private void failUpstream(UUID requestId, Player source, String detail) {
+        requestTracer.transition(requestId, AssistantRequestTracer.State.UPSTREAM_FAILED, detail);
+        Bukkit.getScheduler().runTask(plugin, () -> sendFailureFeedback(source));
+    }
+
+    private void dispatchAsync(Runnable task) {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                task.run();
+            }
+        }.runTaskAsynchronously(plugin);
     }
 
     /**
@@ -370,6 +462,7 @@ public class LLMChatListener implements Listener {
         }
         return npcManager.getNPCRegistry().values().stream()
                 .filter(NPC::isChatEnabled)
+                .filter(NPC::isSpawned)
                 .findFirst()
                 .orElse(null);
     }
@@ -377,11 +470,6 @@ public class LLMChatListener implements Listener {
     private boolean submitProactiveResponse(Player contextPlayer, ProactiveChatTrigger trigger) {
         NPC npc = findAvailableNpc();
         if (npc == null) {
-            return false;
-        }
-        UUID requestId = UUID.nameUUIDFromBytes(("ailex-proactive-" + npc.getId())
-                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        if (!requestGate.tryAcquire(requestId, getMaximumConcurrentRequests())) {
             return false;
         }
         ChatContextStore.ContextSettings contextSettings = getChatContextSettings();
@@ -397,41 +485,60 @@ public class LLMChatListener implements Listener {
                     contextPlayer, npc, trigger.context(), systemPrompt, context.prompt(), context.trustedMetadata()
             );
         } catch (RuntimeException exception) {
-            requestGate.release(requestId);
             LoggerUtils.logError("Could not prepare proactive AI chat: " + exception.getMessage());
             return false;
         }
 
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                try {
-                    OpenAiResponsesClient openAiClient = plugin.getOpenAiResponsesClient();
-                    if (openAiClient == null) {
-                        return;
-                    }
-                    String response = assistantRequest.settings().enabled()
-                            ? String.join("\n", assistantService.respond(assistantRequest).lines())
-                            : openAiClient.getChatResponse(systemPrompt, context.prompt());
-                    if (!assistantRequest.settings().enabled()) {
-                        assistantService.recordDirectResponse(assistantRequest, response);
-                    }
-                    if (response == null || response.isBlank() || !trigger.accepts(response)) {
-                        return;
-                    }
-                    Component result = FormatterUtils.serializer.deserialize(npcDisplayName + ": ")
-                            .append(Component.text(response, NamedTextColor.WHITE));
-                    chatContextStore.recordBotMemory(npc.getId(), npcName, response, contextSettings);
-                    proactiveChatService.recordBotResponse();
-                    Bukkit.getScheduler().runTask(plugin, () -> deliverProactiveResponse(contextPlayer, result));
-                } catch (Exception e) {
-                    LoggerUtils.logError(e.getMessage());
-                } finally {
-                    requestGate.release(requestId);
+        UUID requestId = requestTracer.start(contextPlayer.getName(), npcName, "proactive");
+        Runnable work = () -> {
+            requestTracer.transition(requestId, AssistantRequestTracer.State.STARTED, "");
+            try {
+                OpenAiResponsesClient openAiClient = plugin.getOpenAiResponsesClient();
+                if (openAiClient == null) {
+                    requestTracer.transition(requestId, AssistantRequestTracer.State.UPSTREAM_FAILED, "client-unavailable");
+                    return;
                 }
+                String response = assistantRequest.settings().enabled()
+                        ? String.join("\n", assistantService.respond(assistantRequest).lines())
+                        : openAiClient.getChatResponse(systemPrompt, context.prompt());
+                if (!assistantRequest.settings().enabled()) {
+                    assistantService.recordDirectResponse(assistantRequest, response);
+                }
+                if (response == null || response.isBlank() || !trigger.accepts(response)) {
+                    requestTracer.transition(requestId, AssistantRequestTracer.State.REJECTED, "trigger-rejected-response");
+                    return;
+                }
+                Component result = FormatterUtils.serializer.deserialize(npcDisplayName + ": ")
+                        .append(Component.text(response, NamedTextColor.WHITE));
+                chatContextStore.recordBotMemory(npc.getId(), npcName, response, contextSettings);
+                proactiveChatService.recordBotResponse();
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    deliverProactiveResponse(contextPlayer, result);
+                    requestTracer.transition(requestId, AssistantRequestTracer.State.COMPLETED, "delivered");
+                });
+            } catch (Exception exception) {
+                requestTracer.transition(requestId, AssistantRequestTracer.State.UPSTREAM_FAILED, "exception");
+                LoggerUtils.logError(exception.getMessage());
             }
-        }.runTaskAsynchronously(plugin);
+        };
+        AssistantRequestCoordinator.Submission submission = requestCoordinator.submit(
+                requestId,
+                proactiveOwner(npc),
+                AssistantRequestCoordinator.Priority.PROACTIVE,
+                work,
+                getMaximumConcurrentRequests(),
+                0
+        );
+        if (!submission.accepted()) {
+            requestTracer.transition(requestId, AssistantRequestTracer.State.REJECTED, "direct-capacity-reserved");
+            return false;
+        }
         return true;
+    }
+
+    private UUID proactiveOwner(NPC npc) {
+        return UUID.nameUUIDFromBytes(("ailex-proactive-" + npc.getId())
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     private boolean isNpcMentioned(String chatMessage, String npcName) {
@@ -505,6 +612,59 @@ public class LLMChatListener implements Listener {
                 1,
                 32
         );
+    }
+
+    private int getMaximumQueuedRequests() {
+        FileConfiguration config = plugin.getConfig();
+        if (config == null) {
+            return DEFAULT_MAX_QUEUED_REQUESTS;
+        }
+        return Math.clamp(config.getInt(CHAT_MAX_QUEUED_REQUESTS_PATH, DEFAULT_MAX_QUEUED_REQUESTS), 1, 64);
+    }
+
+    private void sendAccessFeedback(Player source) {
+        sendConfiguredFeedback(
+                source,
+                CHAT_PATH + ".feedback.access_denied",
+                "Je kunt AIlex hier niet gebruiken."
+        );
+    }
+
+    private void sendQueuedFeedback(Player source, boolean replaced) {
+        sendConfiguredFeedback(
+                source,
+                CHAT_PATH + ".feedback." + (replaced ? "queued_replaced" : "queued"),
+                replaced
+                        ? "Ik ben nog bezig; ik pak je nieuwste bericht hierna."
+                        : "Ik ben nog even bezig; ik pak je bericht hierna."
+        );
+    }
+
+    private void sendBusyFeedback(Player source) {
+        sendConfiguredFeedback(
+                source,
+                CHAT_PATH + ".feedback.busy",
+                "Ik heb het nu te druk om dit betrouwbaar te verwerken. Probeer het zo nog eens."
+        );
+    }
+
+    private void sendFailureFeedback(Player source) {
+        sendConfiguredFeedback(
+                source,
+                CHAT_PATH + ".feedback.failure",
+                "Mijn AI-service gaf geen bruikbaar antwoord. Probeer het nog eens."
+        );
+    }
+
+    private void sendConfiguredFeedback(Player source, String path, String fallback) {
+        if (source == null || !source.isOnline()) {
+            return;
+        }
+        FileConfiguration config = plugin.getConfig();
+        String message = config == null ? fallback : config.getString(path, fallback);
+        if (message != null && !message.isBlank()) {
+            source.sendMessage(Component.text(message));
+        }
     }
 
     private void sendRateLimitFeedback(Player source) {
