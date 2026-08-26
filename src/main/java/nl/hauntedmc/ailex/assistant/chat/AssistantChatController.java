@@ -6,6 +6,7 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import nl.hauntedmc.ailex.AIlexPlugin;
 import nl.hauntedmc.ailex.assistant.application.AssistantService;
 import nl.hauntedmc.ailex.assistant.domain.AssistantReply;
+import nl.hauntedmc.ailex.assistant.infrastructure.live.PaperLiveContextEnricher;
 import nl.hauntedmc.ailex.assistant.proactive.ProactiveChatService;
 import nl.hauntedmc.ailex.assistant.proactive.ProactiveChatSettings;
 import nl.hauntedmc.ailex.assistant.proactive.ProactiveChatTrigger;
@@ -32,10 +33,10 @@ import java.util.UUID;
 /**
  * Application-facing chat coordinator.
  *
- * <p>This class deliberately owns no Bukkit metadata extraction. The main-thread call to
- * {@link AssistantService#prepare} is the single authority for selective live context, avoiding duplicate snapshots
- * and duplicate prompt tokens. Raw chat history is only appended when {@link WorkingContextPolicy} says the turn
- * needs historical context.</p>
+ * <p>This class deliberately owns no Bukkit metadata extraction. {@link AssistantService#prepare} remains the
+ * authority that decides which live sources are allowed into a prompt; {@link PaperLiveContextEnricher} only supplies
+ * bounded supplemental Paper facts for live-state questions. Raw chat history is appended only when
+ * {@link WorkingContextPolicy} says the turn needs historical context.</p>
  */
 public final class AssistantChatController implements AutoCloseable {
 
@@ -169,13 +170,13 @@ public final class AssistantChatController implements AutoCloseable {
             sendFeedback(source, "access_denied", "Je kunt AIlex hier niet gebruiken.");
             return;
         }
+        if (assistantService == null) {
+            sendFeedback(source, "failure", "Mijn AI-service is nu niet beschikbaar. Probeer het zo nog eens.");
+            return;
+        }
         if (!responseRateLimiter.tryAcquire(source.getUniqueId(), configuration.bypassRateLimit(source))) {
             chatContextStore.recordGeneralChat(source.getName(), message, contextSettings);
             sendRateLimitFeedback(source);
-            return;
-        }
-        if (assistantService == null) {
-            sendFeedback(source, "failure", "Mijn AI-service is nu niet beschikbaar. Probeer het zo nog eens.");
             return;
         }
 
@@ -189,13 +190,14 @@ public final class AssistantChatController implements AutoCloseable {
 
         try {
             String userPrompt = promptWithWorkingHistory(target, source, message, dialogue, contextSettings);
+            String liveEnrichment = PaperLiveContextEnricher.collect(source, target.npc(), message);
             AssistantService.PreparedRequest prepared = assistantService.prepare(
                     source,
                     target.npc(),
                     message,
                     target.systemPrompt(),
                     userPrompt,
-                    "",
+                    liveEnrichment,
                     dialogue.asDialogueContext()
             );
             requestTracer.transition(requestId, AssistantRequestTracer.State.PREPARED, "");
