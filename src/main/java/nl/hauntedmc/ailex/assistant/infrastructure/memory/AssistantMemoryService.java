@@ -50,6 +50,7 @@ public final class AssistantMemoryService implements AutoCloseable {
     private final File longTermFile;
     private final File migrationMarker;
     private final MemoryRepository repository;
+    private final boolean durableRepository;
     private final Map<String, MemoryRecord> activeRecords = new ConcurrentHashMap<>();
     private final Map<UUID, Map<String, Integer>> recentTopicTerms = new ConcurrentHashMap<>();
     private final ExecutorService writer;
@@ -62,6 +63,7 @@ public final class AssistantMemoryService implements AutoCloseable {
         this.longTermFile = new File(dataFolder, LONG_TERM_FILE_NAME);
         this.migrationMarker = new File(dataFolder, MIGRATION_MARKER);
         this.repository = createRepository(dataFolder);
+        this.durableRepository = repository instanceof SqliteMemoryRepository;
         this.writer = Executors.newSingleThreadExecutor(runnable -> {
             Thread thread = new Thread(runnable, "AIlex-MemoryWriter");
             thread.setDaemon(true);
@@ -456,6 +458,11 @@ public final class AssistantMemoryService implements AutoCloseable {
 
     private void migrateLegacyMemoryOnce() {
         if (migrationMarker.isFile()) {
+            return;
+        }
+        if (!durableRepository) {
+            // Never mark a legacy import complete when SQLite failed and only the volatile fail-safe is active.
+            // Keeping the marker absent lets the next healthy restart retry the original YAML migration safely.
             return;
         }
         try {
