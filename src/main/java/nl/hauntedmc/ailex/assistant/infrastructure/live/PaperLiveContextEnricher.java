@@ -54,7 +54,7 @@ public final class PaperLiveContextEnricher {
             metadata.add("player_level=" + player.getLevel() + ",progress="
                     + String.format(Locale.ROOT, "%.0f%%", player.getExp() * 100.0F));
         }
-        if (containsAny(text, "item", "hand", "holding", "vasthoud", "vast?", "hold")) {
+        if (containsAny(text, "item", "hand", "holding", "vasthoud", "vast", "hold")) {
             metadata.add("player_main_hand=" + describeItem(player.getInventory().getItemInMainHand()));
         }
         if (containsAny(text, "effect", "potion", "buff", "debuff")) {
@@ -77,7 +77,9 @@ public final class PaperLiveContextEnricher {
     }
 
     private static void appendWorld(List<String> metadata, Player player, String text) {
-        if (player.getWorld() == null) {
+        if (!containsAny(text, "biome", "bioom", "facing", "richting", "direction", "welke kant", "difficulty",
+                "moeilijkheid", "environment", "omgeving", "dimension", "dimensie", "overworld", "nether", " end",
+                "light", "licht") || player.getWorld() == null) {
             return;
         }
         if (containsAny(text, "biome", "bioom")) {
@@ -89,7 +91,7 @@ public final class PaperLiveContextEnricher {
         if (containsAny(text, "difficulty", "moeilijkheid")) {
             metadata.add("world_difficulty=" + player.getWorld().getDifficulty().name());
         }
-        if (containsAny(text, "environment", "dimension", "dimensie", "overworld", "nether", " end")) {
+        if (containsAny(text, "environment", "omgeving", "dimension", "dimensie", "overworld", "nether", " end")) {
             metadata.add("world_environment=" + player.getWorld().getEnvironment().name());
         }
         if (containsAny(text, "light", "licht")) {
