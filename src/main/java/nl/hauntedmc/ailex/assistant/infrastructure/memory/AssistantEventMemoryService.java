@@ -15,12 +15,13 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
 /**
- * Selective episodic-memory recorder. It records meaningful state transitions with short TTLs and deliberately
+ * Selective episodic-memory recorder. It records meaningful state transitions with bounded TTLs and deliberately
  * ignores high-volume events such as movement, block changes, damage ticks and ordinary chat.
  */
 public final class AssistantEventMemoryService implements Listener {
@@ -29,7 +30,7 @@ public final class AssistantEventMemoryService implements Listener {
     private static final Duration WORLD_TTL = Duration.ofHours(12);
     private static final Duration DEATH_TTL = Duration.ofDays(2);
     private static final Duration ADVANCEMENT_TTL = Duration.ofDays(30);
-    private static final Duration RELATIONSHIP_TTL = Duration.ofDays(90);
+    private static final Duration RELATIONSHIP_TTL = Duration.ofDays(365);
 
     private final AssistantMemoryService memory;
 
@@ -78,33 +79,36 @@ public final class AssistantEventMemoryService implements Listener {
         );
     }
 
-    /** Factual player↔NPC relationship state; no inferred mood, affinity or psychological profile is stored. */
+    /**
+     * Factual player↔NPC continuity. Only timestamps/count/familiarity derived from the count are stored; this is not an
+     * inferred friendship, mood or personality score.
+     */
     public void recordInteraction(UUID playerId, String npcId) {
         if (memory == null || playerId == null || npcId == null || npcId.isBlank()) {
             return;
         }
-        int previous = memory.search(playerId, npcId, "interaction count", Set.of(MemoryKind.RELATIONSHIP), 8).stream()
-                .filter(record -> record.scope() == MemoryScope.PLAYER_NPC)
+        List<MemoryRecord> relationship = memory.search(
+                playerId, npcId, "interaction relationship", Set.of(MemoryKind.RELATIONSHIP), 16
+        ).stream().filter(record -> record.scope() == MemoryScope.PLAYER_NPC).toList();
+        int previous = relationship.stream()
                 .filter(record -> record.key().equals("interaction_count"))
                 .findFirst()
                 .map(MemoryRecord::value)
                 .map(this::safeInteger)
                 .orElse(0);
-        memory.rememberTrusted(
-                MemoryScope.PLAYER_NPC,
-                playerId.toString(),
-                npcId,
-                MemoryKind.RELATIONSHIP,
-                "interaction_count",
-                String.valueOf(Math.min(previous + 1, 1_000_000)),
-                1.0D,
-                0.45D,
-                "assistant-runtime",
-                "accepted-chat",
-                0L,
-                RELATIONSHIP_TTL,
-                Set.of("relationship", "interaction")
-        );
+        long now = System.currentTimeMillis();
+        long first = relationship.stream()
+                .filter(record -> record.key().equals("first_interaction_at"))
+                .findFirst()
+                .map(MemoryRecord::value)
+                .map(this::safeLong)
+                .orElse(now);
+        int count = Math.min(previous + 1, 1_000_000);
+
+        rememberRelationship(playerId, npcId, "first_interaction_at", String.valueOf(first), 0.50D);
+        rememberRelationship(playerId, npcId, "last_interaction_at", String.valueOf(now), 0.48D);
+        rememberRelationship(playerId, npcId, "interaction_count", String.valueOf(count), 0.55D);
+        rememberRelationship(playerId, npcId, "familiarity", familiarity(count), 0.50D);
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -173,6 +177,24 @@ public final class AssistantEventMemoryService implements Listener {
         );
     }
 
+    private void rememberRelationship(UUID playerId, String npcId, String key, String value, double salience) {
+        memory.rememberTrusted(
+                MemoryScope.PLAYER_NPC,
+                playerId.toString(),
+                npcId,
+                MemoryKind.RELATIONSHIP,
+                key,
+                value,
+                1.0D,
+                salience,
+                "assistant-runtime",
+                "accepted-chat",
+                System.currentTimeMillis(),
+                RELATIONSHIP_TTL,
+                Set.of("relationship", "interaction", key)
+        );
+    }
+
     private void recordPlayerEvent(
             Player player,
             String type,
@@ -193,6 +215,27 @@ public final class AssistantEventMemoryService implements Listener {
         } catch (NumberFormatException ignored) {
             return 0;
         }
+    }
+
+    private long safeLong(String value) {
+        try {
+            return Math.max(0L, Long.parseLong(value));
+        } catch (NumberFormatException ignored) {
+            return 0L;
+        }
+    }
+
+    private String familiarity(int interactions) {
+        if (interactions >= 100) {
+            return "long_term_regular";
+        }
+        if (interactions >= 25) {
+            return "regular";
+        }
+        if (interactions >= 5) {
+            return "familiar";
+        }
+        return "acquainted";
     }
 
     private String normalizeType(String value) {
