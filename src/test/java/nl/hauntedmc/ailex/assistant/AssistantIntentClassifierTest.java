@@ -70,6 +70,42 @@ class AssistantIntentClassifierTest {
     }
 
     @Test
+    void shouldRouteFreshSemanticMemoryRecallToGroundedMemory() {
+        AssistantIntentClassifier.Analysis dutch = AssistantIntentClassifier.analyze("Wat weet je van mij?");
+        AssistantIntentClassifier.Analysis english = AssistantIntentClassifier.analyze(
+                "What do you remember about me?"
+        );
+
+        assertEquals(AssistantIntent.MEMORY_RECALL, dutch.intent());
+        assertEquals(AssistantMode.GROUNDED, dutch.mode());
+        assertEquals(AssistantIntent.MEMORY_RECALL, english.intent());
+    }
+
+    @Test
+    void shouldRouteFreshEventRecallToEpisodicMemory() {
+        AssistantIntentClassifier.Analysis dutch = AssistantIntentClassifier.analyze(
+                "Wat gebeurde er vorige keer?"
+        );
+        AssistantIntentClassifier.Analysis english = AssistantIntentClassifier.analyze(
+                "What happened last time?"
+        );
+
+        assertEquals(AssistantIntent.EVENT_RECALL, dutch.intent());
+        assertEquals(AssistantMode.GROUNDED, dutch.mode());
+        assertEquals(AssistantIntent.EVENT_RECALL, english.intent());
+    }
+
+    @Test
+    void shouldNotConfuseOrdinaryKnowledgeWithPersonalMemoryRecall() {
+        AssistantIntentClassifier.Analysis analysis = AssistantIntentClassifier.analyze(
+                "Weet je hoe ik een wolf tem in Minecraft?"
+        );
+
+        assertEquals(AssistantIntent.GAMEPLAY_HELP, analysis.intent());
+        assertEquals(AssistantMode.GROUNDED, analysis.mode());
+    }
+
+    @Test
     void shouldNotMistakeOrdinaryGameplayQuestionsForLiveState() {
         AssistantIntentClassifier.Analysis crafting = AssistantIntentClassifier.analyze(
                 "Hoe craft ik dit item?"
