@@ -27,13 +27,15 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * Local hybrid knowledge index. Ranking combines BM25, exact command/title signals, concept expansion,
- * a compact hashed dense projection, phrase matching, and redundancy suppression. No external vector DB is required.
+ * Local hybrid knowledge index. Query retrieval combines BM25, exact command/title signals, multilingual concept
+ * expansion, a compact dense projection, phrase matching and redundancy suppression. Open-ended discovery uses a
+ * separate diversity sampler so requests such as "tell me a fun fact" do not fail merely because the query has no
+ * useful lexical terms.
  */
 public final class LocalKnowledgeIndex {
 
     private static final Pattern TOKEN_SEPARATOR = Pattern.compile("[^\\p{L}\\p{N}/+]+");
-    private static final int DENSE_DIMENSIONS = 192;
+    private static final int DENSE_DIMENSIONS = 256;
     private static final Set<String> STOP_WORDS = Set.of(
             "aan", "als", "and", "are", "bij", "can", "dan", "dat", "de", "die", "dit", "een",
             "en", "for", "hauntedmc", "haunty", "het", "hoe", "ik", "in", "is", "je", "met",
@@ -68,10 +70,11 @@ public final class LocalKnowledgeIndex {
         searchCache.clear();
     }
 
+    /** Query-focused retrieval for concrete server/gameplay questions. */
     public List<KnowledgeChunk> search(String query, AssistantSettings settings) {
         String normalizedQuery = query == null ? "" : query.replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
-        String cacheKey = normalizedQuery + '|' + settings.maxChunks() + '|' + settings.maxEvidenceCharacters() + '|'
-                + settings.excludeExpired() + '|' + settings.hybridRetrieval();
+        String cacheKey = "search|" + normalizedQuery + '|' + settings.maxChunks() + '|'
+                + settings.maxEvidenceCharacters() + '|' + settings.excludeExpired() + '|' + settings.hybridRetrieval();
         CachedSearch cached = searchCache.get(cacheKey);
         if (cached != null && cached.isFresh(settings.queryCacheSeconds())) {
             return cached.results();
@@ -102,28 +105,112 @@ public final class LocalKnowledgeIndex {
         scored.sort(Comparator.comparingDouble(ScoredChunk::score).reversed()
                 .thenComparing(scoredChunk -> scoredChunk.chunk().id()));
 
-        List<KnowledgeChunk> selected = selectDiverse(scored, settings);
-        if (settings.queryCacheSeconds() > 0) {
-            searchCache.put(cacheKey, new CachedSearch(System.currentTimeMillis(), selected));
-        }
+        List<KnowledgeChunk> selected = selectDiverse(scored, settings, settings.maxChunks());
+        cache(cacheKey, selected, settings);
         return selected;
     }
 
-    private List<KnowledgeChunk> selectDiverse(List<ScoredChunk> scored, AssistantSettings settings) {
-        List<KnowledgeChunk> selected = new ArrayList<>();
-        int usedCharacters = 0;
-        for (ScoredChunk candidate : scored) {
-            KnowledgeChunk chunk = candidate.chunk();
-            int next = chunk.text().length() + 40;
-            if (selected.size() >= settings.maxChunks() || usedCharacters + next > settings.maxEvidenceCharacters()) {
+    /**
+     * Browses the knowledge corpus without requiring query overlap. Selection is deterministic for a seed, source-
+     * diverse, authority-aware and biased toward concrete positive facts instead of short negations.
+     */
+    public List<KnowledgeChunk> discover(String seed, AssistantSettings settings) {
+        String normalizedSeed = seed == null ? "" : seed.replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
+        String cacheKey = "discover|" + normalizedSeed + '|' + settings.maxChunks() + '|'
+                + settings.maxEvidenceCharacters() + '|' + settings.excludeExpired();
+        CachedSearch cached = searchCache.get(cacheKey);
+        if (cached != null && cached.isFresh(settings.queryCacheSeconds())) {
+            return cached.results();
+        }
+        if (chunks.isEmpty()) {
+            return List.of();
+        }
+
+        List<ScoredChunk> scored = new ArrayList<>();
+        for (KnowledgeChunk chunk : chunks) {
+            if (settings.excludeExpired() && chunk.expired()) {
                 continue;
             }
-            boolean nearDuplicate = selected.stream().anyMatch(existing -> tokenJaccard(existing, chunk) >= 0.82D);
+            double score = discoveryScore(chunk, normalizedSeed);
+            scored.add(new ScoredChunk(chunk, score));
+        }
+        scored.sort(Comparator.comparingDouble(ScoredChunk::score).reversed()
+                .thenComparing(scoredChunk -> scoredChunk.chunk().id()));
+
+        int discoveryLimit = Math.min(settings.maxChunks(), 8);
+        List<KnowledgeChunk> selected = selectDiverse(scored, settings, discoveryLimit);
+        cache(cacheKey, selected, settings);
+        return selected;
+    }
+
+    public int size() {
+        return chunks.size();
+    }
+
+    private void cache(String key, List<KnowledgeChunk> selected, AssistantSettings settings) {
+        if (settings.queryCacheSeconds() > 0) {
+            if (searchCache.size() > 512) {
+                searchCache.clear();
+            }
+            searchCache.put(key, new CachedSearch(System.currentTimeMillis(), selected));
+        }
+    }
+
+    private List<KnowledgeChunk> selectDiverse(
+            List<ScoredChunk> scored, AssistantSettings settings, int maximumChunks
+    ) {
+        List<KnowledgeChunk> selected = new ArrayList<>();
+        Set<String> documents = new HashSet<>();
+        Set<String> categories = new HashSet<>();
+        int usedCharacters = 0;
+
+        for (ScoredChunk candidate : scored) {
+            KnowledgeChunk chunk = candidate.chunk();
+            int next = chunk.text().length() + chunk.title().length() + 48;
+            if (selected.size() >= maximumChunks || usedCharacters + next > settings.maxEvidenceCharacters()) {
+                continue;
+            }
+            boolean nearDuplicate = selected.stream().anyMatch(existing -> tokenJaccard(existing, chunk) >= 0.78D);
             if (nearDuplicate) {
                 continue;
             }
+
+            String document = documentKey(chunk.id());
+            boolean alreadyDocument = documents.contains(document);
+            boolean alreadyCategory = !chunk.category().isBlank() && categories.contains(chunk.category());
+            int remainingCandidates = maximumChunks - selected.size();
+            if (alreadyDocument && selected.size() >= 2 && remainingCandidates > 1) {
+                continue;
+            }
+            if (alreadyCategory && selected.size() >= 3 && remainingCandidates > 1) {
+                continue;
+            }
+
             selected.add(chunk);
             usedCharacters += next;
+            documents.add(document);
+            if (!chunk.category().isBlank()) {
+                categories.add(chunk.category());
+            }
+        }
+
+        // If strict diversity left capacity unused, fill remaining slots by score while still suppressing duplicates.
+        if (selected.size() < maximumChunks) {
+            for (ScoredChunk candidate : scored) {
+                KnowledgeChunk chunk = candidate.chunk();
+                if (selected.contains(chunk)) {
+                    continue;
+                }
+                int next = chunk.text().length() + chunk.title().length() + 48;
+                if (selected.size() >= maximumChunks || usedCharacters + next > settings.maxEvidenceCharacters()) {
+                    break;
+                }
+                if (selected.stream().anyMatch(existing -> tokenJaccard(existing, chunk) >= 0.78D)) {
+                    continue;
+                }
+                selected.add(chunk);
+                usedCharacters += next;
+            }
         }
         return List.copyOf(selected);
     }
@@ -170,7 +257,31 @@ public final class LocalKnowledgeIndex {
         }
         double denseSimilarity = cosine(queryVector, denseVector(chunk.tokens()));
         boost += Math.max(0.0D, denseSimilarity) * 3.2D;
+        if ("official".equals(chunk.authority())) {
+            boost += 0.25D;
+        }
         return boost;
+    }
+
+    private double discoveryScore(KnowledgeChunk chunk, String seed) {
+        String body = chunk.text().toLowerCase(Locale.ROOT);
+        double authority = "official".equals(chunk.authority()) ? 1.0D : 0.55D;
+        double detail = Math.min(1.0D, chunk.tokens().size() / 24.0D);
+        double concrete = containsAny(body, "/", "can ", "has ", "provides ", "use ", "supports ", "wordt ",
+                "heeft ", "kan ", "gebruik ", "players ", "spelers ") ? 0.35D : 0.0D;
+        double negativePenalty = isMostlyNegative(chunk) ? 0.65D : 0.0D;
+        int hash = (seed + '|' + chunk.id()).hashCode();
+        double rotation = Math.floorMod(hash, 10_000) / 10_000.0D;
+        return authority * 0.8D + detail * 0.45D + concrete + rotation * 0.7D - negativePenalty;
+    }
+
+    private boolean isMostlyNegative(KnowledgeChunk chunk) {
+        String text = chunk.text().toLowerCase(Locale.ROOT);
+        boolean negative = containsAny(text, " is not ", " isn't ", " not active", " geen ", " niet ",
+                "does not", "cannot", "can't ");
+        boolean positive = containsAny(text, " can ", " has ", " use ", " provides ", " supports ", " kan ",
+                " heeft ", " gebruik ", " biedt ");
+        return negative && !positive;
     }
 
     private double minimumScore(List<String> queryTokens) {
@@ -207,6 +318,9 @@ public final class LocalKnowledgeIndex {
             addFeature(vector, tokens.get(index), 1.0D);
             if (index + 1 < tokens.size()) {
                 addFeature(vector, tokens.get(index) + '|' + tokens.get(index + 1), 0.65D);
+            }
+            if (index + 2 < tokens.size()) {
+                addFeature(vector, tokens.get(index) + '|' + tokens.get(index + 2), 0.25D);
             }
         }
         return vector;
@@ -251,6 +365,20 @@ public final class LocalKnowledgeIndex {
 
     private int frequency(List<String> tokens, String expected) {
         return (int) tokens.stream().filter(expected::equals).count();
+    }
+
+    private String documentKey(String id) {
+        int separator = id == null ? -1 : id.lastIndexOf('.');
+        return separator <= 0 ? String.valueOf(id) : id.substring(0, separator);
+    }
+
+    private boolean containsAny(String text, String... values) {
+        for (String value : values) {
+            if (text.contains(value)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private record CachedSearch(long createdAtMillis, List<KnowledgeChunk> results) {
@@ -321,7 +449,9 @@ public final class LocalKnowledgeIndex {
             }
             String title = sectionNumber == 0 ? parts.title() : firstLine(text, parts.title());
             String id = parts.id() + "." + sectionNumber++;
-            result.add(new KnowledgeChunk(id, title, parts.aliases(), stripHeading(text), parts.expired()));
+            result.add(new KnowledgeChunk(
+                    id, title, parts.aliases(), stripHeading(text), parts.expired(), parts.category(), parts.authority()
+            ));
         }
         return result;
     }
@@ -370,7 +500,13 @@ public final class LocalKnowledgeIndex {
         String title = metadata.getOrDefault("title", defaultTitle);
         List<String> aliases = tokenize(metadata.getOrDefault("aliases", ""));
         boolean expired = isExpired(metadata.get("expires"));
-        return new DocumentParts(id, title, aliases, body, expired);
+        String category = cleanMetadata(metadata.getOrDefault("category", "general"));
+        String authority = cleanMetadata(metadata.getOrDefault("authority", source.equals("config.knowledge") ? "official" : "reviewed"));
+        return new DocumentParts(id, title, aliases, body, expired, category, authority);
+    }
+
+    private String cleanMetadata(String value) {
+        return value == null ? "" : value.replaceAll("[^A-Za-z0-9._-]+", "-").toLowerCase(Locale.ROOT);
     }
 
     private boolean isExpired(String value) {
@@ -429,7 +565,9 @@ public final class LocalKnowledgeIndex {
                 Set.of("vanish", "invisible", "onzichtbaar"),
                 Set.of("combat", "combattag", "combatlog", "pvp"),
                 Set.of("lottery", "lotto", "loterij"),
-                Set.of("survival", "creative", "minigames", "gamemode", "server")
+                Set.of("survival", "creative", "minigames", "gamemode", "server"),
+                Set.of("fun", "interesting", "feit", "feitje", "fact", "weetje"),
+                Set.of("biome", "bioom", "environment", "dimension", "world", "wereld")
         );
         Map<String, Set<String>> map = new HashMap<>();
         for (Set<String> group : groups) {
@@ -441,17 +579,42 @@ public final class LocalKnowledgeIndex {
     }
 
     /** Source-attributed, player-safe article fragment. */
-    public record KnowledgeChunk(String id, String title, List<String> aliases, String text, boolean expired) {
+    public record KnowledgeChunk(
+            String id,
+            String title,
+            List<String> aliases,
+            String text,
+            boolean expired,
+            String category,
+            String authority
+    ) {
+        public KnowledgeChunk(String id, String title, List<String> aliases, String text, boolean expired) {
+            this(id, title, aliases, text, expired, "general", "reviewed");
+        }
+
         public KnowledgeChunk {
-            aliases = List.copyOf(aliases);
+            id = id == null ? "unknown" : id.trim();
+            title = title == null ? "" : title.trim();
+            aliases = aliases == null ? List.of() : List.copyOf(aliases);
+            text = text == null ? "" : text.trim();
+            category = category == null ? "general" : category.trim().toLowerCase(Locale.ROOT);
+            authority = authority == null ? "reviewed" : authority.trim().toLowerCase(Locale.ROOT);
         }
 
         private List<String> tokens() {
-            return tokenize(title + " " + String.join(" ", aliases) + " " + text);
+            return tokenize(title + " " + String.join(" ", aliases) + " " + category + " " + text);
         }
     }
 
-    private record DocumentParts(String id, String title, List<String> aliases, String body, boolean expired) {
+    private record DocumentParts(
+            String id,
+            String title,
+            List<String> aliases,
+            String body,
+            boolean expired,
+            String category,
+            String authority
+    ) {
     }
 
     private record ScoredChunk(KnowledgeChunk chunk, double score) {
