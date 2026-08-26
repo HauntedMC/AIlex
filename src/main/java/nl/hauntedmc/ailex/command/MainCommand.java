@@ -1,41 +1,37 @@
 package nl.hauntedmc.ailex.command;
 
 import net.kyori.adventure.text.Component;
-
 import nl.hauntedmc.ailex.AIlexPlugin;
 import nl.hauntedmc.ailex.ai.action.ActionContext;
 import nl.hauntedmc.ailex.ai.action.Actionable;
-import nl.hauntedmc.ailex.config.ConfigHandler;
 import nl.hauntedmc.ailex.ai.movement.behaviour.MovementBehaviour;
+import nl.hauntedmc.ailex.application.registry.BuiltinTypeRegistry;
+import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryKind;
+import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryRecord;
+import nl.hauntedmc.ailex.config.ConfigHandler;
+import nl.hauntedmc.ailex.listener.llm.AssistantRequestTracer;
 import nl.hauntedmc.ailex.npc.NPC;
 import nl.hauntedmc.ailex.npc.NPCData;
 import nl.hauntedmc.ailex.util.LoggerUtils;
-import nl.hauntedmc.ailex.application.registry.BuiltinTypeRegistry;
-
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
-
 import org.jetbrains.annotations.NotNull;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.stream.Collectors;
 
-/**
- * Main command for the AIlex plugin.
- * This command is used to create, destroy, and interact with AIlex NPCs.
- * The command has the following subcommands:
- * - create: creates a new AIlex NPC at the player's location
- * - destroy: destroys an existing AIlex NPC
- * - action: performs an action on an existing AIlex NPC
- * - set: sets a property of an existing AIlex NPC
- * - save: saves an existing AIlex NPC to the data file
- * - reload: reloads the AIlex configuration
- * - currentaction: gets the current action of an existing AIlex NPC
- * - cancelaction: cancels the current action of an existing AIlex NPC
- */
+/** Main administrative command for NPC management and assistant diagnostics. */
 public class MainCommand implements CommandExecutor, TabCompleter {
 
     private static final String ADMIN_PERMISSION = "ailex.admin";
@@ -44,10 +40,6 @@ public class MainCommand implements CommandExecutor, TabCompleter {
     private final Map<String, Class<? extends Actionable>> actionMap;
     private final Map<String, Class<? extends NPC>> npcTypeMap;
 
-    /**
-     * Constructor for the MainCommand class
-     * @param plugin The AIlex plugin
-     */
     public MainCommand(AIlexPlugin plugin) {
         this.plugin = plugin;
         behaviourMap = BuiltinTypeRegistry.getBehaviourMap();
@@ -55,317 +47,346 @@ public class MainCommand implements CommandExecutor, TabCompleter {
         npcTypeMap = BuiltinTypeRegistry.getNPCTypeMap();
     }
 
-    /**
-     * Executes the command with the given sender and arguments.
-     *
-     * @param sender the command sender
-     * @param command the command being executed
-     * @param label the command label used by the sender
-     * @param args the supplied command arguments
-     * @return whether the command was handled
-     */
     @Override
-    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
-                             @NotNull String[] args) {
-        if (sender instanceof Player player) {
-            if (!player.hasPermission(ADMIN_PERMISSION)) {
-                sendCommandMessage(player, "You do not have permission to manage AIlex.");
-                return true;
-            }
-
-            if (args.length == 1) {
-                if (args[0].equalsIgnoreCase("reload")) {
-                    ConfigHandler.getInstance().reload();
-                    plugin.reloadOpenAiResponsesClient();
-                    LoggerUtils.logInfo("AIlex configuration reloaded.");
-                    sendCommandMessage(player, "AIlex configuration reloaded.");
-                    return true;
-                }
-            }
-
-            if (args.length >= 1 && args[0].equalsIgnoreCase("ai")) {
-                String action = args.length >= 2 ? args[1].toLowerCase(Locale.ROOT) : "status";
-                if (plugin.getAssistantService() == null) {
-                    sendCommandMessage(player, "Assistant engine is unavailable.");
-                    return true;
-                }
-                switch (action) {
-                    case "status" -> sendCommandMessage(player, "Assistant " + plugin.getAssistantService().status());
-                    case "rebuild-index" -> {
-                        plugin.getAssistantService().reload();
-                        sendCommandMessage(player, "Assistant knowledge index rebuilt.");
-                    }
-                    default -> sendCommandMessage(player, "Usage: /ailex ai <status|rebuild-index>");
-                }
-                return true;
-            }
-
-            if (args.length >= 2) {
-                int id;
-
-                try {
-                    id = Integer.parseInt(args[1]);
-                } catch (NumberFormatException e) {
-                    sendCommandMessage(player, "Invalid ID.");
-                    return true;
-                }
-
-                switch (args[0].toLowerCase()) {
-                    case "action":
-                        if (args.length >= 3) {
-                            String actionType = args[2].toLowerCase();
-                            if (plugin.getNpcManager().getNPCRegistry().containsKey(id)) {
-                                Class<? extends Actionable> actionClass = actionMap.get(actionType);
-                                if (actionClass != null) {
-                                    try {
-                                        ActionContext actionContext = new ActionContext.Builder().setTargetEntity(player).setTargetLocation(player.getLocation()).setPriority(1).build();
-                                        Actionable action = actionClass.getDeclaredConstructor(ActionContext.class).newInstance(actionContext);
-                                        plugin.getNpcManager().getNPCRegistry().get(id).queueAction(action);
-                                        sendCommandMessage(player, "NPC " + id + " is doing action "
-                                                + action.getFriendlyName() + ".");
-                                    } catch (Exception e) {
-                                        sendCommandMessage(player, "Failed to start action: " + e.getMessage());
-                                    }
-                                } else {
-                                    sendCommandMessage(player, "Unknown action.");
-                                }
-                            } else {
-                                sendCommandMessage(player, "NPC " + id + " does not exist.");
-                            }
-                        } else {
-                            sendCommandMessage(player, "Usage: /ailex action <id> <move>");
-                        }
-                        return true;
-
-                    case "cancelaction":
-                        if (plugin.getNpcManager().getNPCRegistry().containsKey(id)) {
-                            Actionable currentAction = plugin.getNpcManager().getNPCRegistry().get(id).getCurrentAction();
-                            if (currentAction != null) {
-                                sendCommandMessage(player, "NPC " + id + " canceled action: "
-                                        + currentAction.getFriendlyName());
-                                plugin.getNpcManager().getNPCRegistry().get(id).cancelCurrentAction();
-                            } else {
-                                sendCommandMessage(player, "NPC " + id + " is currently idle.");
-                            }
-                        } else {
-                            sendCommandMessage(player, "NPC " + id + " does not exist.");
-                        }
-                        return true;
-
-                    case "create":
-                        if (args.length == 4) {
-                            String type = args[2].toLowerCase();
-                            String name = args[3];
-                            Class<? extends NPC> npcClass = npcTypeMap.get(type);
-                            if (npcClass != null) {
-                                NPCData npcData = new NPCData(
-                                        id,
-                                        name,
-                                        player.getLocation(),
-                                        npcClass.getName(),
-                                        ConfigHandler.getInstance().getDefaultNPCProperties()
-                                );
-                                try {
-                                    plugin.getNpcManager().createNPC(npcClass, npcData);
-                                    sendCommandMessage(player, "NPC " + id + " of type " + type
-                                            + " created at your location.");
-                                }
-                                catch (IllegalArgumentException e) {
-                                    sendCommandMessage(player, "Failed to create NPC: " + e.getMessage());
-                                }
-                            } else {
-                                sendCommandMessage(player, "Unknown NPC type.");
-                            }
-                        } else {
-                            sendCommandMessage(player, "Usage: /ailex create <id> <type> <name>");
-                        }
-                        return true;
-
-                    case "currentaction":
-                        if (plugin.getNpcManager().getNPCRegistry().containsKey(id)) {
-                            Actionable currentAction = plugin.getNpcManager().getNPCRegistry().get(id).getCurrentAction();
-                            if (currentAction != null) {
-                                sendCommandMessage(player, "NPC " + id + " is executing action: "
-                                        + currentAction.getFriendlyName() + ".");
-                            } else {
-                                sendCommandMessage(player, "NPC " + id + " is currently idle.");
-                            }
-                        } else {
-                            sendCommandMessage(player, "NPC " + id + " does not exist.");
-                        }
-                        return true;
-
-                    case "remove":
-                        try {
-                            plugin.getNpcManager().removeNPC(id);
-                            sendCommandMessage(player, "NPC " + id + " has been removed.");
-                        }
-                        catch (IllegalArgumentException e) {
-                            sendCommandMessage(player, "Failed to remove NPC: " + e.getMessage());
-                        }
-                        return true;
-
-                    case "save":
-                        try {
-                            plugin.getNpcManager().saveNPC(id);
-                            sendCommandMessage(player, "NPC " + id + " has been saved.");
-                        }
-                        catch (IllegalArgumentException e) {
-                            sendCommandMessage(player, "Failed to save NPC: " + e.getMessage());
-                        }
-                        return true;
-
-                    case "set":
-                        if (args.length >= 4) {
-                            String settingType = args[2].toLowerCase();
-                            String option = args[3].toLowerCase();
-                            if (plugin.getNpcManager().getNPCRegistry().containsKey(id)) {
-                                switch (settingType) {
-                                    case "movebehaviour":
-                                        Class<? extends MovementBehaviour> behaviourClass = behaviourMap.get(option);
-                                        if (behaviourClass != null) {
-                                            try {
-                                                MovementBehaviour behaviour = behaviourClass.getDeclaredConstructor().newInstance();
-                                                plugin.getNpcManager().getNPCRegistry().get(id).setMovementBehaviour(behaviour);
-                                                sendCommandMessage(player, "Set movement behaviour of NPC " + id
-                                                        + " to " + option + ".");
-                                            } catch (Exception e) {
-                                                sendCommandMessage(player, "Failed to set behaviour: " + e.getMessage());
-                                            }
-                                        } else {
-                                            sendCommandMessage(player, "Unknown behaviour.");
-                                        }
-                                        break;
-                                    default:
-                                        sendCommandMessage(player, "Unknown setting.");
-                                }
-                            } else {
-                                sendCommandMessage(player, "NPC " + id + " does not exist.");
-                            }
-                        } else {
-                            sendCommandMessage(player, "Usage: /ailex set <id> <movebehaviour> <>");
-                        }
-                        return true;
-
-                    default:
-                        sendCommandMessage(player, "Unknown command.");
-                }
-            } else {
-                sendCommandMessage(player, "Usage: /ailex <subcommand>");
-            }
-        } else {
+    public boolean onCommand(
+            @NotNull CommandSender sender,
+            @NotNull Command command,
+            @NotNull String label,
+            @NotNull String[] args
+    ) {
+        if (!(sender instanceof Player player)) {
             sender.sendMessage(Component.text("[AIlex] This command can only be used by a player."));
+            return true;
+        }
+        if (!player.hasPermission(ADMIN_PERMISSION)) {
+            sendCommandMessage(player, "You do not have permission to manage AIlex.");
+            return true;
+        }
+        if (args.length == 0) {
+            sendCommandMessage(player, "Usage: /ailex <subcommand>");
+            return true;
         }
 
+        String subcommand = args[0].toLowerCase(Locale.ROOT);
+        if ("reload".equals(subcommand) && args.length == 1) {
+            ConfigHandler.getInstance().reload();
+            plugin.reloadOpenAiResponsesClient();
+            LoggerUtils.logInfo("AIlex configuration reloaded.");
+            sendCommandMessage(player, "AIlex configuration reloaded.");
+            return true;
+        }
+        if ("ai".equals(subcommand)) {
+            handleAssistantCommand(player, args);
+            return true;
+        }
+        if ("trace".equals(subcommand)) {
+            handleTraceCommand(player, args);
+            return true;
+        }
+        if ("memory".equals(subcommand)) {
+            handleMemoryCommand(player, args);
+            return true;
+        }
+
+        if (args.length < 2) {
+            sendCommandMessage(player, "Usage: /ailex <subcommand>");
+            return true;
+        }
+        int id;
+        try {
+            id = Integer.parseInt(args[1]);
+        } catch (NumberFormatException exception) {
+            sendCommandMessage(player, "Invalid ID.");
+            return true;
+        }
+
+        switch (subcommand) {
+            case "action" -> handleAction(player, id, args);
+            case "cancelaction" -> handleCancelAction(player, id);
+            case "create" -> handleCreate(player, id, args);
+            case "currentaction" -> handleCurrentAction(player, id);
+            case "remove" -> handleRemove(player, id);
+            case "save" -> handleSave(player, id);
+            case "set" -> handleSet(player, id, args);
+            default -> sendCommandMessage(player, "Unknown command.");
+        }
         return true;
+    }
+
+    private void handleAssistantCommand(Player player, String[] args) {
+        String action = args.length >= 2 ? args[1].toLowerCase(Locale.ROOT) : "status";
+        if (plugin.getAssistantService() == null) {
+            sendCommandMessage(player, "Assistant engine is unavailable.");
+            return;
+        }
+        switch (action) {
+            case "status" -> {
+                StringBuilder status = new StringBuilder("Assistant ").append(plugin.getAssistantService().status());
+                AssistantRequestTracer tracer = plugin.getAssistantRequestTracer();
+                if (tracer != null) {
+                    status.append(", active_requests=").append(tracer.activeCount());
+                }
+                sendCommandMessage(player, status.toString());
+            }
+            case "rebuild-index" -> {
+                plugin.getAssistantService().reload();
+                sendCommandMessage(player, "Assistant knowledge and memory indexes reloaded.");
+            }
+            default -> sendCommandMessage(player, "Usage: /ailex ai <status|rebuild-index>");
+        }
+    }
+
+    private void handleTraceCommand(Player player, String[] args) {
+        AssistantRequestTracer tracer = plugin.getAssistantRequestTracer();
+        if (tracer == null) {
+            sendCommandMessage(player, "Assistant request tracer is unavailable.");
+            return;
+        }
+        if (args.length >= 2 && !"recent".equalsIgnoreCase(args[1])) {
+            sendCommandMessage(player, "Usage: /ailex trace recent [player] [limit]");
+            return;
+        }
+        String requester = args.length >= 3 ? args[2] : "";
+        int limit = args.length >= 4 ? parseBounded(args[3], 10, 1, 30) : 10;
+        List<AssistantRequestTracer.TraceSnapshot> matches = tracer.recent(256).stream()
+                .filter(trace -> requester.isBlank() || trace.requester().equalsIgnoreCase(requester))
+                .sorted(Comparator.comparingLong(AssistantRequestTracer.TraceSnapshot::latencyMillis).reversed())
+                .limit(limit)
+                .toList();
+        if (matches.isEmpty()) {
+            sendCommandMessage(player, requester.isBlank() ? "No recent assistant traces." : "No recent traces for " + requester + '.');
+            return;
+        }
+        sendCommandMessage(player, "Recent assistant traces (" + matches.size() + "):");
+        for (AssistantRequestTracer.TraceSnapshot trace : matches) {
+            String id = trace.requestId().toString().substring(0, 8);
+            String detail = trace.detail().isBlank() ? "" : " detail=" + trace.detail();
+            sendCommandMessage(player, id + " " + trace.requester() + "→" + trace.npc()
+                    + " " + trace.kind() + " " + trace.state().name().toLowerCase(Locale.ROOT)
+                    + " " + trace.latencyMillis() + "ms" + detail);
+        }
+    }
+
+    private void handleMemoryCommand(Player player, String[] args) {
+        if (plugin.getAssistantMemoryService() == null) {
+            sendCommandMessage(player, "Assistant Memory V2 is unavailable.");
+            return;
+        }
+        List<MemoryRecord> records = plugin.getAssistantMemoryService().activeSnapshot();
+        Map<MemoryKind, Long> byKind = new EnumMap<>(MemoryKind.class);
+        records.forEach(record -> byKind.merge(record.kind(), 1L, Long::sum));
+        String counts = Arrays.stream(MemoryKind.values())
+                .map(kind -> kind.name().toLowerCase(Locale.ROOT) + '=' + byKind.getOrDefault(kind, 0L))
+                .collect(Collectors.joining(", "));
+        sendCommandMessage(player, "Memory V2 active_records=" + records.size() + " (" + counts + ")");
+        if (args.length >= 2 && "recent".equalsIgnoreCase(args[1])) {
+            records.stream().limit(8).forEach(record -> sendCommandMessage(
+                    player,
+                    record.scope().name().toLowerCase(Locale.ROOT) + '/' + record.kind().name().toLowerCase(Locale.ROOT)
+                            + " key=" + record.key() + " confidence=" + String.format(Locale.ROOT, "%.2f", record.confidence())
+                            + " salience=" + String.format(Locale.ROOT, "%.2f", record.salience())
+                            + " source=" + record.sourceType()
+            ));
+        }
+    }
+
+    private void handleAction(Player player, int id, String[] args) {
+        if (args.length < 3) {
+            sendCommandMessage(player, "Usage: /ailex action <id> <move>");
+            return;
+        }
+        NPC npc = npc(id, player);
+        if (npc == null) {
+            return;
+        }
+        Class<? extends Actionable> actionClass = actionMap.get(args[2].toLowerCase(Locale.ROOT));
+        if (actionClass == null) {
+            sendCommandMessage(player, "Unknown action.");
+            return;
+        }
+        try {
+            ActionContext context = new ActionContext.Builder()
+                    .setTargetEntity(player).setTargetLocation(player.getLocation()).setPriority(1).build();
+            Actionable action = actionClass.getDeclaredConstructor(ActionContext.class).newInstance(context);
+            npc.queueAction(action);
+            sendCommandMessage(player, "NPC " + id + " is doing action " + action.getFriendlyName() + ".");
+        } catch (Exception exception) {
+            sendCommandMessage(player, "Failed to start action: " + exception.getMessage());
+        }
+    }
+
+    private void handleCancelAction(Player player, int id) {
+        NPC npc = npc(id, player);
+        if (npc == null) {
+            return;
+        }
+        Actionable current = npc.getCurrentAction();
+        if (current == null) {
+            sendCommandMessage(player, "NPC " + id + " is currently idle.");
+            return;
+        }
+        sendCommandMessage(player, "NPC " + id + " canceled action: " + current.getFriendlyName());
+        npc.cancelCurrentAction();
+    }
+
+    private void handleCreate(Player player, int id, String[] args) {
+        if (args.length != 4) {
+            sendCommandMessage(player, "Usage: /ailex create <id> <type> <name>");
+            return;
+        }
+        String type = args[2].toLowerCase(Locale.ROOT);
+        Class<? extends NPC> npcClass = npcTypeMap.get(type);
+        if (npcClass == null) {
+            sendCommandMessage(player, "Unknown NPC type.");
+            return;
+        }
+        NPCData data = new NPCData(
+                id, args[3], player.getLocation(), npcClass.getName(), ConfigHandler.getInstance().getDefaultNPCProperties()
+        );
+        try {
+            plugin.getNpcManager().createNPC(npcClass, data);
+            sendCommandMessage(player, "NPC " + id + " of type " + type + " created at your location.");
+        } catch (IllegalArgumentException exception) {
+            sendCommandMessage(player, "Failed to create NPC: " + exception.getMessage());
+        }
+    }
+
+    private void handleCurrentAction(Player player, int id) {
+        NPC npc = npc(id, player);
+        if (npc == null) {
+            return;
+        }
+        Actionable current = npc.getCurrentAction();
+        sendCommandMessage(player, current == null
+                ? "NPC " + id + " is currently idle."
+                : "NPC " + id + " is executing action: " + current.getFriendlyName() + ".");
+    }
+
+    private void handleRemove(Player player, int id) {
+        try {
+            plugin.getNpcManager().removeNPC(id);
+            sendCommandMessage(player, "NPC " + id + " has been removed.");
+        } catch (IllegalArgumentException exception) {
+            sendCommandMessage(player, "Failed to remove NPC: " + exception.getMessage());
+        }
+    }
+
+    private void handleSave(Player player, int id) {
+        try {
+            plugin.getNpcManager().saveNPC(id);
+            sendCommandMessage(player, "NPC " + id + " has been saved.");
+        } catch (IllegalArgumentException exception) {
+            sendCommandMessage(player, "Failed to save NPC: " + exception.getMessage());
+        }
+    }
+
+    private void handleSet(Player player, int id, String[] args) {
+        if (args.length < 4) {
+            sendCommandMessage(player, "Usage: /ailex set <id> <movebehaviour> <value>");
+            return;
+        }
+        NPC npc = npc(id, player);
+        if (npc == null) {
+            return;
+        }
+        if (!"movebehaviour".equalsIgnoreCase(args[2])) {
+            sendCommandMessage(player, "Unknown setting.");
+            return;
+        }
+        Class<? extends MovementBehaviour> behaviourClass = behaviourMap.get(args[3].toLowerCase(Locale.ROOT));
+        if (behaviourClass == null) {
+            sendCommandMessage(player, "Unknown behaviour.");
+            return;
+        }
+        try {
+            MovementBehaviour behaviour = behaviourClass.getDeclaredConstructor().newInstance();
+            npc.setMovementBehaviour(behaviour);
+            sendCommandMessage(player, "Set movement behaviour of NPC " + id + " to " + args[3].toLowerCase(Locale.ROOT) + ".");
+        } catch (Exception exception) {
+            sendCommandMessage(player, "Failed to set behaviour: " + exception.getMessage());
+        }
+    }
+
+    private NPC npc(int id, Player player) {
+        NPC npc = plugin.getNpcManager().getNPCRegistry().get(id);
+        if (npc == null) {
+            sendCommandMessage(player, "NPC " + id + " does not exist.");
+        }
+        return npc;
+    }
+
+    private int parseBounded(String value, int fallback, int minimum, int maximum) {
+        try {
+            return Math.clamp(Integer.parseInt(value), minimum, maximum);
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
     }
 
     private void sendCommandMessage(Player player, String message) {
         player.sendMessage(Component.text("[AIlex] " + message));
     }
 
-    /**
-     * Suggests possible completions for the command based on the arguments provided.
-     * TODO: Also get smart tips
-     * @param sender the command sender
-     * @param command the command being completed
-     * @param alias the command label used by the sender
-     * @param args the arguments of the command including repeated spaces
-     * @return a collection of possible completions for the command
-     */
     @Override
-    public @NotNull List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
-                                                @NotNull String alias, @NotNull String[] args) {
-        final List<String> subcommands = Arrays.asList( "action",
-                                                        "ai",
-                                                        "cancelaction",
-                                                        "create",
-                                                        "currentaction",
-                                                        "remove",
-                                                        "reload",
-                                                        "save",
-                                                        "set");
-        final List<String> actions = new ArrayList<>(actionMap.keySet());
-        final List<String> settings = Arrays.asList("movebehaviour");
-        final List<String> behaviours = new ArrayList<>(behaviourMap.keySet());
-        final List<String> npcTypes = new ArrayList<>(npcTypeMap.keySet());
-
-        // Return subcommands if no arguments are provided
+    public @NotNull List<String> onTabComplete(
+            @NotNull CommandSender sender,
+            @NotNull Command command,
+            @NotNull String alias,
+            @NotNull String[] args
+    ) {
+        List<String> subcommands = List.of(
+                "action", "ai", "cancelaction", "create", "currentaction", "memory", "remove", "reload", "save", "set", "trace"
+        );
         if (args.length == 0) {
             return new ArrayList<>(subcommands);
         }
-
         String subcommand = args[0].toLowerCase(Locale.ROOT);
-
         if (args.length == 1) {
-            if (subcommands.contains(subcommand) && !subcommand.equals("reload")) {
+            if (requiresNpcId(subcommand)) {
                 return suggestNpcIds("");
             }
             return filterByPrefix(subcommands, args[0]);
         }
-
         if ("ai".equals(subcommand)) {
-            return args.length == 2 ? filterByPrefix(Arrays.asList("status", "rebuild-index"), args[1]) : List.of();
+            return args.length == 2 ? filterByPrefix(List.of("status", "rebuild-index"), args[1]) : List.of();
         }
-
-        switch (subcommand) {
-            case "action":
-                if (args.length == 2) {
-                    return suggestNpcIds(args[1]);
-                }
-                if (args.length == 3) {
-                    return filterByPrefix(actions, args[2]);
-                }
-                return List.of();
-
-            case "cancelaction":
-            case "currentaction":
-            case "remove":
-            case "save":
-                if (args.length == 2) {
-                    return suggestNpcIds(args[1]);
-                }
-                return List.of();
-
-            case "create":
-                if (args.length == 2) {
-                    return suggestNpcIds(args[1]);
-                }
-                if (args.length == 3) {
-                    return filterByPrefix(npcTypes, args[2]);
-                }
-                return List.of();
-
-            case "set":
-                if (args.length == 2) {
-                    return suggestNpcIds(args[1]);
-                }
-                if (args.length == 3) {
-                    return filterByPrefix(settings, args[2]);
-                }
-                if (args.length == 4 && "movebehaviour".equalsIgnoreCase(args[2])) {
-                    return filterByPrefix(behaviours, args[3]);
-                }
-                return List.of();
-
-            default:
-                return List.of();
+        if ("trace".equals(subcommand)) {
+            return args.length == 2 ? filterByPrefix(List.of("recent"), args[1]) : List.of();
         }
+        if ("memory".equals(subcommand)) {
+            return args.length == 2 ? filterByPrefix(List.of("status", "recent"), args[1]) : List.of();
+        }
+        return switch (subcommand) {
+            case "action" -> args.length == 2 ? suggestNpcIds(args[1])
+                    : args.length == 3 ? filterByPrefix(new ArrayList<>(actionMap.keySet()), args[2]) : List.of();
+            case "cancelaction", "currentaction", "remove", "save" ->
+                    args.length == 2 ? suggestNpcIds(args[1]) : List.of();
+            case "create" -> args.length == 2 ? suggestNpcIds(args[1])
+                    : args.length == 3 ? filterByPrefix(new ArrayList<>(npcTypeMap.keySet()), args[2]) : List.of();
+            case "set" -> args.length == 2 ? suggestNpcIds(args[1])
+                    : args.length == 3 ? filterByPrefix(List.of("movebehaviour"), args[2])
+                    : args.length == 4 && "movebehaviour".equalsIgnoreCase(args[2])
+                    ? filterByPrefix(new ArrayList<>(behaviourMap.keySet()), args[3]) : List.of();
+            default -> List.of();
+        };
+    }
+
+    private boolean requiresNpcId(String subcommand) {
+        return List.of("action", "cancelaction", "create", "currentaction", "remove", "save", "set").contains(subcommand);
     }
 
     private List<String> suggestNpcIds(String prefix) {
+        if (plugin.getNpcManager() == null) {
+            return List.of();
+        }
         return filterByPrefix(
-                plugin.getNpcManager().getNPCRegistry().keySet().stream()
-                        .map(String::valueOf)
-                        .collect(Collectors.toList()),
+                plugin.getNpcManager().getNPCRegistry().keySet().stream().map(String::valueOf).collect(Collectors.toList()),
                 prefix
         );
     }
 
     private List<String> filterByPrefix(Collection<String> values, String prefix) {
-        String valuePrefix = prefix == null ? "" : prefix.toLowerCase(Locale.ROOT);
-        return values.stream()
-                .filter(value -> value.toLowerCase(Locale.ROOT).startsWith(valuePrefix))
-                .collect(Collectors.toList());
+        String normalized = prefix == null ? "" : prefix.toLowerCase(Locale.ROOT);
+        return values.stream().filter(value -> value.toLowerCase(Locale.ROOT).startsWith(normalized)).toList();
     }
 }
