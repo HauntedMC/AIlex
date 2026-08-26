@@ -33,6 +33,27 @@ public final class ProactiveChatService {
         this.lastPlayerMessageMillis = new AtomicLong(now);
     }
 
+    /**
+     * Returns whether the current unaddressed message is likely part of a player-to-player conversation.
+     * This does not record the current message; callers that route it as ambient chat should subsequently call
+     * {@link #onChat(Player, String, Supplier, TriggerConsumer)}, which records it exactly once.
+     */
+    public boolean isLikelyPlayerConversation(
+            Player source,
+            String message,
+            Collection<? extends Player> onlinePlayers
+    ) {
+        ProactiveChatSettings.QuestionSettings questions = settingsSupplier.get().questions();
+        return conversationTracker.isLikelyConversation(
+                source,
+                message,
+                onlinePlayers,
+                currentTimeMillis.getAsLong(),
+                questions.conversationWindowMillis(),
+                questions.minimumSpeakerAlternations()
+        );
+    }
+
     public void onChat(
             Player source,
             String message,
