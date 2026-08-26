@@ -8,8 +8,8 @@ import java.util.EnumSet;
 import java.util.Set;
 
 /**
- * Chooses the main-thread snapshot ceiling. Direct prompt exposure still uses the smaller deterministic plan; this
- * ceiling only lets the asynchronous read-agent inspect another already-authorized source without touching Bukkit.
+ * Chooses the main-thread snapshot ceiling. Direct prompt exposure still uses the smaller deterministic/semantic plan;
+ * the ceiling only lets asynchronous reasoning refine an ambiguous information need without touching Bukkit off-thread.
  */
 public final class AssistantLiveCapturePolicy {
 
@@ -27,8 +27,7 @@ public final class AssistantLiveCapturePolicy {
         if (plan != null) {
             sources.addAll(plan.liveSources());
         }
-        if (!agentEnabled || intent != AssistantIntent.LIVE_STATE
-                || mode == AssistantMode.FAST || mode == AssistantMode.HANDOFF || settings == null) {
+        if (!agentEnabled || mode == AssistantMode.HANDOFF || settings == null) {
             return Set.copyOf(sources);
         }
         if (settings.toolAllowed("requester")) {
