@@ -9,7 +9,7 @@ import java.util.Set;
 
 /**
  * Performs the inexpensive first routing pass. The model never decides whether it may use a tool;
- * this classifier is intentionally conservative and routes uncertainty to grounded processing.
+ * uncertain factual/current-state requests are deliberately routed to grounded processing.
  */
 public final class AssistantIntentClassifier {
 
@@ -23,14 +23,16 @@ public final class AssistantIntentClassifier {
     );
     private static final Set<String> PLAYER_STATE_WORDS = Set.of(
             "health", "gezondheid", "leven", "honger", "food", "item", "hand", "holding", "vasthoud", "vast",
-            "level", "xp", "ervaring", "experience", "effect", "armor", "armour", "pantser", "gespeeld"
+            "level", "xp", "ervaring", "experience", "effect", "armor", "armour", "pantser", "gespeeld",
+            "inventory", "inventaris", "offhand", "equipment", "uitrusting", "saturation", "air", "lucht",
+            "fire", "brand", "flying", "vliegen", "swimming", "zwemmen", "sprinting", "rennen"
     );
     private static final Set<String> WORLD_STATE_WORDS = Set.of(
-            "biome", "bioom", "coord", "coords", "coördinaten", "positie", "location", "locatie", "weer",
+            "biome", "bioom", "coord", "coords", "coördinaten", "positie", "position", "location", "locatie", "weer",
             "weather", "time", "tijd", "light", "licht", "difficulty", "moeilijkheid", "environment", "omgeving",
-            "dimension", "dimensie", "facing", "richting"
+            "dimension", "dimensie", "facing", "richting", "block", "blok", "target", "kijk", "looking"
     );
-    private static final Set<String> LOCAL_CUES = Set.of("hier", "here", "dichtbij", "nearby", "near");
+    private static final Set<String> LOCAL_CUES = Set.of("hier", "here", "dichtbij", "nearby", "near", "nu", "now");
     private static final Set<String> SERVER_WORDS = Set.of(
             "rank", "elite", "legend", "supreme", "claim", "regels", "rules", "vote", "stem",
             "store", "winkel", "warp", "command", "commando", "server", "hauntedmc"
@@ -41,7 +43,8 @@ public final class AssistantIntentClassifier {
             "diamonds", "ore", "erts"
     );
     private static final Set<String> MEMORY_WORDS = Set.of(
-            "onthoud", "onthouden", "herinner", "herinneren", "remember", "remembered", "weet", "wist"
+            "onthoud", "onthouden", "herinner", "herinneren", "remember", "remembered", "weet", "wist", "vergeet",
+            "forget"
     );
     private static final Set<String> EVENT_WORDS = Set.of(
             "gebeurde", "gebeurd", "mis", "bug", "bugged", "fout", "probleem", "vorige", "eerder", "net",
@@ -68,15 +71,21 @@ public final class AssistantIntentClassifier {
         if (containsAny(normalized, SUPPORT_WORDS)) {
             return new Analysis(AssistantIntent.SUPPORT, AssistantMode.DELIBERATE, language);
         }
+        if (isKnowledgeDiscovery(normalized)) {
+            return new Analysis(AssistantIntent.KNOWLEDGE_DISCOVERY, AssistantMode.GROUNDED, language);
+        }
         if (context.active() && containsAny(normalized, MEMORY_WORDS)) {
             return new Analysis(AssistantIntent.MEMORY_RECALL, AssistantMode.GROUNDED, language);
         }
-        if (context.active() && containsAny(normalized, EVENT_WORDS)) {
+        if (context.active() && containsAny(normalized, EVENT_WORDS) && !isCorrection(normalized)) {
             return new Analysis(AssistantIntent.EVENT_RECALL, AssistantMode.GROUNDED, language);
         }
         if (isLiveStateQuestion(normalized)) {
-            // Live-state answers are evidence-oriented but normally simple; Terra is enough unless validation escalates.
             return new Analysis(AssistantIntent.LIVE_STATE, AssistantMode.GROUNDED, language);
+        }
+        if (isCorrection(normalized) && (containsAny(normalized, SERVER_WORDS) || context.active())) {
+            return new Analysis(context.active() ? AssistantIntent.CONTEXT_FOLLOWUP : AssistantIntent.SERVER_FACT,
+                    AssistantMode.GROUNDED, language);
         }
         if (containsAny(normalized, SERVER_WORDS) || normalized.contains("/")) {
             return new Analysis(AssistantIntent.SERVER_FACT, AssistantMode.GROUNDED, language);
@@ -88,13 +97,24 @@ public final class AssistantIntentClassifier {
         }
         if (context.active() && isContextualFollowUp(normalized, context)) {
             AssistantMode mode = context.previousIntent() == AssistantIntent.SERVER_FACT
+                    || context.previousIntent() == AssistantIntent.KNOWLEDGE_DISCOVERY
                     || context.previousIntent() == AssistantIntent.GAMEPLAY_HELP
                     || context.previousIntent() == AssistantIntent.EVENT_RECALL
                     || context.previousIntent() == AssistantIntent.MEMORY_RECALL
+                    || context.previousIntent() == AssistantIntent.LIVE_STATE
                     ? AssistantMode.GROUNDED : AssistantMode.FAST;
             return new Analysis(AssistantIntent.CONTEXT_FOLLOWUP, mode, language);
         }
         return new Analysis(AssistantIntent.CONVERSATION, AssistantMode.FAST, language);
+    }
+
+    private static boolean isKnowledgeDiscovery(String message) {
+        return containsAnyPhrase(message,
+                "fun fact", "random fact", "interesting fact", "tell me a fact", "tell me something about the server",
+                "tell me something about haunted", "what do you know about haunted", "what do you know about the server",
+                "leuk feitje", "willekeurig feitje", "interessant feit", "vertel een feitje", "vertel iets over de server",
+                "vertel iets over haunted", "wat weet je over haunted", "wat weet je over de server", "server weetje"
+        );
     }
 
     private static boolean isLiveStateQuestion(String message) {
@@ -103,12 +123,19 @@ public final class AssistantIntentClassifier {
         }
         boolean currentSelfReference = containsAnyPhrase(
                 message,
-                "mijn ", "my ", "heb ik", "ik heb", "houd ik", "hou ik", "am i", "i have", "i'm ", "im "
+                "mijn ", "my ", "heb ik", "ik heb", "houd ik", "hou ik", "am i", "i have", "i'm ", "im ",
+                "bij mij", "for me"
         );
         if (currentSelfReference && containsAny(message, PLAYER_STATE_WORDS)) {
             return true;
         }
         if (containsAny(message, LOCAL_CUES) && containsAny(message, WORLD_STATE_WORDS)) {
+            return true;
+        }
+        if (containsAnyPhrase(message,
+                "welk bioom", "welke biome", "welke bioom", "what biome", "which biome",
+                "welk blok", "welke block", "what block", "which block", "waar kijk ik", "what am i looking at",
+                "welke kant kijk", "which way am i facing", "what direction am i facing")) {
             return true;
         }
         return containsAnyPhrase(
@@ -122,6 +149,14 @@ public final class AssistantIntentClassifier {
         return containsAnyPhrase(message, "om me heen", "around me", "near me");
     }
 
+    private static boolean isCorrection(String message) {
+        return containsAnyPhrase(message,
+                "klopt niet", "niet waar", "je hebt het fout", "je zit fout", "correctie", "eigenlijk is",
+                "nee, ", "nee ", "that's wrong", "that is wrong", "you're wrong", "you are wrong", "not correct",
+                "correction", "actually,", "actually "
+        );
+    }
+
     private static boolean containsAnyPhrase(String message, String... phrases) {
         for (String phrase : phrases) {
             if (message.contains(phrase)) {
@@ -132,7 +167,7 @@ public final class AssistantIntentClassifier {
     }
 
     private static boolean isContextualFollowUp(String message, AssistantDialogueContext context) {
-        if (context.pendingAnswer() && message.length() <= 96) {
+        if (context.pendingAnswer() && message.length() <= 160) {
             return true;
         }
         if (message.endsWith("?")) {
@@ -140,7 +175,8 @@ public final class AssistantIntentClassifier {
         }
         return Set.of(
                 "ja", "nee", "maar", "dus", "waarom", "hoezo", "wat", "welke", "waar", "wacht", "bedoel",
-                "huh", "yes", "no", "but", "so", "why", "how", "what", "which", "where", "wait"
+                "huh", "eigenlijk", "correctie", "yes", "no", "but", "so", "why", "how", "what", "which",
+                "where", "wait", "actually", "correction"
         ).stream().anyMatch(prefix -> message.equals(prefix) || message.startsWith(prefix + " "));
     }
 
