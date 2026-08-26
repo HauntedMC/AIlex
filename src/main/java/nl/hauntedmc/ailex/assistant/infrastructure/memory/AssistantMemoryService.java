@@ -57,6 +57,7 @@ public final class AssistantMemoryService implements AutoCloseable {
     private final JavaPlugin plugin;
     private final MemoryRepository repository;
     private final MemoryTruthResolver truthResolver = new MemoryTruthResolver();
+    private final MemoryRetentionPolicy retentionPolicy = new MemoryRetentionPolicy();
     private final MemoryGraphRetriever graphRetriever = new MemoryGraphRetriever();
     private final AssistantMemoryConsolidator consolidator;
     private final Map<String, MemoryRecord> activeRecords = new ConcurrentHashMap<>();
@@ -98,6 +99,11 @@ public final class AssistantMemoryService implements AutoCloseable {
         if (consolidationEnabled()) {
             writer.scheduleWithFixedDelay(
                     this::consolidateSafely, 60L, consolidationIntervalMinutes(), TimeUnit.MINUTES
+            );
+        }
+        if (retentionEnabled()) {
+            writer.scheduleWithFixedDelay(
+                    this::maintainRetentionSafely, 5L, retentionIntervalMinutes(), TimeUnit.MINUTES
             );
         }
     }
@@ -650,6 +656,57 @@ public final class AssistantMemoryService implements AutoCloseable {
         } catch (RuntimeException exception) {
             warn("Could not consolidate assistant memory: " + exception.getMessage());
         }
+    }
+
+    /** Reactivates only evidence that was actually used in a validated answer; factual confidence is unchanged. */
+    public synchronized void reconsolidateVerifiedEvidence(Set<String> evidenceIds) {
+        if (closed || evidenceIds == null || evidenceIds.isEmpty()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        Set<String> ids = evidenceIds.stream()
+                .filter(id -> id != null && id.startsWith("memory."))
+                .map(id -> id.substring("memory.".length()))
+                .collect(java.util.stream.Collectors.toSet());
+        if (ids.isEmpty()) {
+            return;
+        }
+        activeRecords.values().stream()
+                .filter(record -> ids.contains(record.id()))
+                .map(record -> retentionPolicy.reconsolidateVerifiedUse(record, now))
+                .filter(java.util.Objects::nonNull)
+                .forEach(this::store);
+    }
+
+    private void maintainRetentionSafely() {
+        if (closed || !retentionEnabled()) {
+            return;
+        }
+        try {
+            long now = System.currentTimeMillis();
+            List<MemoryRecord> snapshot = activeSnapshot();
+            for (MemoryRecord record : snapshot) {
+                if (retentionPolicy.shouldExpire(record, now, snapshot)
+                        && activeRecords.remove(record.identityKey(), record)) {
+                    unindexRecord(record);
+                    repository.upsert(record.expireAt(now));
+                }
+            }
+        } catch (RuntimeException exception) {
+            warn("Could not maintain assistant memory retention: " + exception.getMessage());
+        }
+    }
+
+    private boolean retentionEnabled() {
+        FileConfiguration config = plugin.getConfig();
+        return config == null || config.getBoolean("openai.assistant.memory.retention.enabled", true);
+    }
+
+    private long retentionIntervalMinutes() {
+        FileConfiguration config = plugin.getConfig();
+        return config == null ? 30L : Math.clamp(config.getLong(
+                "openai.assistant.memory.retention.interval_minutes", 30L
+        ), 5L, 24L * 60L);
     }
 
     private boolean consolidationEnabled() {

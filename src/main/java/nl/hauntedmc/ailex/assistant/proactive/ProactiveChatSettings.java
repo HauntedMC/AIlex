@@ -2,7 +2,9 @@ package nl.hauntedmc.ailex.assistant.proactive;
 
 import org.bukkit.configuration.file.FileConfiguration;
 
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /** Immutable, validated proactive-assistant configuration. */
 public record ProactiveChatSettings(
@@ -12,7 +14,8 @@ public record ProactiveChatSettings(
         JoinSettings join,
         QuestionSettings questions,
         CollectiveSettings collective,
-        IdleSettings idle
+        IdleSettings idle,
+        GoalSettings goals
 ) {
 
     private static final String PATH = "openai.proactive_chat";
@@ -65,8 +68,23 @@ public record ProactiveChatSettings(
                         probability(config.getDouble(PATH + ".idle.probability", 0.02D)),
                         Math.clamp(config.getInt(PATH + ".idle.minimum_online_players", 1), 1, 100),
                         secondsToMillis(config.getLong(PATH + ".idle.recent_chat_window_seconds", 600L))
-                )
+                ),
+                GoalSettings.from(config)
         );
+    }
+
+
+    /** Source-compatible constructor retained for existing tests/integrations. */
+    public ProactiveChatSettings(
+            boolean enabled,
+            String responseVisibility,
+            long cooldownMillis,
+            JoinSettings join,
+            QuestionSettings questions,
+            CollectiveSettings collective,
+            IdleSettings idle
+    ) {
+        this(enabled, responseVisibility, cooldownMillis, join, questions, collective, idle, GoalSettings.defaults());
     }
 
     private static ProactiveChatSettings disabled() {
@@ -75,7 +93,8 @@ public record ProactiveChatSettings(
                 new JoinSettings(false, 0.0D, 300_000L, DEFAULT_JOIN_PROMPT),
                 new QuestionSettings(false, 0.0D, 45_000L, 2, 180_000L, 2.5D),
                 new CollectiveSettings(false, DEFAULT_COLLECTIVE_TERMS, 2, 45_000L, 0.0D),
-                new IdleSettings(false, 1_800_000L, 60_000L, 0.0D, 1, 600_000L)
+                new IdleSettings(false, 1_800_000L, 60_000L, 0.0D, 1, 600_000L),
+                GoalSettings.disabled()
         );
     }
 
@@ -135,6 +154,56 @@ public record ProactiveChatSettings(
             long windowMillis,
             double probability
     ) {
+    }
+
+    public record GoalSettings(
+            boolean enabled,
+            Set<CommunityGoal> enabledGoals,
+            double probability,
+            double followUpProbability
+    ) {
+        static GoalSettings from(FileConfiguration config) {
+            Set<CommunityGoal> goals = EnumSet.noneOf(CommunityGoal.class);
+            List<String> configured = config.getStringList(PATH + ".goals.enabled_goals");
+            if (configured.isEmpty()) {
+                goals.addAll(defaultGoals());
+            } else {
+                for (String value : configured) {
+                    try {
+                        goals.add(CommunityGoal.valueOf(value.trim().toUpperCase(java.util.Locale.ROOT).replace('-', '_')));
+                    } catch (IllegalArgumentException ignored) {
+                        // Invalid config values are ignored fail-closed.
+                    }
+                }
+            }
+            goals.remove(CommunityGoal.SILENCE);
+            return new GoalSettings(
+                    config.getBoolean(PATH + ".goals.enabled", true),
+                    Set.copyOf(goals),
+                    probability(config.getDouble(PATH + ".goals.probability", 0.30D)),
+                    probability(config.getDouble(PATH + ".goals.follow_up_probability", 0.12D))
+            );
+        }
+
+        static GoalSettings defaults() {
+            return new GoalSettings(true, defaultGoals(), 0.30D, 0.12D);
+        }
+
+        static GoalSettings disabled() {
+            return new GoalSettings(false, Set.of(), 0.0D, 0.0D);
+        }
+
+        public boolean enabled(CommunityGoal goal) {
+            return enabled && goal != null && enabledGoals.contains(goal);
+        }
+
+        private static Set<CommunityGoal> defaultGoals() {
+            return Set.of(
+                    CommunityGoal.HELP_NEW_PLAYER, CommunityGoal.WELCOME, CommunityGoal.CELEBRATE,
+                    CommunityGoal.SUPPORT_CONVERSATION, CommunityGoal.CONNECT, CommunityGoal.DEFUSE,
+                    CommunityGoal.FOLLOW_UP, CommunityGoal.INFORM
+            );
+        }
     }
 
     public record IdleSettings(

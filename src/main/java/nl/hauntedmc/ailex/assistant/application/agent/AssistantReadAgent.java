@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import nl.hauntedmc.ailex.assistant.application.AssistantService;
 import nl.hauntedmc.ailex.assistant.domain.AssistantIntent;
 import nl.hauntedmc.ailex.assistant.domain.AssistantMode;
+import nl.hauntedmc.ailex.assistant.application.prompt.AssistantPromptComposer;
 import nl.hauntedmc.ailex.assistant.infrastructure.knowledge.LocalKnowledgeIndex;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantExperienceMemoryService;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantMemoryService;
@@ -30,6 +31,7 @@ public final class AssistantReadAgent {
     private final JavaPlugin plugin;
     private final OpenAiToolPlanningClient plannerClient;
     private final AssistantToolRegistry toolRegistry;
+    private final AssistantPromptComposer promptComposer = new AssistantPromptComposer();
 
     public AssistantReadAgent(
             JavaPlugin plugin,
@@ -71,6 +73,7 @@ public final class AssistantReadAgent {
         StringBuilder context = new StringBuilder();
         Set<String> evidenceIds = new HashSet<>();
         Set<String> usedTools = new HashSet<>();
+        Set<String> callFingerprints = new HashSet<>();
         int modelCalls = 0;
         int toolCalls = 0;
         int plannerInputTokens = 0;
@@ -97,6 +100,14 @@ public final class AssistantReadAgent {
             for (OpenAiToolPlanningClient.FunctionCall call : plan.calls()) {
                 if (callsThisRound >= maximumPerRound) {
                     break;
+                }
+                String fingerprint = call.name() + '|' + clean(call.arguments()).toLowerCase(Locale.ROOT);
+                if (!callFingerprints.add(fingerprint)) {
+                    history.add(OpenAiToolPlanningClient.functionCallInput(call));
+                    history.add(OpenAiToolPlanningClient.functionOutput(
+                            call.callId(), "Equivalent tool call already executed; use existing evidence or choose a different query."
+                    ));
+                    continue;
                 }
                 AssistantTool.ToolResult observation = toolRegistry.execute(request, call);
                 history.add(OpenAiToolPlanningClient.functionCallInput(call));
@@ -175,15 +186,16 @@ public final class AssistantReadAgent {
                 .orElse("none");
         boolean memoryPresent = request.memory() != null && !request.memory().isBlank();
         Set<String> liveIds = request.snapshot().filtered(request.contextPlan().liveSources()).sourceIds();
-        return "Player request: " + clean(request.message())
-                + "\nroute=" + request.analysis().intent().name().toLowerCase(Locale.ROOT)
+        return "request=" + clean(request.message())
+                + "
+route=" + request.analysis().intent().name().toLowerCase(Locale.ROOT)
                 + " mode=" + request.analysis().mode().name().toLowerCase(Locale.ROOT)
-                + "\ninitial_reviewed_evidence_ids=" + evidence
-                + "\ninitial_memory_present=" + memoryPresent
-                + " initial_live_evidence_ids=" + (liveIds.isEmpty() ? "none" : String.join(",", liveIds))
-                + "\nUse a read tool only for information that is still missing and materially needed. "
-                + "Do not re-read a source already represented above. For temporal corrections/history prefer the memory "
-                + "timeline. For missing current state use inspect_live. Stop retrieving when evidence is sufficient.";
+                + "
+reviewed_evidence=" + evidence
+                + " memory_present=" + memoryPresent
+                + " live_evidence=" + (liveIds.isEmpty() ? "none" : String.join(",", liveIds))
+                + "
+" + promptComposer.plannerContract();
     }
 
     private Duration remainingForRound(Duration totalRemaining, int callsAlreadyMade) {

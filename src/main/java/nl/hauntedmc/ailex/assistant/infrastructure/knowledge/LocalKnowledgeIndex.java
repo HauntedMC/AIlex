@@ -49,6 +49,7 @@ public final class LocalKnowledgeIndex {
     private static final Map<String, Set<String>> CONCEPTS = conceptMap();
 
     private final JavaPlugin plugin;
+    private final KnowledgeDocumentParser documentParser = new KnowledgeDocumentParser();
     private final boolean managedEmbeddingProvider;
     private volatile SemanticEmbeddingProvider embeddingProvider;
     private final AtomicBoolean semanticWarmupRunning = new AtomicBoolean();
@@ -137,7 +138,8 @@ public final class LocalKnowledgeIndex {
                     .orElse(0.0D);
             double semantic = semanticScores.getOrDefault(chunk.id(), 0.0D);
             double rrf = reciprocalRank(lexicalRanks.get(chunk.id())) + reciprocalRank(semanticRanks.get(chunk.id()));
-            double combined = lexical + semantic * SEMANTIC_WEIGHT + rrf * RRF_WEIGHT;
+            double combined = lexical + semantic * SEMANTIC_WEIGHT + rrf * RRF_WEIGHT
+                    + freshnessWeight(chunk) * 0.30D;
             if (combined > 0.0D && eligible(chunk, settings)) {
                 fused.add(new ScoredChunk(chunk, combined));
             }
@@ -385,11 +387,29 @@ public final class LocalKnowledgeIndex {
 
     private double authorityWeight(String authority) {
         return switch (authority == null ? "" : authority.toLowerCase(Locale.ROOT)) {
+            case "operator-confirmed" -> 1.32D;
             case "official" -> 1.25D;
             case "reviewed" -> 1.15D;
             case "trusted" -> 1.08D;
             default -> 1.0D;
         };
+    }
+
+    private double freshnessWeight(KnowledgeChunk chunk) {
+        if (chunk == null || chunk.updated().isBlank()) {
+            return 0.35D;
+        }
+        try {
+            long days = Math.max(0L, java.time.temporal.ChronoUnit.DAYS.between(
+                    LocalDate.parse(chunk.updated()), LocalDate.now()
+            ));
+            boolean volatileCategory = chunk.category().contains("current") || chunk.category().contains("event")
+                    || chunk.category().contains("status");
+            double halfLife = volatileCategory ? 45.0D : 365.0D;
+            return 1.0D / (1.0D + days / halfLife);
+        } catch (DateTimeParseException ignored) {
+            return 0.35D;
+        }
     }
 
     private double cosine(double[] left, double[] right) {
@@ -491,41 +511,12 @@ public final class LocalKnowledgeIndex {
     }
 
     private List<KnowledgeChunk> parseDocument(String source, String content) {
-        List<KnowledgeChunk> parsed = new ArrayList<>();
-        String normalized = content == null ? "" : content.replace("\r\n", "\n");
-        String[] sections = normalized.split("(?m)^##\\s+");
-        for (int index = 0; index < sections.length; index++) {
-            String section = sections[index].trim();
-            if (section.isBlank()) {
-                continue;
-            }
-            String title;
-            String body;
-            int newline = section.indexOf('\n');
-            if (newline < 0) {
-                title = index == 0 ? source : section;
-                body = section;
-            } else {
-                title = section.substring(0, newline).replaceFirst("^#+\\s*", "").trim();
-                body = section.substring(newline + 1).trim();
-            }
-            Map<String, String> metadata = metadata(body);
-            String cleanedBody = stripMetadata(body);
-            if (cleanedBody.isBlank()) {
-                continue;
-            }
-            String id = safeId(source + "." + title + "." + index);
-            parsed.add(new KnowledgeChunk(
-                    id,
-                    title.isBlank() ? source : title,
-                    aliases(metadata.get("aliases")),
-                    cleanedBody,
-                    expired(metadata.get("expires")),
-                    metadata.getOrDefault("category", ""),
-                    metadata.getOrDefault("authority", "reviewed")
-            ));
-        }
-        return List.copyOf(parsed);
+        return documentParser.parse(source, content).stream()
+                .map(section -> new KnowledgeChunk(
+                        section.id(), section.title(), section.aliases(), section.text(), section.expired(),
+                        section.category(), section.authority(), section.source(), section.updated()
+                ))
+                .toList();
     }
 
     private Map<String, String> metadata(String body) {
@@ -579,7 +570,9 @@ public final class LocalKnowledgeIndex {
             String text,
             boolean expired,
             String category,
-            String authority
+            String authority,
+            String source,
+            String updated
     ) {
         public KnowledgeChunk {
             id = id == null ? "" : id;
@@ -588,6 +581,21 @@ public final class LocalKnowledgeIndex {
             text = text == null ? "" : text;
             category = category == null ? "" : category;
             authority = authority == null ? "" : authority;
+            source = source == null ? "" : source;
+            updated = updated == null ? "" : updated;
+        }
+
+        /** Source-compatible constructor retained for deterministic tests/integrations. */
+        public KnowledgeChunk(
+                String id,
+                String title,
+                List<String> aliases,
+                String text,
+                boolean expired,
+                String category,
+                String authority
+        ) {
+            this(id, title, aliases, text, expired, category, authority, "", "");
         }
     }
 

@@ -50,7 +50,7 @@ public final class AssistantToolRegistry {
         Map<String, AssistantTool> registered = new LinkedHashMap<>();
         register(registered, stringTool(
                 "search_memory",
-                "Search scoped durable player/shared/NPC memory by meaning.",
+                "Use for explicit player-owned facts, preferences, goals or remembered context not already supplied. Search by the smallest discriminative concept; do not use for current live state or official server rules.",
                 "session",
                 "query",
                 "What memory should be recalled?",
@@ -58,7 +58,7 @@ public final class AssistantToolRegistry {
         ));
         register(registered, stringTool(
                 "search_memory_timeline",
-                "Inspect historical versions of one semantic memory key.",
+                "Use for corrections, what changed, what was true earlier, or conflicting remembered values. Prefer a stable semantic key; this is historical evidence, not current-state inspection.",
                 "session",
                 "key",
                 "Stable semantic key, or a short description of it.",
@@ -66,7 +66,7 @@ public final class AssistantToolRegistry {
         ));
         register(registered, stringTool(
                 "search_experience",
-                "Recall verified procedural lessons from prior AIlex outcomes.",
+                "Strategy-only recall of externally verified prior AIlex outcomes. Use to choose a better retrieval/response approach; never cite this tool as factual evidence about a player or server.",
                 "session",
                 "query",
                 "Situation or failure mode to recall.",
@@ -74,7 +74,7 @@ public final class AssistantToolRegistry {
         ));
         register(registered, stringTool(
                 "search_knowledge",
-                "Search reviewed HauntedMC/server knowledge with a focused query.",
+                "Use for HauntedMC-specific commands, rules, ranks, systems and reviewed server facts. Query narrowly. Reviewed knowledge outranks player-learned shared claims but not live runtime state for current-state questions.",
                 "knowledge",
                 "query",
                 "Focused knowledge query.",
@@ -146,7 +146,7 @@ public final class AssistantToolRegistry {
                 this::hasLiveCapability,
                 settings -> functionTool(
                         "inspect_live",
-                        "Read one source family from the frozen safe Minecraft snapshot.",
+                        "Use for current requester/world/server/NPC state when the answer depends on what is true now. The snapshot is frozen on the Paper thread; inspect only the source family materially needed.",
                         enumParameter("source", "Safe live source family.", liveSources(settings)),
                         Set.of("source")
                 ),
@@ -276,7 +276,10 @@ public final class AssistantToolRegistry {
         for (LocalKnowledgeIndex.KnowledgeChunk chunk : chunks.stream().limit(8).toList()) {
             ids.add(chunk.id());
             output.append("evidence_id=").append(chunk.id()).append(" title=").append(chunk.title())
-                    .append(" authority=").append(chunk.authority()).append('\n').append(chunk.text()).append('\n');
+                    .append(" authority=").append(chunk.authority())
+                    .append(" updated=").append(chunk.updated().isBlank() ? "unknown" : chunk.updated())
+                    .append(" source=").append(chunk.source().isBlank() ? "reviewed-local" : chunk.source())
+                    .append('\n').append(chunk.text()).append('\n');
         }
         return new AssistantTool.ToolResult(clip(output.toString()), Set.copyOf(ids));
     }

@@ -1,5 +1,7 @@
 package nl.hauntedmc.ailex.assistant.proactive;
 
+import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantMemoryService;
+
 import org.bukkit.entity.Player;
 
 import java.util.Collection;
@@ -15,6 +17,7 @@ public final class ProactiveChatService {
     private final LongSupplier currentTimeMillis;
     private final CollectiveReactionTracker collectiveTracker = new CollectiveReactionTracker();
     private final SocialConversationGraph socialGraph = new SocialConversationGraph();
+    private final ProactiveGoalService goalService;
     private final AtomicLong lastBotMessageMillis;
     private final AtomicLong lastPlayerMessageMillis;
     private final AtomicLong lastProactiveRequestMillis = new AtomicLong(Long.MIN_VALUE);
@@ -22,12 +25,28 @@ public final class ProactiveChatService {
     private final AtomicLong lastIdleCheckMillis = new AtomicLong(Long.MIN_VALUE);
 
     public ProactiveChatService(Supplier<ProactiveChatSettings> settingsSupplier) {
-        this(settingsSupplier, System::currentTimeMillis);
+        this(settingsSupplier, System::currentTimeMillis, null);
+    }
+
+    public ProactiveChatService(
+            Supplier<ProactiveChatSettings> settingsSupplier,
+            AssistantMemoryService memoryService
+    ) {
+        this(settingsSupplier, System::currentTimeMillis, memoryService);
     }
 
     ProactiveChatService(Supplier<ProactiveChatSettings> settingsSupplier, LongSupplier currentTimeMillis) {
+        this(settingsSupplier, currentTimeMillis, null);
+    }
+
+    ProactiveChatService(
+            Supplier<ProactiveChatSettings> settingsSupplier,
+            LongSupplier currentTimeMillis,
+            AssistantMemoryService memoryService
+    ) {
         this.settingsSupplier = settingsSupplier;
         this.currentTimeMillis = currentTimeMillis;
+        this.goalService = new ProactiveGoalService(memoryService);
         long now = currentTimeMillis.getAsLong();
         this.lastBotMessageMillis = new AtomicLong(now);
         this.lastPlayerMessageMillis = new AtomicLong(now);
@@ -78,9 +97,25 @@ public final class ProactiveChatService {
         InterventionDecision decision = ProactiveInterventionPolicy.evaluateQuestion(
                 source, message, players, activeConversation, socialGraph, now, questions
         );
+        SocialConversationGraph.ThreadView thread = socialGraph.threadView(
+                source.getUniqueId(), now, questions.socialGraphWindowMillis()
+        );
+        java.util.Optional<ProactiveChatTrigger> goalTrigger = goalService.chatTrigger(
+                source, message, thread, activeConversation
+        );
+        InterventionDecision goalDecision = goalTrigger
+                .map(trigger -> ProactiveInterventionPolicy.evaluateGoal(
+                        trigger.goal(), source, activeConversation, trigger.privateOnly(), socialGraph, now, questions
+                ))
+                .orElse(new InterventionDecision(CommunityGoal.SILENCE, 0, 1, 0, 0, -1, false));
         socialGraph.observe(source, message, players, now, questions.socialGraphWindowMillis());
 
         if (!settings.enabled()) {
+            return;
+        }
+        if (goalTrigger.isPresent() && settings.goals().enabled(goalTrigger.get().goal()) && goalDecision.speak()
+                && passesProbability(settings.goals().probability())
+                && submitIfOffCooldown(source, goalTrigger.get(), goalDecision.goal(), now, settings, consumer)) {
             return;
         }
         if (decision.speak()
@@ -98,7 +133,7 @@ public final class ProactiveChatService {
                 && submitIfOffCooldown(
                         source,
                         ProactiveChatTrigger.collectiveReaction(collective.minimumDistinctPlayers(), message),
-                        CommunityGoal.SUPPORT_CONVERSATION,
+                        CommunityGoal.CELEBRATE,
                         now,
                         settings,
                         consumer
@@ -154,6 +189,38 @@ public final class ProactiveChatService {
                 settings,
                 consumer
         );
+    }
+
+    public void checkForScheduledGoals(
+            Collection<? extends Player> onlinePlayers,
+            TriggerConsumer consumer
+    ) {
+        long now = currentTimeMillis.getAsLong();
+        ProactiveChatSettings settings = settingsSupplier.get();
+        if (!settings.enabled() || !settings.goals().enabled(CommunityGoal.FOLLOW_UP)
+                || onlinePlayers == null || onlinePlayers.isEmpty()) {
+            return;
+        }
+        for (Player player : onlinePlayers) {
+            java.util.Optional<ProactiveChatTrigger> candidate = goalService.followUp(player, now);
+            if (candidate.isEmpty()) {
+                continue;
+            }
+            ProactiveChatTrigger trigger = candidate.get();
+            InterventionDecision decision = ProactiveInterventionPolicy.evaluateGoal(
+                    CommunityGoal.FOLLOW_UP, player, false, true, socialGraph, now, settings.questions()
+            );
+            if (decision.speak() && passesProbability(settings.goals().followUpProbability())
+                    && submitIfOffCooldown(player, trigger, CommunityGoal.FOLLOW_UP, now, settings, consumer)) {
+                return;
+            }
+        }
+    }
+
+    public void recordDeliveredGoal(Player player, ProactiveChatTrigger trigger) {
+        if (trigger != null && trigger.goal() == CommunityGoal.FOLLOW_UP) {
+            goalService.recordFollowUpDelivered(player, currentTimeMillis.getAsLong());
+        }
     }
 
     public void recordBotResponse() {

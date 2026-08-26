@@ -6,6 +6,8 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import nl.hauntedmc.ailex.AIlexPlugin;
 import nl.hauntedmc.ailex.assistant.action.AssistantActionService;
 import nl.hauntedmc.ailex.assistant.application.AssistantService;
+import nl.hauntedmc.ailex.assistant.action.AssistantActionOutcomeRecorder;
+import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantExperienceMemoryService;
 import nl.hauntedmc.ailex.assistant.domain.AssistantDialogueContext;
 import nl.hauntedmc.ailex.assistant.domain.AssistantReply;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantEventMemoryService;
@@ -51,6 +53,7 @@ public final class AssistantChatController implements AutoCloseable {
     private final AssistantConversationManager conversationManager;
     private final ChatContextStore chatContextStore;
     private final ProactiveChatService proactiveChatService;
+    private final AssistantActionOutcomeRecorder actionOutcomeRecorder;
     private BukkitTask idleConversationTask;
 
     public AssistantChatController(AIlexPlugin plugin) {
@@ -72,7 +75,13 @@ public final class AssistantChatController implements AutoCloseable {
                 System::currentTimeMillis,
                 contextSettings.persistToDisk()
         );
-        this.proactiveChatService = new ProactiveChatService(() -> ProactiveChatSettings.from(plugin.getConfig()));
+        this.proactiveChatService = new ProactiveChatService(
+                () -> ProactiveChatSettings.from(plugin.getConfig()), plugin.getAssistantMemoryService()
+        );
+        this.actionOutcomeRecorder = new AssistantActionOutcomeRecorder(
+                plugin.getAssistantEventMemoryService(),
+                new AssistantExperienceMemoryService(plugin.getAssistantMemoryService())
+        );
     }
 
     /** Starts one lightweight main-thread check; actual model work is always admitted through the async coordinator. */
@@ -82,10 +91,11 @@ public final class AssistantChatController implements AutoCloseable {
         }
         idleConversationTask = Bukkit.getScheduler().runTaskTimer(
                 plugin,
-                () -> proactiveChatService.checkForIdleConversation(
-                        new ArrayList<>(Bukkit.getOnlinePlayers()),
-                        this::submitProactiveResponse
-                ),
+                () -> {
+                    ArrayList<Player> online = new ArrayList<>(Bukkit.getOnlinePlayers());
+                    proactiveChatService.checkForIdleConversation(online, this::submitProactiveResponse);
+                    proactiveChatService.checkForScheduledGoals(online, this::submitProactiveResponse);
+                },
                 20L,
                 20L
         );
@@ -313,8 +323,11 @@ public final class AssistantChatController implements AutoCloseable {
             AssistantReply completedReply = reply;
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (completedReply != null && target.npc() != null && !completedReply.actionProposals().isEmpty()) {
-                    assistantActionService.validateAndExecute(
+                    var actionResult = assistantActionService.validateAndExecute(
                             source, target.npc(), prepared.message(), completedReply.actionProposals()
+                    );
+                    actionOutcomeRecorder.record(
+                            source, String.valueOf(target.id()), prepared.message(), actionResult
                     );
                 }
                 deliverTrackedResponse(requestId, source, result);
@@ -330,7 +343,8 @@ public final class AssistantChatController implements AutoCloseable {
         if (target == null || assistantService == null) {
             return false;
         }
-        String prompt = "Proactieve aanleiding: \"" + trigger.context() + "\"\n"
+        String prompt = "Proactief doel=" + trigger.goal().name().toLowerCase(Locale.ROOT)
+                + " aanleiding: \"" + trigger.context() + "\"\n"
                 + trigger.instruction() + " Antwoord als " + target.name()
                 + " in exact één korte, gewone chatregel, zonder speaker label.";
         AssistantService.PreparedRequest prepared;
@@ -417,7 +431,10 @@ public final class AssistantChatController implements AutoCloseable {
             Component result = FormatterUtils.serializer.deserialize(target.displayName() + ": ")
                     .append(Component.text(response, NamedTextColor.WHITE));
             Bukkit.getScheduler().runTask(plugin, () -> {
-                deliverResponse(contextPlayer, result, proactiveChatService.responseVisibility());
+                deliverResponse(
+                        contextPlayer, result, trigger.privateOnly() ? "requester" : proactiveChatService.responseVisibility()
+                );
+                proactiveChatService.recordDeliveredGoal(contextPlayer, trigger);
                 requestTracer.transition(requestId, AssistantRequestTracer.State.COMPLETED, "delivered");
             });
         } catch (Exception exception) {
