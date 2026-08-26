@@ -1,42 +1,56 @@
-# Development Notes
+# Development
 
-This page is for contributors who want a fast, reliable local workflow for AIlex.
+## Local setup
 
-## Local Setup
+Requirements are the Java toolchain configured by the Gradle build and access to the declared Paper/Citizens dependencies.
+
+Run the full local validation with:
 
 ```bash
-./gradlew compileJava
+./gradlew clean build
 ```
 
-Useful commands during development:
+For faster iteration:
 
 ```bash
 ./gradlew test
 ./gradlew checkstyleMain checkstyleTest
-./gradlew test jacocoTestReport
-./gradlew build
 ```
 
-## Recommended Workflow
+## Architecture rules
 
-1. Create a branch for one focused change.
-2. Implement the change with tests in the same pass.
-3. Run local validation (`test` and lint at minimum).
-4. Update docs when behavior or operator workflow changes.
-5. Open a PR with context, impact, and migration notes (if any).
+Keep Paper/Bukkit access on the server thread. Copy any required live state into immutable request context before asynchronous model work begins.
 
-## Engineering Guidelines
+The LLM path must remain read-only. New gameplay integrations should expose bounded player-safe facts through `AssistantContextProvider`, not hand the model arbitrary plugin objects or mutation APIs.
 
-- Keep action and movement responsibilities separated.
-- Prefer explicit stop/guard conditions over hidden side effects.
-- Remove obsolete configuration keys and their code paths in the same change.
-- Isolate external API/network logic from core movement primitives.
-- Favor small, testable units over broad command handlers.
+Durable memory writes must go through `AssistantMemoryService` validation. Do not persist raw model-proposed memory directly, and do not turn raw chat transcripts into durable identity.
 
-## Before You Open a PR
+Prefer deterministic routing, context selection, validation and safety checks over asking the model to decide its own permissions.
 
-- Build succeeds locally.
-- Relevant tests pass.
-- New behavior is covered by tests.
-- Lint checks pass.
-- Operator-visible errors are logged clearly.
+## Adding server knowledge
+
+Reviewed HauntedMC facts belong in concise Markdown/text knowledge files. Add aliases and clear headings so retrieval can find them. Open-ended discovery should have several useful positive facts available across different topics.
+
+Do not add credentials, private player data, reports, sanctions, internal infrastructure details or speculative facts.
+
+## Adding live integration state
+
+Implement `AssistantContextProvider` and register it with `AIlexPlugin#getAssistantContextProviderRegistry()`. Keep provider output compact and player-facing. Providers execute as trusted server code, so failures must be safe and must not broaden AIlex's security boundary.
+
+## Memory changes
+
+When adding a semantic memory type or retrieval signal, add tests for:
+
+- extraction/source validation;
+- correction/supersession;
+- explicit forgetting where applicable;
+- persistence;
+- privacy filtering;
+- retrieval ranking and redundancy;
+- interaction with other semantic kinds.
+
+Temporary/current-state concepts should have an explicit lifecycle rather than becoming permanent player identity.
+
+## Proactive behavior
+
+Proactive participation should be conservative. Any new trigger must remain lower priority than direct requests and should have deterministic eligibility checks before model execution. Add tests for false-positive interruption, not only successful triggering.
