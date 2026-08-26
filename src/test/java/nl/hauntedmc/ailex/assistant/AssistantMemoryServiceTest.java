@@ -1,7 +1,9 @@
 package nl.hauntedmc.ailex.assistant;
 
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantMemoryService;
+import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryCandidate;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryKind;
+import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryRecord;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryScope;
 
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -10,7 +12,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -30,76 +31,154 @@ class AssistantMemoryServiceTest {
     Path dataDirectory;
 
     @Test
-    void shouldPersistTypedSharedAndPlayerFactsInSqlite() {
+    void shouldPersistSemanticSharedAndPlayerMemoryInSqlite() {
         UUID playerId = UUID.randomUUID();
         File dataFolder = dataDirectory.toFile();
         AssistantMemoryService memory = memoryService(dataFolder);
-        memory.remember(playerId, "remymine", "shared:Staff members are Alice and Bob.",
-                "De staff members zijn Alice en Bob.");
-        memory.remember(playerId, "remymine", "player:Ik speel graag Survival en bouw Redstone farms.",
-                "Ik speel graag Survival en bouw Redstone farms.");
 
-        assertTrue(memory.summary(playerId).contains("Staff members are Alice and Bob."));
-        assertTrue(memory.summary(playerId).contains("Survival en bouw Redstone farms"));
+        memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("shared", "fact", "staff.members", "Alice and Bob are staff", "upsert"),
+                "Alice and Bob are staff.",
+                true
+        );
+        memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("player", "opinion", "redstone", "Redstone is geweldig", "upsert"),
+                "Ik vind Redstone geweldig.",
+                false
+        );
+
+        assertTrue(memory.summary(playerId).contains("staff.members=Alice and Bob are staff"));
+        assertTrue(memory.summary(playerId).contains("redstone=Redstone is geweldig"));
         memory.flush();
         assertTrue(new File(dataFolder, "assistant-memory.db").isFile());
         memory.close();
 
         AssistantMemoryService reloaded = memoryService(dataFolder);
-        assertTrue(reloaded.summary(playerId).contains("Staff members are Alice and Bob."));
-        assertTrue(reloaded.summary(playerId).contains("Survival en bouw Redstone farms"));
+        assertTrue(reloaded.summary(playerId).contains("staff.members=Alice and Bob are staff"));
+        assertTrue(reloaded.summary(playerId).contains("redstone=Redstone is geweldig"));
         reloaded.close();
     }
 
     @Test
-    void shouldRejectSensitiveInventedAndUnauthorizedFacts() {
+    void shouldRejectSensitiveInventedAndUnauthorizedMemory() {
         UUID playerId = UUID.randomUUID();
         AssistantMemoryService memory = memoryService(dataDirectory.toFile());
 
-        memory.remember(playerId, "remymine", "player:Mijn wachtwoord is secret123.",
-                "Mijn wachtwoord is secret123.");
-        memory.remember(playerId, "remymine", "player:Speelt altijd Minigames.", "Ik hou van Redstone.");
-        memory.remember(playerId, "remymine", "shared:Alice is staff.", "Alice is staff.", false);
+        memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("player", "fact", "account.password", "secret123", "upsert"),
+                "Mijn wachtwoord is secret123.",
+                false
+        );
+        memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("player", "fact", "favorite_gamemode", "Minigames", "upsert"),
+                "Ik hou van Redstone.",
+                false
+        );
+        memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("shared", "fact", "staff.alice", "Alice is staff", "upsert"),
+                "Alice is staff.",
+                false
+        );
 
-        assertFalse(memory.summary(playerId).contains("wachtwoord"));
-        assertFalse(memory.summary(playerId).contains("Minigames"));
-        assertFalse(memory.summary(playerId).contains("Alice is staff"));
+        String summary = memory.summary(playerId);
+        assertFalse(summary.contains("secret123"));
+        assertFalse(summary.contains("favorite_gamemode=Minigames"));
+        assertFalse(summary.contains("staff.alice"));
         memory.close();
     }
 
     @Test
-    void shouldSupersedePreferencesWithoutLeavingTwoActiveValues() {
+    void shouldSupersedeCorrectedSemanticFact() {
         UUID playerId = UUID.randomUUID();
         AssistantMemoryService memory = memoryService(dataDirectory.toFile());
 
-        memory.remember(playerId, "remymine", "preference:tone=casual", "Gebruik een casual toon.");
-        memory.remember(playerId, "remymine", "preference:tone=formal", "Gebruik vanaf nu een formal toon.");
+        memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("player", "fact", "favorite_gamemode", "Survival", "upsert"),
+                "Mijn favoriete gamemode is Survival.",
+                false
+        );
+        memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("player", "fact", "favorite_gamemode", "Creative", "upsert"),
+                "Dat klopt niet, mijn favoriete gamemode is Creative.",
+                false
+        );
 
-        List<nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryRecord> tone = memory.activeSnapshot().stream()
-                .filter(record -> record.kind() == MemoryKind.PREFERENCE && record.key().equals("tone"))
+        List<MemoryRecord> active = memory.activeSnapshot().stream()
+                .filter(record -> record.scope() == MemoryScope.PLAYER)
+                .filter(record -> record.kind() == MemoryKind.FACT)
+                .filter(record -> record.key().equals("favorite_gamemode"))
                 .toList();
-        assertEquals(1, tone.size());
-        assertEquals("formal", tone.getFirst().value());
-        assertFalse(tone.getFirst().supersedes().isBlank());
+        assertEquals(1, active.size());
+        assertEquals("Creative", active.getFirst().value());
+        assertFalse(active.getFirst().supersedes().isBlank());
         memory.close();
     }
 
     @Test
-    void shouldPersistExplicitLanguageAndHarmlessInterests() {
+    void shouldRememberGenericPreferencesOpinionsAndExplicitLanguage() {
         UUID playerId = UUID.randomUUID();
         AssistantMemoryService memory = memoryService(dataDirectory.toFile());
 
         memory.rememberExplicitLanguagePreference(playerId,
                 "Ik spreek vanaf nu alleen nog Duits, onthoud mijn voorkeur.");
-        memory.remember(playerId, "remymine", "player:likes pizza", "I like pizza.");
-        memory.observe(playerId, "Redstone is leuk.");
-        memory.observe(playerId, "Redstone again vandaag.");
-        memory.remember(playerId, "remymine", "player:redstone fan", "Redstone again vandaag.");
+        memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("player", "preference", "answer_style", "casual", "upsert"),
+                "Ik heb liever casual antwoorden.",
+                false
+        );
+        memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("player", "opinion", "redstone", "Redstone is leuk", "upsert"),
+                "Ik vind Redstone leuk.",
+                false
+        );
 
-        assertTrue(memory.summary(playerId).contains("language=de"));
+        String summary = memory.summary(playerId);
         assertEquals("de", memory.preferredLanguage(playerId));
-        assertTrue(memory.summary(playerId).contains("likes pizza"));
-        assertTrue(memory.summary(playerId).contains("redstone fan"));
+        assertTrue(summary.contains("language=de"));
+        assertTrue(summary.contains("answer_style=casual"));
+        assertTrue(summary.contains("redstone=Redstone is leuk"));
+        memory.close();
+    }
+
+    @Test
+    void shouldForgetAnExplicitlyNamedMemoryKey() {
+        UUID playerId = UUID.randomUUID();
+        AssistantMemoryService memory = memoryService(dataDirectory.toFile());
+        memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("player", "fact", "favorite_gamemode", "Survival", "upsert"),
+                "Mijn favoriete gamemode is Survival.",
+                false
+        );
+
+        memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("player", "fact", "favorite_gamemode", "", "forget"),
+                "Vergeet mijn favoriete gamemode.",
+                false
+        );
+
+        assertFalse(memory.summary(playerId).contains("favorite_gamemode"));
         memory.close();
     }
 
@@ -109,14 +188,34 @@ class AssistantMemoryServiceTest {
         AssistantMemoryService memory = memoryService(dataDirectory.toFile());
 
         assertNotNull(memory.rememberTrusted(
-                MemoryScope.PLAYER_NPC, playerId.toString(), "haunty", MemoryKind.RELATIONSHIP,
-                "interaction_count", "4", 1.0, 0.5, "runtime", "conversation-manager", 0L,
-                Duration.ofDays(30), Set.of("relationship")
+                MemoryScope.PLAYER_NPC,
+                playerId.toString(),
+                "haunty",
+                MemoryKind.RELATIONSHIP,
+                "interaction_count",
+                "4",
+                1.0,
+                0.5,
+                "runtime",
+                "conversation-manager",
+                0L,
+                Duration.ofDays(30),
+                Set.of("relationship")
         ));
         assertNotNull(memory.rememberTrusted(
-                MemoryScope.EVENT, playerId.toString(), "haunty", MemoryKind.EVENT,
-                "chatgame.win.1", "remymine won the Regen chatgame", 1.0, 0.9,
-                "event-listener", "chatgame", System.currentTimeMillis(), Duration.ofDays(7), Set.of("chatgame")
+                MemoryScope.EVENT,
+                playerId.toString(),
+                "haunty",
+                MemoryKind.EVENT,
+                "chatgame.win.1",
+                "remymine won the Regen chatgame",
+                1.0,
+                0.9,
+                "event-listener",
+                "chatgame",
+                System.currentTimeMillis(),
+                Duration.ofDays(7),
+                Set.of("chatgame")
         ));
 
         String summary = memory.summary(playerId, "haunty", "wat gebeurde met regen?");
@@ -126,48 +225,13 @@ class AssistantMemoryServiceTest {
         memory.close();
     }
 
-    @Test
-    void shouldMigrateLegacyYamlOnce() throws Exception {
-        UUID playerId = UUID.randomUUID();
-        File dataFolder = dataDirectory.toFile();
-        YamlConfiguration preferences = new YamlConfiguration();
-        preferences.set("players." + playerId + ".tone", "casual");
-        preferences.set("players." + playerId + ".updated_at", System.currentTimeMillis());
-        preferences.save(new File(dataFolder, "assistant-memory.yml"));
-        YamlConfiguration longTerm = new YamlConfiguration();
-        longTerm.set("shared_facts", List.of("HauntedMC has Survival."));
-        longTerm.set("players." + playerId + ".name", "remymine");
-        longTerm.set("players." + playerId + ".facts", List.of("likes building farms"));
-        longTerm.save(new File(dataFolder, "assistant-long-term-memory.yml"));
-
-        AssistantMemoryService memory = memoryService(dataFolder);
-
-        assertTrue(memory.summary(playerId).contains("tone=casual"));
-        assertTrue(memory.summary(playerId).contains("HauntedMC has Survival."));
-        assertTrue(memory.summary(playerId).contains("likes building farms"));
-        assertTrue(new File(dataFolder, ".assistant-memory-v2-migrated").isFile());
-        memory.close();
-    }
-
-    @Test
-    void shouldNotMarkLegacyMigrationCompleteWhenSqliteFallsBackToMemory() throws Exception {
-        Path invalidDataFolder = dataDirectory.resolve("not-a-directory");
-        Files.writeString(invalidDataFolder, "blocks child database path");
-
-        AssistantMemoryService memory = memoryService(invalidDataFolder.toFile());
-
-        assertFalse(new File(invalidDataFolder.toFile(), ".assistant-memory-v2-migrated").isFile());
-        assertFalse(new File(invalidDataFolder.toFile(), "assistant-memory.db").isFile());
-        memory.close();
-    }
-
     private AssistantMemoryService memoryService(File dataFolder) {
         JavaPlugin plugin = mock(JavaPlugin.class);
         YamlConfiguration config = new YamlConfiguration();
         config.set("openai.assistant.memory.enabled", true);
-        config.set("openai.assistant.memory.retention_days", 90);
-        config.set("openai.assistant.memory.max_shared_facts", 128);
-        config.set("openai.assistant.memory.max_player_facts", 24);
+        config.set("openai.assistant.memory.max_shared_facts", 1024);
+        config.set("openai.assistant.memory.max_player_memories", 256);
+        config.set("openai.assistant.memory.max_context_characters", 8000);
         config.set("openai.assistant.routing.allowed_languages", List.of("nl", "en", "de"));
         when(plugin.getConfig()).thenReturn(config);
         when(plugin.getDataFolder()).thenReturn(dataFolder);
