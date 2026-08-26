@@ -45,7 +45,10 @@ public class AIlexPlugin extends JavaPlugin {
 
         ConfigHandler.init(this);
         DataHandler.init(this);
-        assistantRequestTracer = new AssistantRequestTracer();
+        assistantRequestTracer = new AssistantRequestTracer(
+                () -> getConfig().getBoolean("openai.assistant.observability.enabled", true),
+                () -> getConfig().getBoolean("openai.assistant.observability.include_requester_name", true)
+        );
         openAiResponsesClient = new OpenAiResponsesClient(this);
         assistantMemoryService = new AssistantMemoryService(this);
         assistantEventMemoryService = new AssistantEventMemoryService(this);
