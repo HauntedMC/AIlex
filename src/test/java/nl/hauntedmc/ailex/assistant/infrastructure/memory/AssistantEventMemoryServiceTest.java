@@ -10,12 +10,14 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -49,6 +51,32 @@ class AssistantEventMemoryServiceTest {
     }
 
     @Test
+    void repeatedEventsShouldUseDistinctEpisodicKeys() {
+        AIlexPlugin plugin = mock(AIlexPlugin.class);
+        AssistantMemoryService memory = mock(AssistantMemoryService.class);
+        AssistantEventMemoryService events = new AssistantEventMemoryService(plugin, memory);
+        UUID playerId = UUID.randomUUID();
+
+        events.recordCustomEvent("world.change", playerId, "", "Player moved to survival",
+                0.4D, Duration.ofHours(12), Set.of("world"));
+        events.recordCustomEvent("world.change", playerId, "", "Player moved to creative",
+                0.4D, Duration.ofHours(12), Set.of("world"));
+
+        ArgumentCaptor<String> keys = ArgumentCaptor.forClass(String.class);
+        verify(memory, times(2)).rememberTrusted(
+                org.mockito.ArgumentMatchers.eq(MemoryScope.EVENT),
+                org.mockito.ArgumentMatchers.eq(playerId.toString()),
+                org.mockito.ArgumentMatchers.eq(""),
+                org.mockito.ArgumentMatchers.eq(MemoryKind.EVENT),
+                keys.capture(),
+                anyString(), anyDouble(), anyDouble(), anyString(), anyString(), anyLong(), any(Duration.class), any()
+        );
+        assertEquals(2, keys.getAllValues().size());
+        assertNotEquals(keys.getAllValues().get(0), keys.getAllValues().get(1));
+        assertTrue(keys.getAllValues().stream().allMatch(key -> key.startsWith("world.change.")));
+    }
+
+    @Test
     void relationshipTrackingShouldIncrementOnlyFactualInteractionCount() {
         AIlexPlugin plugin = mock(AIlexPlugin.class);
         AssistantMemoryService memory = mock(AssistantMemoryService.class);
@@ -71,7 +99,8 @@ class AssistantEventMemoryServiceTest {
                 org.mockito.ArgumentMatchers.eq(MemoryKind.RELATIONSHIP),
                 org.mockito.ArgumentMatchers.eq("interaction_count"),
                 value.capture(),
-                anyDouble(), anyDouble(), anyString(), anyString(), anyLong(), any(Duration.class), any()
+                anyDouble(), anyDouble(), anyString(),
+                org.mockito.ArgumentMatchers.eq("accepted-chat"), anyLong(), any(Duration.class), any()
         );
         assertEquals("4", value.getValue());
         assertTrue(value.getValue().matches("\\d+"));
