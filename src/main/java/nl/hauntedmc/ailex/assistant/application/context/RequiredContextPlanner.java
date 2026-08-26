@@ -37,11 +37,11 @@ public final class RequiredContextPlanner {
             if (settings.toolAllowed("world") && worldSignal(text)) {
                 live.add(LiveSource.WORLD);
             }
-            if (settings.toolAllowed("server") && serverSignal(text)) {
-                live.add(LiveSource.SERVER);
-            }
             if (settings.toolAllowed("nearby") && nearbySignal(text)) {
                 live.add(LiveSource.NEARBY);
+            }
+            if (settings.toolAllowed("server") && serverSignal(text)) {
+                live.add(LiveSource.SERVER);
             }
             if (settings.toolAllowed("npc") && npcSignal(text)) {
                 live.add(LiveSource.NPC);
@@ -70,7 +70,9 @@ public final class RequiredContextPlanner {
     }
 
     private boolean serverSignal(String text) {
-        return containsAny(text, "online", "spelers", "players", "tps", "mspt", "server", "uptime", "versie", "version");
+        // Generic words such as "spelers"/"players" are deliberately not enough: a nearby-player question
+        // should not also capture global server population. "online" still covers player-count questions.
+        return containsAny(text, "online", "tps", "mspt", "server", "uptime", "versie", "version");
     }
 
     private boolean nearbySignal(String text) {
