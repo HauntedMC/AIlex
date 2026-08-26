@@ -1,5 +1,7 @@
 package nl.hauntedmc.ailex.assistant.infrastructure.live;
 
+import nl.hauntedmc.ailex.assistant.security.AssistantDataSafety;
+
 import org.bukkit.entity.Player;
 
 import java.util.List;
@@ -19,7 +21,7 @@ public interface AssistantContextProvider {
      */
     List<ContextFact> collect(Player player, String playerMessage);
 
-    /** A compact key/value fact with an optional evidence-friendly description. */
+    /** A compact key/value fact that is validated before it can enter model context. */
     record ContextFact(String key, String value) {
         public ContextFact {
             key = sanitizeKey(key);
@@ -27,7 +29,9 @@ public interface AssistantContextProvider {
         }
 
         public boolean valid() {
-            return !key.isBlank() && !value.isBlank();
+            return !key.isBlank()
+                    && !value.isBlank()
+                    && !AssistantDataSafety.forbiddenLiveIntegration(key, value);
         }
 
         private static String sanitizeKey(String value) {
