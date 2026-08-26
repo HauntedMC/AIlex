@@ -14,13 +14,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
 
 /**
- * Tracks compact active player-to-assistant dialogue state independently from raw server chat.
- * Only a small recent turn window is retained and exposed to prompts.
+ * Tracks active player-to-assistant dialogue independently from ambient server chat.
+ * Recent turns are retained as a bounded working-memory window so follow-ups can resolve references and corrections.
  */
 public class AssistantConversationManager {
 
-    private static final int MAX_TURNS = 10;
-    private static final int MAX_PROMPT_CHARACTERS = 1600;
+    private static final int MAX_TURNS = 24;
+    private static final int MAX_PROMPT_CHARACTERS = 6_000;
     private final Map<SessionKey, Session> sessions = new ConcurrentHashMap<>();
     private final LongSupplier clock;
 
@@ -48,8 +48,8 @@ public class AssistantConversationManager {
         synchronized (session) {
             session.lastActivityMillis = clock.getAsLong();
             session.pendingAnswer = true;
-            session.previousUserMessage = compact(message, 320);
-            session.turns.addLast(new Turn("user", compact(speaker, 48), compact(message, 360)));
+            session.previousUserMessage = compact(message, 720);
+            session.turns.addLast(new Turn("user", compact(speaker, 48), compact(message, 900)));
             trim(session.turns);
         }
     }
@@ -59,9 +59,9 @@ public class AssistantConversationManager {
         synchronized (session) {
             session.lastActivityMillis = clock.getAsLong();
             session.pendingAnswer = false;
-            session.previousAssistantMessage = compact(message, 320);
+            session.previousAssistantMessage = compact(message, 720);
             session.previousIntent = intent;
-            session.turns.addLast(new Turn("assistant", compact(speaker, 48), compact(message, 360)));
+            session.turns.addLast(new Turn("assistant", compact(speaker, 48), compact(message, 900)));
             trim(session.turns);
         }
     }
@@ -89,21 +89,28 @@ public class AssistantConversationManager {
             return false;
         }
         String normalized = message.replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
-        if (normalized.length() > 180) {
+        if (normalized.length() > 320) {
             return false;
         }
         if (normalized.endsWith("?") || snapshot.pendingAnswer()) {
-            return startsLikeFollowUp(normalized) || normalized.length() <= 48;
+            return startsLikeFollowUp(normalized) || normalized.length() <= 96;
         }
-        return startsLikeFollowUp(normalized);
+        return startsLikeFollowUp(normalized) || correctionLikeFollowUp(normalized);
     }
 
     private boolean startsLikeFollowUp(String text) {
         return List.of(
                 "ja", "nee", "maar", "en ", "dus", "waarom", "hoezo", "wat dan", "welke", "waar dan",
                 "wacht", "bedoel", "huh", "uh", "ok", "oke", "oké", "yes", "no", "but", "and ",
-                "so ", "why", "how", "what", "which", "where", "wait", "i mean", "hmm"
+                "so ", "why", "how", "what", "which", "where", "wait", "i mean", "hmm", "eigenlijk",
+                "actually", "correctie", "correction"
         ).stream().anyMatch(text::startsWith);
+    }
+
+    private boolean correctionLikeFollowUp(String text) {
+        return text.contains("klopt niet") || text.contains("niet waar") || text.contains("je hebt het fout")
+                || text.contains("je zit fout") || text.contains("that's wrong") || text.contains("you are wrong")
+                || text.contains("you're wrong") || text.contains("not correct");
     }
 
     private Snapshot snapshot(Session session) {
@@ -118,7 +125,7 @@ public class AssistantConversationManager {
         }
         String promptContext = context.toString().trim();
         if (promptContext.length() > MAX_PROMPT_CHARACTERS) {
-            promptContext = promptContext.substring(promptContext.length() - MAX_PROMPT_CHARACTERS);
+            promptContext = "…" + promptContext.substring(promptContext.length() - MAX_PROMPT_CHARACTERS + 1);
         }
         return new Snapshot(
                 true,
@@ -161,7 +168,7 @@ public class AssistantConversationManager {
 
         public AssistantDialogueContext asDialogueContext() {
             return new AssistantDialogueContext(
-                    active, pendingAnswer, previousIntent, previousUserMessage, previousAssistantMessage
+                    active, pendingAnswer, previousIntent, previousUserMessage, previousAssistantMessage, promptContext
             );
         }
     }
