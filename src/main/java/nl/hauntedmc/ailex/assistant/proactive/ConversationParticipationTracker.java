@@ -11,13 +11,14 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * Tiny temporal model used only to keep proactive AIlex replies out of player-to-player conversations.
+ * Tiny temporal model used only to keep unaddressed AIlex replies out of player-to-player conversations.
  * It stores a short in-memory speaker window; no chat transcript is persisted by this component.
  */
 final class ConversationParticipationTracker {
 
     private static final int MAX_MESSAGES = 48;
     private static final long CONTEXTUAL_REPLY_MAX_GAP_MILLIS = 20_000L;
+    private static final int DIRECT_ADDRESS_HISTORY_MESSAGES = 8;
     private final Deque<Message> messages = new ArrayDeque<>();
 
     synchronized boolean isLikelyConversation(
@@ -102,11 +103,8 @@ final class ConversationParticipationTracker {
         if (!sourceName.isBlank() && mentionsName(latestOther.text(), sourceName)) {
             return true;
         }
-        for (int index = recent.size() - 1; index >= 0 && index >= recent.size() - 8; index--) {
-            Message message = recent.get(index);
-            if (message.playerId().equals(source.getUniqueId()) && mentionsName(message.text(), otherName)) {
-                return true;
-            }
+        if (recentSourceMessagesMention(recent, source.getUniqueId(), otherName)) {
+            return true;
         }
         if (onlinePlayers == null) {
             return false;
@@ -116,11 +114,25 @@ final class ConversationParticipationTracker {
                 continue;
             }
             String name = player.getName().toLowerCase(Locale.ROOT);
-            boolean sourceAddressedPlayer = recent.stream()
-                    .filter(message -> message.playerId().equals(source.getUniqueId()))
-                    .limit(8)
-                    .anyMatch(message -> mentionsName(message.text(), name));
-            if (sourceAddressedPlayer) {
+            if (recentSourceMessagesMention(recent, source.getUniqueId(), name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean recentSourceMessagesMention(List<Message> recent, UUID sourceId, String playerName) {
+        if (playerName == null || playerName.isBlank()) {
+            return false;
+        }
+        int checked = 0;
+        for (int index = recent.size() - 1; index >= 0 && checked < DIRECT_ADDRESS_HISTORY_MESSAGES; index--) {
+            Message message = recent.get(index);
+            if (!message.playerId().equals(sourceId)) {
+                continue;
+            }
+            checked++;
+            if (mentionsName(message.text(), playerName)) {
                 return true;
             }
         }
