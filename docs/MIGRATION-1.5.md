@@ -48,9 +48,9 @@ The original YAML files are **not overwritten or deleted**. This makes rollback 
 
 ### What is not imported
 
-`assistant-short-term-memory.yml` is raw short-lived chat/metadata state, not durable semantic memory. It is not promoted into Memory V2. AIlex 1.5 no longer bundles or recreates that file.
+`assistant-short-term-memory.yml` is raw short-lived chat/metadata state, not durable semantic memory. It is not promoted into Memory V2 and is not restored by default. AIlex 1.5 no longer bundles the file and will create/use short-term YAML only when an operator explicitly enables `openai.chat_context.persist_to_disk`.
 
-After verifying the upgrade, old YAML files may be archived outside the plugin directory. Keeping them is also safe; the migration marker prevents repeated import.
+After verifying the upgrade, old YAML files may be archived outside the plugin directory. Keeping the legacy semantic-memory YAML files is also safe; the migration marker prevents repeated import.
 
 ## Verify the upgrade
 
