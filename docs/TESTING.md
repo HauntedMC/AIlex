@@ -1,62 +1,89 @@
 # Testing and Quality
 
-AIlex tests deterministic logic at component boundaries so reliability failures can be reproduced without a live Minecraft server or real model call.
-
-## Local commands
+Run the complete build before merging:
 
 ```bash
-./gradlew test
-./gradlew checkstyleMain checkstyleTest
-./gradlew test jacocoTestReport
-./gradlew check
+./gradlew clean build
 ```
 
-Coverage reports are written to:
+This includes compilation, unit tests, Checkstyle and coverage reporting configured by the project.
 
-- `build/reports/jacoco/test/html/index.html`
-- `build/reports/jacoco/test/jacocoTestReport.xml`
+## Assistant routing and context
 
-## Test areas
+Tests should verify:
 
-Tests under `src/test/java` cover:
+- intent classification and follow-up routing;
+- live-state questions select the required source families;
+- the current request is never dropped when context is clipped;
+- multi-turn dialogue survives prompt compilation;
+- live state and memory receive useful space within large grounded budgets;
+- excessive history/evidence still stays within the configured route ceiling.
 
-- movement/pathfinding algorithms;
-- NPC lifecycle, actions, config and persistence;
-- chat mention/routing behavior;
-- active player↔NPC dialogue state;
-- request admission, queueing, supersession and proactive priority;
-- route-specific context/token budgets;
-- selective live-context planning;
-- local hybrid retrieval;
-- Memory V2 validation, supersession, SQLite persistence and legacy YAML migration;
-- selective episodic/event memory;
-- OpenAI request construction, response parsing and provider usage/cache accounting;
-- command/operator diagnostics.
+Important manual prompts include `waar ben ik?`, `welk bioom is dit?`, `wat houd ik vast?`, `waar kijk ik naar?` and a server-health question.
 
-## Reliability regressions
+## Knowledge retrieval
 
-`HauntyIncidentRegressionTest` encodes the production failure that motivated Runtime V2. It verifies that an unresolved addressed turn keeps `haunty?` as a continuation and that newer turns sent while a request is active are queued/superseded instead of silently disappearing.
+Test exact commands, Dutch/English concept aliases, redundancy suppression and broad discovery. A prompt such as `vertel een leuk feitje over HauntedMC` should retrieve multiple useful candidate facts rather than collapse to one negative/unrelated fact or return an empty corpus when reviewed knowledge exists.
 
-`AssistantRequestCoordinatorLoadTest` applies deterministic pressure without timing assumptions. With the shipped admission shape it verifies that 100 distinct direct submissions cannot exceed four active + eight queued requests, rejected work cannot grow the queue, proactive traffic gets no direct queue capacity, and accepted work drains completely.
+## Durable memory
 
-These tests should remain even if the implementation is reorganized; they describe required user-visible behavior rather than a specific internal class layout.
+Memory tests must cover:
 
-## Assistant quality bar
+- SQLite persistence;
+- sensitive/invented candidate rejection;
+- player vs trusted shared scope;
+- shared memory accepting facts only;
+- stable-key correction and supersession;
+- cross-kind semantic replacement;
+- explicit forgetting;
+- preferences, opinions, interests and temporary goals;
+- relationship/event scoping;
+- reinforcement on repeated confirmation;
+- associative retrieval and duplicate suppression.
 
-When changing assistant behavior, test both the selected route and what is *not* selected. Examples:
+Memory tests should assert what remains **active**, not only that a historical row was once written.
 
-- casual chat should not capture world/server state;
-- nearby-player questions should not automatically capture global server population;
-- event recall should use episodic memory rather than unrelated live context;
-- vanilla gameplay answers may be accepted without HauntedMC evidence;
-- custom/time-sensitive HauntedMC facts must not invent evidence IDs;
-- an active follow-up should preserve unresolved dialogue intent;
-- queue pressure must produce explicit accepted/queued/rejected outcomes.
+## Proactive chat
 
-For memory, assert provenance/scope/expiry/supersession rather than only checking a rendered summary string.
+False positives matter more than raw response rate. Test at least:
 
-For OpenAI integration, mock HTTP and assert exact request fields and provider-reported token/cache parsing. Tests must never depend on a real API key.
+1. a self-contained public question with no active conversation;
+2. a question directly naming/tagging another player;
+3. two players alternating messages followed by a contextual `?` reply;
+4. recent direct-address history followed by a question without the name;
+5. an explicit broadcast question (`weet iemand...?` / `anyone know...?`) during an active conversation;
+6. shared cooldown behavior;
+7. direct-request capacity remaining available while proactive work exists.
 
-## CI
+AIlex should prefer silence when it cannot confidently distinguish a private player conversation from a public question.
 
-Pull requests run separate lint and test/coverage workflows. A release candidate is not considered ready until both workflows pass on the current PR head.
+## Live integration providers
+
+Provider tests should ensure invalid keys/oversized values are rejected or bounded, provider failures do not fail the whole assistant request, and output is qualified so two integrations cannot silently overwrite each other's facts.
+
+Never test by exposing secrets to the model and expecting the prompt to remove them later; providers themselves must only return player-safe data.
+
+## Reliability and verification
+
+Cover:
+
+- invalid structured output retry limits;
+- grounded→deliberate escalation boundaries;
+- circuit-breaker behavior;
+- queue replacement/supersession;
+- evidence-ID validation;
+- static cache fingerprints changing with memory/live/evidence;
+- deadline fallback behavior.
+
+## Manual production smoke test
+
+After deploying to a test server, verify:
+
+```text
+/ailex ai status
+/ailex ai usage
+/ailex memory status
+/ailex trace recent
+```
+
+Then run a normal conversation, a multi-turn follow-up, live biome/item queries, reviewed server knowledge, open-ended discovery, a remembered preference, a correction, an explicit forget, and a two-player conversation that AIlex must not interrupt.
