@@ -149,12 +149,7 @@ public final class AssistantIntentClassifier {
         if (containsAny(message, STRONG_LIVE_WORDS) || containsLivePhrase(message)) {
             return true;
         }
-        boolean currentSelfReference = containsAnyPhrase(
-                message,
-                "mijn ", "my ", "heb ik", "ik heb", "ben ik", "am i", "i have", "i'm ", "im ",
-                "houd ik", "hou ik", "bij mij", "for me"
-        );
-        if (currentSelfReference
+        if (hasCurrentSelfReference(message)
                 && (containsAny(message, PLAYER_STATE_WORDS) || containsAny(message, WORLD_STATE_WORDS))) {
             return true;
         }
@@ -172,6 +167,15 @@ public final class AssistantIntentClassifier {
                 message,
                 "waar ben ik", "waar sta ik", "where am i", "where do i stand",
                 "waar sta je", "waar ben jij", "where are you", "wat doe je", "what are you doing"
+        );
+    }
+
+    private static boolean hasCurrentSelfReference(String message) {
+        String padded = " " + (message == null ? "" : message.replaceAll("\\s+", " ").trim()) + " ";
+        return containsAnyPhrase(
+                padded,
+                " mijn ", " my ", " heb ik ", " ik heb ", " ben ik ", " am i ", " i have ", " i'm ", " im ",
+                " houd ik ", " hou ik ", " bij mij ", " for me "
         );
     }
 
