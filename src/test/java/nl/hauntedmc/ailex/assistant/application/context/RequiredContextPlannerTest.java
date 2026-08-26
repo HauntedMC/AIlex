@@ -41,7 +41,7 @@ class RequiredContextPlannerTest {
     }
 
     @Test
-    void heldItemQuestionShouldRequestRequesterAndInventoryState() {
+    void heldItemQuestionShouldUseCompactRequesterStateWithoutFullInventoryScan() {
         RequiredContextPlanner.Plan plan = planner.plan(
                 AssistantIntent.LIVE_STATE,
                 AssistantMode.GROUNDED,
@@ -49,10 +49,8 @@ class RequiredContextPlannerTest {
                 AssistantSettings.defaults()
         );
 
-        assertEquals(
-                Set.of(RequiredContextPlanner.LiveSource.REQUESTER, RequiredContextPlanner.LiveSource.INVENTORY),
-                plan.liveSources()
-        );
+        assertEquals(Set.of(RequiredContextPlanner.LiveSource.REQUESTER), plan.liveSources());
+        assertFalse(plan.liveSources().contains(RequiredContextPlanner.LiveSource.INVENTORY));
     }
 
     @Test
