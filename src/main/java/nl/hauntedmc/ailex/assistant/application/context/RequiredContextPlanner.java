@@ -23,9 +23,6 @@ public final class RequiredContextPlanner {
             default -> false;
         };
 
-        // Relevant semantic memory is cheap to retrieve from the hot in-memory index and is useful in ordinary
-        // conversation too: preferences, prior explicit facts and factual player↔NPC relationship state are what make
-        // the assistant feel continuous instead of stateless. Retrieval remains query-ranked and prompt-bounded.
         boolean durableMemory = settings.toolAllowed("session") && switch (effectiveIntent) {
             case SAFETY, SUPPORT -> false;
             default -> true;
@@ -56,8 +53,6 @@ public final class RequiredContextPlanner {
                 live.add(LiveSource.NPC);
             }
             if (live.isEmpty()) {
-                // Ambiguous current-state wording receives the safe compact self + world sources. This includes biome,
-                // position and held-item state and avoids the previous failure where a valid live question had no data.
                 if (settings.toolAllowed("requester")) {
                     live.add(LiveSource.REQUESTER);
                 }
@@ -70,10 +65,15 @@ public final class RequiredContextPlanner {
     }
 
     private boolean requesterSignal(String text) {
-        return containsAny(text, "health", "gezondheid", "leven", "hp", "honger", "food", "gamemode", "game mode",
+        return containsAny(text,
+                "health", "gezondheid", "leven", "hp", "honger", "food", "gamemode", "game mode",
                 "level", "xp", "ervaring", "experience", "item", "hand", "holding", "vasthoud", "vast", "effect",
                 "armor", "armour", "pantser", "ping", "latency", "playtime", "speeltijd", "gespeeld", "saturation",
-                "air", "lucht", "fire", "brand", "flying", "vliegen", "swimming", "zwemmen", "sprinting", "rennen");
+                "air", "lucht", "fire", "brand", "flying", "vliegen", "swimming", "zwemmen", "sprinting", "rennen",
+                "rank", "balance", "saldo", "money", "geld", "currency", "valuta", "credits", "crowns", "essence",
+                "claim", "combattag", "combat-tag", "tagged", "autopickup", "fly", "god", "vanish", "queue",
+                "lottery", "loterij", "friends", "vrienden", "perk", "perks"
+        );
     }
 
     private boolean inventorySignal(String text) {
