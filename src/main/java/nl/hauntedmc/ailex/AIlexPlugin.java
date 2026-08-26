@@ -13,6 +13,7 @@ import nl.hauntedmc.ailex.npc.lifecycle.NpcManager;
 import nl.hauntedmc.ailex.util.LoggerUtils;
 import nl.hauntedmc.ailex.infrastructure.openai.OpenAiResponsesClient;
 import nl.hauntedmc.ailex.assistant.application.AssistantService;
+import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantEventMemoryService;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantMemoryService;
 
 import org.bukkit.command.PluginCommand;
@@ -30,6 +31,7 @@ public class AIlexPlugin extends JavaPlugin {
     private NpcManager npcManager;
     private OpenAiResponsesClient openAiResponsesClient;
     private AssistantMemoryService assistantMemoryService;
+    private AssistantEventMemoryService assistantEventMemoryService;
     private AssistantService assistantService;
     private AssistantRequestTracer assistantRequestTracer;
 
@@ -46,6 +48,7 @@ public class AIlexPlugin extends JavaPlugin {
         assistantRequestTracer = new AssistantRequestTracer();
         openAiResponsesClient = new OpenAiResponsesClient(this);
         assistantMemoryService = new AssistantMemoryService(this);
+        assistantEventMemoryService = new AssistantEventMemoryService(this);
         assistantService = new AssistantService(this);
         npcManager = new NpcManager(this::isNpcEnabled);
 
@@ -101,6 +104,9 @@ public class AIlexPlugin extends JavaPlugin {
         LLMChatListener chatListener = new LLMChatListener(this);
         getServer().getPluginManager().registerEvents(chatListener, this);
         chatListener.startProactiveConversationChecks();
+        if (assistantEventMemoryService != null) {
+            getServer().getPluginManager().registerEvents(assistantEventMemoryService, this);
+        }
         getServer().getPluginManager().registerEvents(new NPCDeathListener(this), this);
         getServer().getPluginManager().registerEvents(new NPCSpawnListener(this), this);
         getServer().getPluginManager().registerEvents(new PlayerJoinListener(this), this);
@@ -130,6 +136,11 @@ public class AIlexPlugin extends JavaPlugin {
 
     public AssistantMemoryService getAssistantMemoryService() {
         return assistantMemoryService;
+    }
+
+    /** Public integration surface for meaningful custom HauntedMC events. */
+    public AssistantEventMemoryService getAssistantEventMemoryService() {
+        return assistantEventMemoryService;
     }
 
     public AssistantRequestTracer getAssistantRequestTracer() {
