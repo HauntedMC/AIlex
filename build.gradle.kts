@@ -34,9 +34,11 @@ dependencies {
     implementation("net.citizensnpcs:citizens-main:2.0.43-SNAPSHOT")
     compileOnly("com.github.retrooper:packetevents-spigot:2.13.0")
 
-    // Memory V2 uses local SQLite/WAL. Embed only the JDBC driver so production needs no extra library plugin.
+    // Memory V2 uses local SQLite/WAL. Embed only the JDBC driver itself; Paper already supplies shared logging APIs.
     compileOnly("org.xerial:sqlite-jdbc:3.53.2.1")
-    bundled("org.xerial:sqlite-jdbc:3.53.2.1")
+    bundled("org.xerial:sqlite-jdbc:3.53.2.1") {
+        isTransitive = false
+    }
 
     testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
