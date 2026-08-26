@@ -24,10 +24,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 
-/**
- * Main class of the AIlex plugin
- * This class is responsible for initializing the plugin and registering all commands
- */
+/** Main plugin entrypoint. */
 public class AIlexPlugin extends JavaPlugin {
 
     private NpcManager npcManager;
@@ -36,20 +33,14 @@ public class AIlexPlugin extends JavaPlugin {
     private AssistantService assistantService;
     private AssistantRequestTracer assistantRequestTracer;
 
-    /**
-     * Called when the plugin is enabled
-     * This method initializes the plugin and registers all commands and listeners
-     */
     @Override
     public void onEnable() {
-        // Save the default config
         saveDefaultConfig();
         saveBuiltInKnowledge();
-        saveResource("assistant-memory.yml", false);
-        saveResource("assistant-long-term-memory.yml", false);
+        // assistant-memory.yml / assistant-long-term-memory.yml are legacy migration inputs in 1.5.0.
+        // Existing files are imported automatically by Memory V2; new installs use SQLite directly.
         saveResource("assistant-short-term-memory.yml", false);
 
-        // Initialize different parts of the plugin
         ConfigHandler.init(this);
         DataHandler.init(this);
         assistantRequestTracer = new AssistantRequestTracer();
@@ -58,11 +49,9 @@ public class AIlexPlugin extends JavaPlugin {
         assistantService = new AssistantService(this);
         npcManager = new NpcManager(this::isNpcEnabled);
 
-        // Register all commands and listeners
         registerCommands();
         registerListeners();
 
-        // Delay NPC loading one tick so all dependent plugins have fully enabled.
         getServer().getScheduler().runTask(this, () -> {
             if (isEnabled() && isNpcEnabled()) {
                 npcManager.loadNPCs();
@@ -72,37 +61,26 @@ public class AIlexPlugin extends JavaPlugin {
         LoggerUtils.logInfo("AIlex has been enabled");
     }
 
-    /**
-     * Called when the plugin is disabled
-     * Clean up all resources and remove all NPCs from the world
-     */
     @Override
     public void onDisable() {
         if (npcManager != null) {
-            // Unload all NPCs
             npcManager.unloadAllNPCs();
-
-            // Clear the NPCRegistry after removing all NPCs
             npcManager.clearNPCRegistry();
         }
-
+        if (assistantMemoryService != null) {
+            assistantMemoryService.close();
+        }
         LoggerUtils.logInfo("AIlex has been disabled");
     }
 
-    /**
-     * Register all commands that are part of the plugin
-     * Here you must register new commands
-     */
     private void registerCommands() {
         PluginCommand ailexCommand = getCommand("ailex");
         if (ailexCommand == null) {
             throw new IllegalStateException("The ailex command is missing from plugin.yml");
         }
-
         MainCommand mainCommand = new MainCommand(this);
         ailexCommand.setExecutor(mainCommand);
         ailexCommand.setTabCompleter(mainCommand);
-
     }
 
     private void saveBuiltInKnowledge() {
@@ -119,11 +97,7 @@ public class AIlexPlugin extends JavaPlugin {
         }
     }
 
-    /**
-     * Register all listeners that are used
-     */
     private void registerListeners() {
-        // Register here all listeners
         LLMChatListener chatListener = new LLMChatListener(this);
         getServer().getPluginManager().registerEvents(chatListener, this);
         chatListener.startProactiveConversationChecks();
@@ -131,57 +105,37 @@ public class AIlexPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new NPCSpawnListener(this), this);
         getServer().getPluginManager().registerEvents(new PlayerJoinListener(this), this);
         getServer().getPluginManager().registerEvents(new PlayerLeaveListener(this), this);
-
         registerPacketEventsListeners();
     }
 
-    /**
-     * Register all PacketEvents listeners
-     */
     private void registerPacketEventsListeners() {
-        // Register PacketEvents listeners here
-        //PacketEvents.getAPI().getEventManager().registerListener(new PacketTestListener());
+        // PacketEvents listeners are registered here when needed.
     }
 
-    /**
-     * Returns the lifecycle manager for AIlex-owned NPCs.
-     * @return the NPC lifecycle manager
-     */
     public NpcManager getNpcManager() {
         return npcManager;
     }
 
-    /** Returns whether AIlex may create and manage physical Citizens NPCs. */
     public boolean isNpcEnabled() {
         return getConfig().getBoolean("npc.enabled", true);
     }
 
-    /**
-     * Returns the configured OpenAI Responses API client.
-     * @return the OpenAI Responses API client
-     */
     public OpenAiResponsesClient getOpenAiResponsesClient() {
         return openAiResponsesClient;
     }
 
-    /** Returns the bounded read-only assistant application service. */
     public AssistantService getAssistantService() {
         return assistantService;
     }
 
-    /** Returns automatically managed assistant memory. */
     public AssistantMemoryService getAssistantMemoryService() {
         return assistantMemoryService;
     }
 
-    /** Returns the bounded assistant request trace registry. */
     public AssistantRequestTracer getAssistantRequestTracer() {
         return assistantRequestTracer;
     }
 
-    /**
-     * Recreate the OpenAI client after configuration changes.
-     */
     public void reloadOpenAiResponsesClient() {
         openAiResponsesClient = new OpenAiResponsesClient(this);
         if (assistantService != null) {
@@ -189,11 +143,6 @@ public class AIlexPlugin extends JavaPlugin {
         }
     }
 
-    /**
-     * Get the AIlex plugin
-     * Note: If possible pass this instance to other classes instead of using this method
-     * @return The AIlex plugin
-     */
     public static AIlexPlugin getPlugin() {
         return getPlugin(AIlexPlugin.class);
     }
