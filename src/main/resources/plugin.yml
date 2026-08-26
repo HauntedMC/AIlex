@@ -14,6 +14,9 @@ permissions:
   ailex.admin:
     description: Allows management of AIlex NPCs and configuration reloads.
     default: op
+  ailex.chat:
+    description: Allows players to address AIlex chat assistants.
+    default: true
   ailex.rate_limit.bypass:
     description: Bypasses the per-player AI response rate limit.
     default: op
