@@ -44,7 +44,12 @@ public record ProactiveChatSettings(
                         secondsToMillis(config.getLong(PATH + ".questions.conversation_window_seconds", 45L)),
                         Math.clamp(config.getInt(PATH + ".questions.minimum_speaker_alternations", 2), 2, 6),
                         secondsToMillis(config.getLong(PATH + ".questions.social_graph_window_seconds", 180L)),
-                        Math.clamp(config.getDouble(PATH + ".questions.strong_pair_score", 2.5D), 0.5D, 12.0D)
+                        Math.clamp(config.getDouble(PATH + ".questions.strong_pair_score", 2.5D), 0.5D, 12.0D),
+                        Math.clamp(config.getDouble(PATH + ".questions.utility.threshold", 0.25D), -1.0D, 2.0D),
+                        Math.clamp(config.getDouble(PATH + ".questions.utility.helpful_weight", 1.25D), 0.0D, 3.0D),
+                        Math.clamp(config.getDouble(PATH + ".questions.utility.privacy_cost", 1.20D), 0.0D, 3.0D),
+                        Math.clamp(config.getDouble(PATH + ".questions.utility.error_cost", 0.75D), 0.0D, 3.0D),
+                        Math.clamp(config.getDouble(PATH + ".questions.utility.repetition_cost", 0.85D), 0.0D, 3.0D)
                 ),
                 new CollectiveSettings(
                         config.getBoolean(PATH + ".collective.enabled", true),
@@ -100,8 +105,27 @@ public record ProactiveChatSettings(
             long conversationWindowMillis,
             int minimumSpeakerAlternations,
             long socialGraphWindowMillis,
-            double strongPairScore
+            double strongPairScore,
+            double utilityThreshold,
+            double helpfulWeight,
+            double privacyCost,
+            double errorCost,
+            double repetitionCost
     ) {
+        /** Source-compatible defaults for existing integrations/tests. */
+        public QuestionSettings(
+                boolean enabled,
+                double probability,
+                long conversationWindowMillis,
+                int minimumSpeakerAlternations,
+                long socialGraphWindowMillis,
+                double strongPairScore
+        ) {
+            this(
+                    enabled, probability, conversationWindowMillis, minimumSpeakerAlternations,
+                    socialGraphWindowMillis, strongPairScore, 0.25D, 1.25D, 1.20D, 0.75D, 0.85D
+            );
+        }
     }
 
     public record CollectiveSettings(
