@@ -1,5 +1,13 @@
 package nl.hauntedmc.ailex.infrastructure.openai;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import nl.hauntedmc.ailex.util.LoggerUtils;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.plugin.java.JavaPlugin;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -7,22 +15,10 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Objects;
 import java.util.Locale;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import java.util.Objects;
 
-import nl.hauntedmc.ailex.util.LoggerUtils;
-
-import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.plugin.java.JavaPlugin;
-
-/**
- * Client for OpenAI chat responses.
- * This class sends requests to the OpenAI Responses API and extracts one assistant reply.
- */
+/** Responses API client with privacy controls, stable cache routing, and first-class usage accounting. */
 public class OpenAiResponsesClient {
 
     static final String OPENAI_RESPONSES_API_URL = "https://api.openai.com/v1/responses";
@@ -51,10 +47,6 @@ public class OpenAiResponsesClient {
     private final boolean storeResponses;
     private final Duration requestTimeout;
 
-    /**
-     * Constructor for the OpenAI Responses API client.
-     * @param plugin - AIlex plugin instance
-     */
     public OpenAiResponsesClient(JavaPlugin plugin) {
         this(plugin.getConfig());
     }
@@ -62,10 +54,8 @@ public class OpenAiResponsesClient {
     OpenAiResponsesClient(FileConfiguration config) {
         this(
                 config.getString("openai.api_key", ""),
-                config.getString("openai.model", "gpt-5.4-mini"),
-                HttpClient.newBuilder()
-                        .connectTimeout(CONNECT_TIMEOUT)
-                        .build(),
+                config.getString("openai.model", "gpt-5.6-luna"),
+                HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build(),
                 config.getBoolean("openai.safety.enabled", true),
                 config.getString("openai.safety.system_prompt", SAFETY_SYSTEM_PROMPT),
                 Math.clamp(config.getInt("openai.max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS), 16, 600),
@@ -79,7 +69,9 @@ public class OpenAiResponsesClient {
         this(apiKey, model, httpClient, true, SAFETY_SYSTEM_PROMPT);
     }
 
-    OpenAiResponsesClient(String apiKey, String model, HttpClient httpClient, boolean safetyEnabled, String safetySystemPrompt) {
+    OpenAiResponsesClient(
+            String apiKey, String model, HttpClient httpClient, boolean safetyEnabled, String safetySystemPrompt
+    ) {
         this(apiKey, model, httpClient, safetyEnabled, safetySystemPrompt,
                 DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_REASONING_EFFORT, false, DEFAULT_REQUEST_TIMEOUT);
     }
@@ -123,122 +115,104 @@ public class OpenAiResponsesClient {
         LoggerUtils.logInfo("Initialized OpenAI client with model: " + (this.model.isEmpty() ? "<empty>" : this.model));
         if (!isConfigured()) {
             LoggerUtils.logWarning("OpenAI integration is disabled: set both openai.api_key and openai.model in config.yml.");
-            return;
-        }
-        if (this.safetyEnabled) {
+        } else if (this.safetyEnabled) {
             LoggerUtils.logInfo("OpenAI safety prompt guard is enabled.");
         }
     }
 
-    /**
-     * Sends a request to the OpenAI API with the given prompt and returns the response.
-     * @param prompt - the prompt to send to the API
-     * @return the text response from the API
-     */
     public String getChatResponse(String prompt) {
         return getChatResponse("", prompt);
     }
 
-    /**
-     * Sends a request to the OpenAI API using an NPC-specific system prompt and user prompt.
-     * @param systemPrompt - optional system prompt for NPC persona/behavior
-     * @param userPrompt - user prompt content
-     * @return the text response from the API
-     */
     public String getChatResponse(String systemPrompt, String userPrompt) {
         return getChatResponse(systemPrompt, userPrompt, RequestOptions.defaults());
     }
 
-    /**
-     * Sends a request with a bounded, per-call execution profile. This lets a caller choose a
-     * model tier without rebuilding the client or weakening its configured privacy safeguards.
-     */
+    /** Backward-compatible text API. Prefer {@link #getChatResult} when usage telemetry is needed. */
     public String getChatResponse(String systemPrompt, String userPrompt, RequestOptions options) {
-        if (userPrompt == null || userPrompt.isBlank()) {
-            return FALLBACK_RESPONSE;
-        }
-
-        if (!isConfigured(options)) {
-            return FALLBACK_RESPONSE;
-        }
-
-        HttpRequest request = createHttpRequest(systemPrompt, userPrompt, null, SYSTEM_RESPONSE_INSTRUCTION, options);
-
-        try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                String errorMessage = extractErrorMessage(response.body());
-                if (errorMessage.isEmpty()) {
-                    LoggerUtils.logWarning("OpenAI request failed with status: " + response.statusCode());
-                } else {
-                    LoggerUtils.logWarning("OpenAI request failed with status " + response.statusCode() + ": " + errorMessage);
-                }
-                return FALLBACK_RESPONSE;
-            }
-
-            String parsedResponse = extractAssistantText(response.body());
-            if (parsedResponse.isBlank()) {
-                LoggerUtils.logWarning("OpenAI response did not contain assistant text.");
-                return FALLBACK_RESPONSE;
-            }
-
-            return normalizeResponse(parsedResponse);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            LoggerUtils.logError("OpenAI request interrupted: " + e.getMessage());
-            return FALLBACK_RESPONSE;
-        } catch (IOException e) {
-            LoggerUtils.logError("OpenAI request failed: " + e.getMessage());
-            return FALLBACK_RESPONSE;
-        } catch (RuntimeException e) {
-            LoggerUtils.logError("OpenAI response parsing failed: " + e.getMessage());
-            return FALLBACK_RESPONSE;
-        }
+        return getChatResult(systemPrompt, userPrompt, options).text();
     }
 
-    /**
-     * Requests a schema-constrained response without applying chat-line normalization. Callers must
-     * validate the returned JSON before exposing any part of it to a player.
-     *
-     * @param systemPrompt assistant policy and NPC persona
-     * @param userPrompt request and trusted evidence
-     * @param responseFormat a Responses API {@code text.format} object
-     * @return raw model text, or an empty string when the request cannot be completed
-     */
+    /** Plain-text response plus server-reported token/cache usage. */
+    public ResponseResult getChatResult(String systemPrompt, String userPrompt, RequestOptions options) {
+        if (userPrompt == null || userPrompt.isBlank() || !isConfigured(options)) {
+            return ResponseResult.failure(FALLBACK_RESPONSE, 0);
+        }
+        return execute(
+                systemPrompt,
+                userPrompt,
+                null,
+                SYSTEM_RESPONSE_INSTRUCTION,
+                options,
+                true
+        );
+    }
+
     public String getStructuredChatResponse(String systemPrompt, String userPrompt, JsonObject responseFormat) {
         return getStructuredChatResponse(systemPrompt, userPrompt, responseFormat, RequestOptions.defaults());
     }
 
-    /** Requests a schema-constrained response with a bounded execution profile. */
+    /** Backward-compatible structured text API. Prefer {@link #getStructuredChatResult} for usage accounting. */
     public String getStructuredChatResponse(
             String systemPrompt, String userPrompt, JsonObject responseFormat, RequestOptions options
     ) {
-        if (userPrompt == null || userPrompt.isBlank() || responseFormat == null || !isConfigured(options)) {
-            return "";
-        }
+        return getStructuredChatResult(systemPrompt, userPrompt, responseFormat, options).text();
+    }
 
-        HttpRequest request = createHttpRequest(
+    /** Schema-constrained response plus server-reported token/cache usage. */
+    public ResponseResult getStructuredChatResult(
+            String systemPrompt, String userPrompt, JsonObject responseFormat, RequestOptions options
+    ) {
+        if (userPrompt == null || userPrompt.isBlank() || responseFormat == null || !isConfigured(options)) {
+            return ResponseResult.failure("", 0);
+        }
+        return execute(
                 systemPrompt,
                 userPrompt,
                 responseFormat,
                 "Return only a JSON object that conforms exactly to the supplied response schema.",
-                options
+                options,
+                false
         );
+    }
+
+    private ResponseResult execute(
+            String systemPrompt,
+            String userPrompt,
+            JsonObject responseFormat,
+            String responseInstruction,
+            RequestOptions options,
+            boolean normalize
+    ) {
+        HttpRequest request = createHttpRequest(systemPrompt, userPrompt, responseFormat, responseInstruction, options);
         try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            HttpResponse<String> response = httpClient.send(
+                    request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
+            );
+            Usage usage = extractUsage(response.body());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                LoggerUtils.logWarning("OpenAI structured request failed with status: " + response.statusCode());
-                return "";
+                String error = extractErrorMessage(response.body());
+                LoggerUtils.logWarning(error.isBlank()
+                        ? "OpenAI request failed with status: " + response.statusCode()
+                        : "OpenAI request failed with status " + response.statusCode() + ": " + error);
+                return ResponseResult.failure(normalize ? FALLBACK_RESPONSE : "", response.statusCode(), usage);
             }
-            return extractAssistantText(response.body()).trim();
+            String text = extractAssistantText(response.body());
+            if (text.isBlank()) {
+                LoggerUtils.logWarning("OpenAI response did not contain assistant text.");
+                return ResponseResult.failure(normalize ? FALLBACK_RESPONSE : "", response.statusCode(), usage);
+            }
+            return new ResponseResult(normalize ? normalizeResponse(text) : text.trim(), usage, response.statusCode(), true);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            LoggerUtils.logError("OpenAI structured request interrupted: " + exception.getMessage());
-            return "";
-        } catch (IOException | RuntimeException exception) {
-            LoggerUtils.logError("OpenAI structured request failed: " + exception.getMessage());
-            return "";
+            LoggerUtils.logError("OpenAI request interrupted: " + exception.getMessage());
+            return ResponseResult.failure(normalize ? FALLBACK_RESPONSE : "", 0);
+        } catch (IOException exception) {
+            LoggerUtils.logError("OpenAI request failed: " + exception.getMessage());
+            return ResponseResult.failure(normalize ? FALLBACK_RESPONSE : "", 0);
+        } catch (RuntimeException exception) {
+            LoggerUtils.logError("OpenAI response parsing failed: " + exception.getMessage());
+            return ResponseResult.failure(normalize ? FALLBACK_RESPONSE : "", 0);
         }
     }
 
@@ -247,14 +221,9 @@ public class OpenAiResponsesClient {
     }
 
     private boolean isConfigured(RequestOptions options) {
-        return !apiKey.isBlank() && !((options == null ? "" : options.model(model)).isBlank());
+        return !apiKey.isBlank() && !(options == null ? model : options.model(model)).isBlank();
     }
 
-    /**
-     * Creates an HttpRequest with the given prompt.
-     * @param prompt - the prompt to send to the API
-     * @return the HttpRequest
-     */
     HttpRequest createHttpRequest(String systemPrompt, String prompt) {
         return createHttpRequest(systemPrompt, prompt, null, SYSTEM_RESPONSE_INSTRUCTION, RequestOptions.defaults());
     }
@@ -270,35 +239,24 @@ public class OpenAiResponsesClient {
             String responseInstruction,
             RequestOptions options
     ) {
-        RequestOptions effectiveOptions = options == null ? RequestOptions.defaults() : options;
-        String inputJson = createRequestBody(systemPrompt, prompt, responseFormat, responseInstruction, effectiveOptions);
-        Duration timeout = effectiveOptions.timeout(requestTimeout);
-
+        RequestOptions effective = options == null ? RequestOptions.defaults() : options;
         return HttpRequest.newBuilder()
                 .uri(URI.create(OPENAI_RESPONSES_API_URL))
-                .timeout(timeout)
+                .timeout(effective.timeout(requestTimeout))
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + apiKey)
                 .header("Accept", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(inputJson, StandardCharsets.UTF_8))
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        createRequestBody(systemPrompt, prompt, responseFormat, responseInstruction, effective),
+                        StandardCharsets.UTF_8
+                ))
                 .build();
     }
 
-    /**
-     * Creates a JSON request body for the OpenAI Responses API.
-     * @param prompt - the prompt to send to the API
-     * @return JSON payload as string
-     */
     String createRequestBody(String prompt) {
         return createRequestBody("", prompt);
     }
 
-    /**
-     * Creates a JSON request body for the OpenAI Responses API.
-     * @param systemPrompt Optional system prompt for NPC persona/behavior
-     * @param prompt User prompt text
-     * @return JSON payload as string
-     */
     String createRequestBody(String systemPrompt, String prompt) {
         return createRequestBody(systemPrompt, prompt, null, SYSTEM_RESPONSE_INSTRUCTION, RequestOptions.defaults());
     }
@@ -314,22 +272,22 @@ public class OpenAiResponsesClient {
             String responseInstruction,
             RequestOptions options
     ) {
-        RequestOptions effectiveOptions = options == null ? RequestOptions.defaults() : options;
+        RequestOptions effective = options == null ? RequestOptions.defaults() : options;
         JsonObject payload = new JsonObject();
-        payload.addProperty("model", effectiveOptions.model(model));
-        payload.addProperty("max_output_tokens", effectiveOptions.maxOutputTokens(maxOutputTokens));
+        payload.addProperty("model", effective.model(model));
+        payload.addProperty("max_output_tokens", effective.maxOutputTokens(maxOutputTokens));
         payload.addProperty("store", storeResponses);
-        String effectiveReasoningEffort = effectiveOptions.reasoningEffort(reasoningEffort);
-        if (!effectiveReasoningEffort.isEmpty()) {
+        String effort = effective.reasoningEffort(reasoningEffort);
+        if (!effort.isBlank()) {
             JsonObject reasoning = new JsonObject();
-            reasoning.addProperty("effort", effectiveReasoningEffort);
+            reasoning.addProperty("effort", effort);
             payload.add("reasoning", reasoning);
         }
-        if (!effectiveOptions.safetyIdentifier().isBlank()) {
-            payload.addProperty("safety_identifier", effectiveOptions.safetyIdentifier());
+        if (!effective.safetyIdentifier().isBlank()) {
+            payload.addProperty("safety_identifier", effective.safetyIdentifier());
         }
-        if (!effectiveOptions.promptCacheKey().isBlank()) {
-            payload.addProperty("prompt_cache_key", effectiveOptions.promptCacheKey());
+        if (!effective.promptCacheKey().isBlank()) {
+            payload.addProperty("prompt_cache_key", effective.promptCacheKey());
         }
 
         String instructions = combineInstructions(systemPrompt, responseInstruction);
@@ -342,45 +300,15 @@ public class OpenAiResponsesClient {
         if (responseFormat != null) {
             JsonObject text = new JsonObject();
             text.add("format", responseFormat.deepCopy());
-            if (!effectiveOptions.verbosity().isBlank()) {
-                text.addProperty("verbosity", effectiveOptions.verbosity());
+            if (!effective.verbosity().isBlank()) {
+                text.addProperty("verbosity", effective.verbosity());
             }
             payload.add("text", text);
         }
-
         return payload.toString();
     }
 
-    private String sanitizeReasoningEffort(String effort) {
-        if (effort == null) {
-            return "";
-        }
-        String normalizedEffort = effort.trim().toLowerCase(Locale.ROOT);
-        return switch (normalizedEffort) {
-            case "none", "low", "medium", "high", "xhigh", "max" -> normalizedEffort;
-            default -> "";
-        };
-    }
-
-    private String combineInstructions(String systemPrompt, String responseInstruction) {
-        StringBuilder instructions = new StringBuilder();
-        appendInstruction(instructions, safetyEnabled ? safetySystemPrompt : "");
-        appendInstruction(instructions, systemPrompt);
-        appendInstruction(instructions, responseInstruction);
-        return instructions.toString();
-    }
-
-    private void appendInstruction(StringBuilder output, String instruction) {
-        if (instruction == null || instruction.isBlank()) {
-            return;
-        }
-        if (!output.isEmpty()) {
-            output.append("\n\n");
-        }
-        output.append(instruction.trim());
-    }
-
-    /** Per-request controls that may safely override the default model execution profile. */
+    /** Per-request execution profile. Stable prompt-cache keys should identify the static instruction prefix. */
     public record RequestOptions(
             String model,
             int maxOutputTokens,
@@ -390,6 +318,12 @@ public class OpenAiResponsesClient {
             String promptCacheKey,
             String verbosity
     ) {
+        public RequestOptions {
+            safetyIdentifier = sanitizeIdentifier(safetyIdentifier, 64);
+            promptCacheKey = sanitizeIdentifier(promptCacheKey, 64);
+            verbosity = sanitizeVerbosity(verbosity);
+        }
+
         public static RequestOptions defaults() {
             return new RequestOptions("", 0, "", null, "", "", "");
         }
@@ -418,12 +352,6 @@ public class OpenAiResponsesClient {
             return requestTimeout.compareTo(Duration.ofSeconds(1)) < 0 ? Duration.ofSeconds(1) : requestTimeout;
         }
 
-        public RequestOptions {
-            safetyIdentifier = sanitizeIdentifier(safetyIdentifier, 64);
-            promptCacheKey = sanitizeIdentifier(promptCacheKey, 64);
-            verbosity = sanitizeVerbosity(verbosity);
-        }
-
         private static String sanitizeIdentifier(String value, int maxLength) {
             if (value == null) {
                 return "";
@@ -443,154 +371,227 @@ public class OpenAiResponsesClient {
         }
     }
 
+    /** Exact server-reported usage fields used for cost and prompt-cache observability. */
+    public record Usage(long inputTokens, long cachedInputTokens, long cacheWriteTokens, long outputTokens, long totalTokens) {
+        public static Usage empty() {
+            return new Usage(0L, 0L, 0L, 0L, 0L);
+        }
+
+        public Usage plus(Usage other) {
+            if (other == null) {
+                return this;
+            }
+            return new Usage(
+                    inputTokens + other.inputTokens,
+                    cachedInputTokens + other.cachedInputTokens,
+                    cacheWriteTokens + other.cacheWriteTokens,
+                    outputTokens + other.outputTokens,
+                    totalTokens + other.totalTokens
+            );
+        }
+
+        public double cacheHitRatio() {
+            return inputTokens <= 0L ? 0.0D : Math.clamp((double) cachedInputTokens / inputTokens, 0.0D, 1.0D);
+        }
+    }
+
+    /** One Responses API result; failure text keeps legacy caller behavior while exposing success separately. */
+    public record ResponseResult(String text, Usage usage, int httpStatus, boolean success) {
+        public ResponseResult {
+            text = text == null ? "" : text;
+            usage = usage == null ? Usage.empty() : usage;
+        }
+
+        public static ResponseResult failure(String text, int status) {
+            return failure(text, status, Usage.empty());
+        }
+
+        public static ResponseResult failure(String text, int status, Usage usage) {
+            return new ResponseResult(text, usage, status, false);
+        }
+    }
+
+    private Usage extractUsage(String responseBody) {
+        JsonObject root = parseJsonObject(responseBody);
+        if (root == null || !root.has("usage") || !root.get("usage").isJsonObject()) {
+            return Usage.empty();
+        }
+        JsonObject usage = root.getAsJsonObject("usage");
+        JsonObject inputDetails = object(usage, "input_tokens_details");
+        long input = longValue(usage, "input_tokens");
+        long output = longValue(usage, "output_tokens");
+        long total = longValue(usage, "total_tokens");
+        long cached = firstPositive(
+                longValue(inputDetails, "cached_tokens"),
+                longValue(usage, "cached_input_tokens")
+        );
+        long cacheWrite = firstPositive(
+                longValue(inputDetails, "cache_write_tokens"),
+                longValue(inputDetails, "cache_creation_tokens"),
+                longValue(usage, "cache_write_tokens"),
+                longValue(usage, "cache_creation_input_tokens")
+        );
+        return new Usage(input, cached, cacheWrite, output, total);
+    }
+
+    private long firstPositive(long... values) {
+        for (long value : values) {
+            if (value > 0L) {
+                return value;
+            }
+        }
+        return 0L;
+    }
+
+    private long longValue(JsonObject object, String property) {
+        if (object == null || !object.has(property) || !object.get(property).isJsonPrimitive()) {
+            return 0L;
+        }
+        try {
+            return Math.max(0L, object.get(property).getAsLong());
+        } catch (RuntimeException ignored) {
+            return 0L;
+        }
+    }
+
+    private JsonObject object(JsonObject parent, String property) {
+        return parent != null && parent.has(property) && parent.get(property).isJsonObject()
+                ? parent.getAsJsonObject(property) : null;
+    }
+
+    private String sanitizeReasoningEffort(String effort) {
+        if (effort == null) {
+            return "";
+        }
+        return switch (effort.trim().toLowerCase(Locale.ROOT)) {
+            case "none", "low", "medium", "high", "xhigh", "max" -> effort.trim().toLowerCase(Locale.ROOT);
+            default -> "";
+        };
+    }
+
+    private String combineInstructions(String systemPrompt, String responseInstruction) {
+        StringBuilder instructions = new StringBuilder();
+        appendInstruction(instructions, safetyEnabled ? safetySystemPrompt : "");
+        appendInstruction(instructions, systemPrompt);
+        appendInstruction(instructions, responseInstruction);
+        return instructions.toString();
+    }
+
+    private void appendInstruction(StringBuilder output, String instruction) {
+        if (instruction == null || instruction.isBlank()) {
+            return;
+        }
+        if (!output.isEmpty()) {
+            output.append("\n\n");
+        }
+        output.append(instruction.trim());
+    }
+
     private JsonObject createInputMessage(String role, String text) {
         JsonObject message = new JsonObject();
         message.addProperty("role", role);
-
         JsonArray content = new JsonArray();
         JsonObject textContent = new JsonObject();
         textContent.addProperty("type", "input_text");
         textContent.addProperty("text", text);
         content.add(textContent);
-
         message.add("content", content);
         return message;
     }
 
     private String extractAssistantText(String responseBody) {
-        if (responseBody == null || responseBody.isBlank()) {
-            return "";
-        }
-
         JsonObject root = parseJsonObject(responseBody);
         if (root == null) {
             return "";
         }
-
         String outputArrayText = extractFromOutputArray(root.getAsJsonArray("output"));
         if (!outputArrayText.isBlank()) {
             return outputArrayText;
         }
-
-        String topLevelOutputText = getString(root, "output_text");
-        if (!topLevelOutputText.isBlank()) {
-            return topLevelOutputText;
-        }
-
-        return "";
+        return getString(root, "output_text");
     }
 
     private String extractErrorMessage(String responseBody) {
-        if (responseBody == null || responseBody.isBlank()) {
-            return "";
-        }
-
         JsonObject root = parseJsonObject(responseBody);
         if (root == null || !root.has("error") || root.get("error").isJsonNull()) {
             return "";
         }
-
         JsonElement error = root.get("error");
         if (error.isJsonObject()) {
             return getString(error.getAsJsonObject(), "message");
         }
-        if (error.isJsonPrimitive()) {
-            return error.getAsString();
-        }
-
-        return "";
+        return error.isJsonPrimitive() ? error.getAsString() : "";
     }
 
     private JsonObject parseJsonObject(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
         try {
             JsonElement parsed = JsonParser.parseString(value);
-            if (parsed.isJsonObject()) {
-                return parsed.getAsJsonObject();
-            }
+            return parsed.isJsonObject() ? parsed.getAsJsonObject() : null;
         } catch (RuntimeException ignored) {
-            // Keep this method pure; caller decides whether to log.
+            return null;
         }
-        return null;
     }
 
     private String extractFromOutputArray(JsonArray outputArray) {
         if (outputArray == null || outputArray.isEmpty()) {
             return "";
         }
-
         StringBuilder assistantText = new StringBuilder();
         StringBuilder directOutputText = new StringBuilder();
         for (JsonElement outputItem : outputArray) {
             if (!outputItem.isJsonObject()) {
                 continue;
             }
-
-            JsonObject outputObject = outputItem.getAsJsonObject();
-            String outputType = getString(outputObject, "type");
+            JsonObject output = outputItem.getAsJsonObject();
+            String outputType = getString(output, "type");
             if ("output_text".equals(outputType)) {
-                appendText(directOutputText, getString(outputObject, "text"));
+                appendText(directOutputText, getString(output, "text"));
                 continue;
             }
             if (!"message".equals(outputType)) {
                 continue;
             }
-
-            String role = getString(outputObject, "role");
+            String role = getString(output, "role");
             if (!role.isBlank() && !"assistant".equalsIgnoreCase(role)) {
                 continue;
             }
-
-            JsonArray content = outputObject.getAsJsonArray("content");
-            if (content == null || content.isEmpty()) {
+            JsonArray content = output.getAsJsonArray("content");
+            if (content == null) {
                 continue;
             }
-
-            for (JsonElement contentItem : content) {
-                if (!contentItem.isJsonObject()) {
+            for (JsonElement item : content) {
+                if (!item.isJsonObject()) {
                     continue;
                 }
-
-                JsonObject contentObject = contentItem.getAsJsonObject();
-                String contentType = getString(contentObject, "type");
-                if ("output_text".equals(contentType) || contentType.isBlank()) {
-                    appendText(assistantText, getString(contentObject, "text"));
-                    continue;
-                }
-                if ("refusal".equals(contentType)) {
-                    String refusalText = getString(contentObject, "refusal");
-                    if (refusalText.isBlank()) {
-                        refusalText = getString(contentObject, "text");
-                    }
-                    appendText(assistantText, refusalText);
+                JsonObject part = item.getAsJsonObject();
+                String type = getString(part, "type");
+                if ("output_text".equals(type) || type.isBlank()) {
+                    appendText(assistantText, getString(part, "text"));
+                } else if ("refusal".equals(type)) {
+                    String refusal = getString(part, "refusal");
+                    appendText(assistantText, refusal.isBlank() ? getString(part, "text") : refusal);
                 }
             }
         }
-
-        if (assistantText.length() > 0) {
-            return assistantText.toString();
-        }
-        return directOutputText.toString();
+        return assistantText.isEmpty() ? directOutputText.toString() : assistantText.toString();
     }
 
     private String getString(JsonObject object, String property) {
-        if (object == null || !object.has(property) || object.get(property).isJsonNull()) {
+        if (object == null || !object.has(property) || object.get(property).isJsonNull()
+                || !object.get(property).isJsonPrimitive()) {
             return "";
         }
-
-        JsonElement value = object.get(property);
-        if (!value.isJsonPrimitive()) {
-            return "";
-        }
-
-        String text = value.getAsString();
-        return text == null ? "" : text.trim();
+        return object.get(property).getAsString().trim();
     }
 
     private void appendText(StringBuilder builder, String text) {
         if (text == null || text.isBlank()) {
             return;
         }
-        if (builder.length() > 0) {
+        if (!builder.isEmpty()) {
             builder.append(' ');
         }
         builder.append(text.trim());
@@ -601,19 +602,11 @@ public class OpenAiResponsesClient {
         if (normalized.startsWith("\"") && normalized.endsWith("\"") && normalized.length() > 1) {
             normalized = normalized.substring(1, normalized.length() - 1).trim();
         }
-
-        normalized = normalized.replaceAll("\\s*\\n+\\s*", " ");
-        normalized = normalized.replaceAll("\\s{2,}", " ").trim();
-
+        normalized = normalized.replaceAll("\\s*\n+\\s*", " ").replaceAll("\\s{2,}", " ").trim();
         if (normalized.isEmpty()) {
             return FALLBACK_RESPONSE;
         }
-
-        if (normalized.length() > MAX_CHAT_RESPONSE_LENGTH) {
-            return normalized.substring(0, MAX_CHAT_RESPONSE_LENGTH - 3).trim() + "...";
-        }
-
-        return normalized;
+        return normalized.length() > MAX_CHAT_RESPONSE_LENGTH
+                ? normalized.substring(0, MAX_CHAT_RESPONSE_LENGTH - 3).trim() + "..." : normalized;
     }
-
 }
