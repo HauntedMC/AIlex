@@ -64,7 +64,7 @@ class AssistantMemoryServiceTest {
     }
 
     @Test
-    void shouldRejectSensitiveInventedAndUnauthorizedMemory() {
+    void shouldRejectSensitiveInventedUnauthorizedAndNonFactualSharedMemory() {
         UUID playerId = UUID.randomUUID();
         AssistantMemoryService memory = memoryService(dataDirectory.toFile());
 
@@ -89,11 +89,19 @@ class AssistantMemoryServiceTest {
                 "Alice is staff.",
                 false
         );
+        memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("shared", "opinion", "best_gamemode", "Survival is het leukst", "upsert"),
+                "Ik vind Survival het leukst.",
+                true
+        );
 
         String summary = memory.summary(playerId);
         assertFalse(summary.contains("secret123"));
         assertFalse(summary.contains("favorite_gamemode=Minigames"));
         assertFalse(summary.contains("staff.alice"));
+        assertFalse(summary.contains("best_gamemode"));
         memory.close();
     }
 
@@ -129,7 +137,37 @@ class AssistantMemoryServiceTest {
     }
 
     @Test
-    void shouldRememberGenericPreferencesOpinionsAndExplicitLanguage() {
+    void shouldKeepOnlyOneSemanticKindForTheSamePlayerKey() {
+        UUID playerId = UUID.randomUUID();
+        AssistantMemoryService memory = memoryService(dataDirectory.toFile());
+
+        memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("player", "fact", "favorite_gamemode", "Survival", "upsert"),
+                "Mijn favoriete gamemode is Survival.",
+                false
+        );
+        memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("player", "preference", "favorite_gamemode", "Creative", "upsert"),
+                "Mijn voorkeur is Creative; dat is mijn favoriete gamemode.",
+                false
+        );
+
+        List<MemoryRecord> active = memory.activeSnapshot().stream()
+                .filter(record -> record.scope() == MemoryScope.PLAYER)
+                .filter(record -> record.key().equals("favorite_gamemode"))
+                .toList();
+        assertEquals(1, active.size());
+        assertEquals(MemoryKind.PREFERENCE, active.getFirst().kind());
+        assertEquals("Creative", active.getFirst().value());
+        memory.close();
+    }
+
+    @Test
+    void shouldRememberGenericPreferencesOpinionsInterestsGoalsAndExplicitLanguage() {
         UUID playerId = UUID.randomUUID();
         AssistantMemoryService memory = memoryService(dataDirectory.toFile());
 
@@ -149,24 +187,42 @@ class AssistantMemoryServiceTest {
                 "Ik vind Redstone leuk.",
                 false
         );
+        memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("player", "interest", "building_style", "medieval builds", "upsert"),
+                "Ik ben geïnteresseerd in medieval builds.",
+                false
+        );
+        MemoryRecord goal = memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("player", "goal", "current_project", "een groot kasteel bouwen", "upsert"),
+                "Mijn doel is een groot kasteel bouwen.",
+                false
+        );
 
         String summary = memory.summary(playerId);
         assertEquals("de", memory.preferredLanguage(playerId));
         assertTrue(summary.contains("language=de"));
         assertTrue(summary.contains("answer_style=casual"));
         assertTrue(summary.contains("redstone=Redstone is leuk"));
+        assertTrue(summary.contains("building_style=medieval builds"));
+        assertTrue(summary.contains("current_project=een groot kasteel bouwen"));
+        assertNotNull(goal);
+        assertTrue(goal.expiresAt() > System.currentTimeMillis());
         memory.close();
     }
 
     @Test
-    void shouldForgetAnExplicitlyNamedMemoryKey() {
+    void shouldForgetAnExplicitlyNamedMemoryKeyAcrossSemanticKinds() {
         UUID playerId = UUID.randomUUID();
         AssistantMemoryService memory = memoryService(dataDirectory.toFile());
         memory.rememberCandidate(
                 playerId,
                 "remymine",
-                new MemoryCandidate("player", "fact", "favorite_gamemode", "Survival", "upsert"),
-                "Mijn favoriete gamemode is Survival.",
+                new MemoryCandidate("player", "interest", "favorite_gamemode", "Survival", "upsert"),
+                "Ik ben fan van Survival, onthoud mijn favoriete gamemode.",
                 false
         );
 
@@ -179,6 +235,37 @@ class AssistantMemoryServiceTest {
         );
 
         assertFalse(memory.summary(playerId).contains("favorite_gamemode"));
+        memory.close();
+    }
+
+    @Test
+    void shouldRetrieveAssociatedMemoriesThroughSharedConcepts() {
+        UUID playerId = UUID.randomUUID();
+        AssistantMemoryService memory = memoryService(dataDirectory.toFile());
+        memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("player", "interest", "building_style", "medieval castle building", "upsert"),
+                "Ik ben geïnteresseerd in medieval castle building.",
+                false
+        );
+        memory.rememberCandidate(
+                playerId,
+                "remymine",
+                new MemoryCandidate("player", "goal", "current_project", "castle storage room", "upsert"),
+                "Mijn doel is een castle storage room bouwen.",
+                false
+        );
+
+        List<MemoryRecord> results = memory.search(
+                playerId,
+                "",
+                "medieval building",
+                Set.of(MemoryKind.INTEREST, MemoryKind.GOAL),
+                8
+        );
+        assertTrue(results.stream().anyMatch(record -> record.key().equals("building_style")));
+        assertTrue(results.stream().anyMatch(record -> record.key().equals("current_project")));
         memory.close();
     }
 
