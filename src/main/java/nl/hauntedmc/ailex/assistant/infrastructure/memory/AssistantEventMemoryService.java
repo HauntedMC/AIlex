@@ -1,11 +1,7 @@
 package nl.hauntedmc.ailex.assistant.infrastructure.memory;
 
-import io.papermc.paper.event.player.AsyncChatEvent;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import nl.hauntedmc.ailex.AIlexPlugin;
-import nl.hauntedmc.ailex.npc.NPC;
-import nl.hauntedmc.ailex.npc.lifecycle.NpcManager;
-import org.bukkit.Bukkit;
+
 import org.bukkit.GameMode;
 import org.bukkit.advancement.Advancement;
 import org.bukkit.entity.Player;
@@ -19,7 +15,6 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
 import java.time.Duration;
-import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
@@ -36,7 +31,6 @@ public final class AssistantEventMemoryService implements Listener {
     private static final Duration ADVANCEMENT_TTL = Duration.ofDays(30);
     private static final Duration RELATIONSHIP_TTL = Duration.ofDays(90);
 
-    private final AIlexPlugin plugin;
     private final AssistantMemoryService memory;
 
     public AssistantEventMemoryService(AIlexPlugin plugin) {
@@ -44,7 +38,6 @@ public final class AssistantEventMemoryService implements Listener {
     }
 
     AssistantEventMemoryService(AIlexPlugin plugin, AssistantMemoryService memory) {
-        this.plugin = plugin;
         this.memory = memory;
     }
 
@@ -62,22 +55,23 @@ public final class AssistantEventMemoryService implements Listener {
             return null;
         }
         long now = System.currentTimeMillis();
+        String type = normalizeType(eventType);
         String player = playerId == null ? "" : playerId.toString();
         String npc = npcId == null ? "" : npcId.trim();
         Set<String> effectiveTags = new java.util.HashSet<>(tags == null ? Set.of() : tags);
         effectiveTags.add("event");
-        effectiveTags.add(normalizeType(eventType));
+        effectiveTags.add(type);
         return memory.rememberTrusted(
                 MemoryScope.EVENT,
                 player,
                 npc,
                 MemoryKind.EVENT,
-                normalizeType(eventType) + '.' + now + '.' + UUID.randomUUID().toString().substring(0, 8),
+                type + '.' + now + '.' + UUID.randomUUID().toString().substring(0, 8),
                 summary,
                 1.0D,
                 Math.clamp(salience, 0.0D, 1.0D),
                 "event-listener",
-                normalizeType(eventType),
+                type,
                 now,
                 ttl == null ? Duration.ofDays(7) : ttl,
                 Set.copyOf(effectiveTags)
@@ -106,7 +100,7 @@ public final class AssistantEventMemoryService implements Listener {
                 1.0D,
                 0.45D,
                 "assistant-runtime",
-                "addressed-chat",
+                "accepted-chat",
                 0L,
                 RELATIONSHIP_TTL,
                 Set.of("relationship", "interaction")
@@ -114,24 +108,9 @@ public final class AssistantEventMemoryService implements Listener {
     }
 
     @EventHandler(ignoreCancelled = true)
-    public void onChat(AsyncChatEvent event) {
-        if (memory == null) {
-            return;
-        }
-        Player player = event.getPlayer();
-        String message = PlainTextComponentSerializer.plainText().serialize(event.message());
-        Runnable task = () -> recordAddressedInteraction(player, message);
-        if (event.isAsynchronous()) {
-            Bukkit.getScheduler().runTask(plugin, task);
-        } else {
-            task.run();
-        }
-    }
-
-    @EventHandler(ignoreCancelled = true)
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        recordFixedEvent(
+        recordPlayerEvent(
                 player, "session.start", "Player joined the server", 0.20D, SESSION_TTL, Set.of("session", "join")
         );
     }
@@ -139,7 +118,7 @@ public final class AssistantEventMemoryService implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
-        recordFixedEvent(
+        recordPlayerEvent(
                 player, "session.end", "Player left the server", 0.15D, SESSION_TTL, Set.of("session", "quit")
         );
     }
@@ -148,14 +127,14 @@ public final class AssistantEventMemoryService implements Listener {
     public void onChangedWorld(PlayerChangedWorldEvent event) {
         Player player = event.getPlayer();
         String summary = "Player moved from world " + event.getFrom().getName() + " to " + player.getWorld().getName();
-        recordFixedEvent(player, "world.change", summary, 0.35D, WORLD_TTL, Set.of("world"));
+        recordPlayerEvent(player, "world.change", summary, 0.35D, WORLD_TTL, Set.of("world"));
     }
 
     @EventHandler(ignoreCancelled = true)
     public void onGameModeChanged(PlayerGameModeChangeEvent event) {
         Player player = event.getPlayer();
         GameMode mode = event.getNewGameMode();
-        recordFixedEvent(
+        recordPlayerEvent(
                 player,
                 "gamemode.change",
                 "Player changed game mode to " + mode.name().toLowerCase(Locale.ROOT),
@@ -194,73 +173,18 @@ public final class AssistantEventMemoryService implements Listener {
         );
     }
 
-    private void recordAddressedInteraction(Player player, String message) {
-        if (player == null || message == null || message.isBlank()) {
-            return;
-        }
-        NpcManager manager = plugin.getNpcManager();
-        if (manager != null) {
-            for (NPC npc : manager.getNPCRegistry().values()) {
-                if (npc.isChatEnabled() && isMentioned(message, npc.getName())) {
-                    recordInteraction(player.getUniqueId(), String.valueOf(npc.getId()));
-                    return;
-                }
-            }
-        }
-        if (!plugin.isNpcEnabled()) {
-            String standalone = plugin.getConfig().getString("openai.chat.standalone.mention", "AIlex");
-            if (isMentioned(message, standalone)) {
-                recordInteraction(player.getUniqueId(), "0");
-            }
-        }
-    }
-
-    private void recordFixedEvent(
+    private void recordPlayerEvent(
             Player player,
-            String key,
+            String type,
             String summary,
             double salience,
             Duration ttl,
             Set<String> tags
     ) {
-        if (memory == null || player == null) {
+        if (player == null) {
             return;
         }
-        long now = System.currentTimeMillis();
-        memory.rememberTrusted(
-                MemoryScope.EVENT,
-                player.getUniqueId().toString(),
-                "",
-                MemoryKind.EVENT,
-                key,
-                summary,
-                1.0D,
-                salience,
-                "event-listener",
-                key,
-                now,
-                ttl,
-                tags
-        );
-    }
-
-    private boolean isMentioned(String message, String name) {
-        if (name == null || name.isBlank()) {
-            return false;
-        }
-        String text = message.toLowerCase(Locale.ROOT);
-        String target = name.toLowerCase(Locale.ROOT);
-        int index = text.indexOf(target);
-        while (index >= 0) {
-            int end = index + target.length();
-            boolean before = index == 0 || !Character.isLetterOrDigit(text.charAt(index - 1));
-            boolean after = end == text.length() || !Character.isLetterOrDigit(text.charAt(end));
-            if (before && after) {
-                return true;
-            }
-            index = text.indexOf(target, end);
-        }
-        return false;
+        recordCustomEvent(type, player.getUniqueId(), "", summary, salience, ttl, tags);
     }
 
     private int safeInteger(String value) {

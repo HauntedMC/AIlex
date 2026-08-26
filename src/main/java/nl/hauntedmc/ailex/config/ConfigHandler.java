@@ -14,10 +14,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.Set;
 
-/** Utility class for handling the plugin configuration. */
+/** Utility class for handling the current plugin configuration. */
 public class ConfigHandler {
 
-    private static final int CURRENT_CONFIG_VERSION = 2;
     private static ConfigHandler instance;
     private final JavaPlugin plugin;
 
@@ -67,35 +66,18 @@ public class ConfigHandler {
         );
     }
 
-    /**
-     * Synchronizes plugin config with bundled defaults and applies one-way compatibility migrations first.
-     * Existing operator values are retained except where a versioned migration deliberately changes an unsafe old default.
-     */
+    /** Keeps the generated configuration exactly aligned with the current bundled defaults. */
     private void synchronizeConfigWithDefaults() {
         InputStream defaultsStream = plugin.getResource("config.yml");
         if (defaultsStream == null) {
             return;
         }
-
         YamlConfiguration defaults = YamlConfiguration.loadConfiguration(
                 new InputStreamReader(defaultsStream, StandardCharsets.UTF_8)
         );
         FileConfiguration current = plugin.getConfig();
-
-        migrate(current);
         syncSection(current, defaults, "");
-        current.set("config_version", CURRENT_CONFIG_VERSION);
         plugin.saveConfig();
-    }
-
-    private void migrate(FileConfiguration current) {
-        int version = current.getInt("config_version", 1);
-        if (version < 2) {
-            // 1.4 persisted the raw short-term transcript by default. In 1.5 durable state lives in typed SQLite
-            // Memory V2, so an upgrade explicitly turns raw transcript persistence off. Operators may opt in again.
-            current.set("openai.chat_context.persist_to_disk", false);
-            current.set("config_version", 2);
-        }
     }
 
     private void syncSection(FileConfiguration currentConfig, ConfigurationSection defaultsSection, String currentPath) {
@@ -116,8 +98,7 @@ public class ConfigHandler {
 
         for (String currentKey : currentKeys) {
             if (!defaultKeys.contains(currentKey)) {
-                String removePath = fullPath(currentPath, currentKey);
-                currentConfig.set(removePath, null);
+                currentConfig.set(fullPath(currentPath, currentKey), null);
             }
         }
 
@@ -132,7 +113,6 @@ public class ConfigHandler {
                     currentConfig.set(keyPath, null);
                     currentConfig.createSection(keyPath);
                 }
-
                 ConfigurationSection nestedDefaults = defaultsSection.getConfigurationSection(defaultKey);
                 if (nestedDefaults != null) {
                     syncSection(currentConfig, nestedDefaults, keyPath);
@@ -147,9 +127,6 @@ public class ConfigHandler {
     }
 
     private String fullPath(String parentPath, String key) {
-        if (parentPath.isEmpty()) {
-            return key;
-        }
-        return parentPath + "." + key;
+        return parentPath.isEmpty() ? key : parentPath + "." + key;
     }
 }

@@ -38,7 +38,7 @@ class AssistantConversationManagerTest {
     }
 
     @Test
-    void recognisesShortContinuationWithoutAnotherNpcMention() {
+    void recognisesContextualContinuationWithoutAnotherNpcMention() {
         AtomicLong clock = new AtomicLong(1_000L);
         AssistantConversationManager manager = new AssistantConversationManager(clock::get);
         UUID player = UUID.randomUUID();
@@ -49,10 +49,26 @@ class AssistantConversationManagerTest {
 
         assertTrue(manager.isLikelyFollowUp("waarom?", snapshot));
         assertTrue(manager.isLikelyFollowUp("nee ik bedoel die vorige ronde", snapshot));
+        assertTrue(manager.isLikelyFollowUp("kun je dat verder uitleggen?", snapshot));
+        assertFalse(manager.isLikelyFollowUp("waar is Alex?", snapshot));
+        assertFalse(manager.isLikelyFollowUp("kan iemand slapen?", snapshot));
         assertFalse(manager.isLikelyFollowUp(
                 "Ik ga nu een volledig andere lange discussie beginnen over iets dat niets met het gesprek te maken heeft.",
                 snapshot
         ));
+    }
+
+    @Test
+    void pendingAnswerDoesNotCaptureArbitraryPublicQuestions() {
+        AssistantConversationManager manager = new AssistantConversationManager(() -> 1_000L);
+        UUID player = UUID.randomUUID();
+        manager.recordUser(player, 3, "remymine", "haunty vertel eens iets");
+        AssistantConversationManager.Snapshot pending = manager.snapshot(player, 3, 60_000L);
+
+        assertTrue(pending.pendingAnswer());
+        assertTrue(manager.isLikelyFollowUp("wacht?", pending));
+        assertFalse(manager.isLikelyFollowUp("waar is Sam?", pending));
+        assertFalse(manager.isLikelyFollowUp("wie wil pvp?", pending));
     }
 
     @Test

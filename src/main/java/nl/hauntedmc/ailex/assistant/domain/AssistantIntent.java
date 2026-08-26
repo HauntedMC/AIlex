@@ -7,6 +7,7 @@ public enum AssistantIntent {
     MEMORY_RECALL,
     EVENT_RECALL,
     SERVER_FACT,
+    KNOWLEDGE_DISCOVERY,
     LIVE_STATE,
     GAMEPLAY_HELP,
     SUPPORT,

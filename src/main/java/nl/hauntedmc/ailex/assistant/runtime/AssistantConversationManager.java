@@ -11,24 +11,28 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongSupplier;
 
 /**
- * Tracks compact active player-to-assistant dialogue state independently from raw server chat.
- * Only a small recent turn window is retained and exposed to prompts.
+ * Tracks active player-to-assistant dialogue independently from ambient server chat.
+ * Recent turns are retained as a bounded working-memory window so follow-ups can resolve references and corrections.
  */
 public class AssistantConversationManager {
 
-    private static final int MAX_TURNS = 10;
-    private static final int MAX_PROMPT_CHARACTERS = 1600;
+    private static final int MAX_TURNS = 24;
+    private static final int MAX_PROMPT_CHARACTERS = 6_000;
+    private static final long CLEANUP_INTERVAL_MILLIS = 60_000L;
     private final Map<SessionKey, Session> sessions = new ConcurrentHashMap<>();
     private final LongSupplier clock;
+    private final AtomicLong lastCleanupMillis = new AtomicLong(Long.MIN_VALUE);
 
     public AssistantConversationManager(LongSupplier clock) {
         this.clock = clock;
     }
 
     public Snapshot snapshot(UUID playerId, int npcId, long timeoutMillis) {
+        cleanupExpiredSessions(timeoutMillis);
         SessionKey key = new SessionKey(playerId, npcId);
         Session session = sessions.get(key);
         if (session == null) {
@@ -48,8 +52,8 @@ public class AssistantConversationManager {
         synchronized (session) {
             session.lastActivityMillis = clock.getAsLong();
             session.pendingAnswer = true;
-            session.previousUserMessage = compact(message, 320);
-            session.turns.addLast(new Turn("user", compact(speaker, 48), compact(message, 360)));
+            session.previousUserMessage = compact(message, 720);
+            session.turns.addLast(new Turn("user", compact(speaker, 48), compact(message, 900)));
             trim(session.turns);
         }
     }
@@ -59,14 +63,15 @@ public class AssistantConversationManager {
         synchronized (session) {
             session.lastActivityMillis = clock.getAsLong();
             session.pendingAnswer = false;
-            session.previousAssistantMessage = compact(message, 320);
+            session.previousAssistantMessage = compact(message, 720);
             session.previousIntent = intent;
-            session.turns.addLast(new Turn("assistant", compact(speaker, 48), compact(message, 360)));
+            session.turns.addLast(new Turn("assistant", compact(speaker, 48), compact(message, 900)));
             trim(session.turns);
         }
     }
 
     public ActiveTarget activeTarget(UUID playerId, long timeoutMillis) {
+        cleanupExpiredSessions(timeoutMillis);
         long now = clock.getAsLong();
         return sessions.entrySet().stream()
                 .filter(entry -> entry.getKey().playerId().equals(playerId))
@@ -74,6 +79,7 @@ public class AssistantConversationManager {
                     Session session = entry.getValue();
                     synchronized (session) {
                         if (now - session.lastActivityMillis > timeoutMillis) {
+                            sessions.remove(entry.getKey(), session);
                             return null;
                         }
                         return new ActiveTarget(entry.getKey().npcId(), snapshot(session), session.lastActivityMillis);
@@ -84,26 +90,89 @@ public class AssistantConversationManager {
                 .orElse(null);
     }
 
+    /**
+     * Decides whether an unmentioned message belongs to the active AIlex dialogue. A bare question mark is not enough:
+     * the turn must carry a conversational continuation, correction or explicit reference to prior assistant content.
+     */
     public boolean isLikelyFollowUp(String message, Snapshot snapshot) {
         if (snapshot == null || !snapshot.active() || message == null || message.isBlank()) {
             return false;
         }
         String normalized = message.replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
-        if (normalized.length() > 180) {
+        if (normalized.length() > 320) {
             return false;
         }
-        if (normalized.endsWith("?") || snapshot.pendingAnswer()) {
-            return startsLikeFollowUp(normalized) || normalized.length() <= 48;
+        if (startsLikeFollowUp(normalized) || correctionLikeFollowUp(normalized) || referencesPriorTurn(normalized)) {
+            return true;
         }
-        return startsLikeFollowUp(normalized);
+        // While the model is still answering, allow terse acknowledgements/continuations but not an arbitrary new
+        // public question. This preserves fast conversational turns without capturing normal server chat.
+        return snapshot.pendingAnswer() && normalized.length() <= 32 && isTerseContinuation(normalized);
     }
 
     private boolean startsLikeFollowUp(String text) {
         return List.of(
                 "ja", "nee", "maar", "en ", "dus", "waarom", "hoezo", "wat dan", "welke", "waar dan",
                 "wacht", "bedoel", "huh", "uh", "ok", "oke", "oké", "yes", "no", "but", "and ",
-                "so ", "why", "how", "what", "which", "where", "wait", "i mean", "hmm"
+                "so ", "why", "how come", "what then", "which one", "where then", "wait", "i mean", "hmm",
+                "eigenlijk", "actually", "correctie", "correction"
         ).stream().anyMatch(text::startsWith);
+    }
+
+    private boolean correctionLikeFollowUp(String text) {
+        return text.contains("klopt niet") || text.contains("niet waar") || text.contains("je hebt het fout")
+                || text.contains("je zit fout") || text.contains("that's wrong") || text.contains("you are wrong")
+                || text.contains("you're wrong") || text.contains("not correct");
+    }
+
+    private boolean referencesPriorTurn(String text) {
+        if (text.matches("^(dit|dat|die|deze|daar|daarmee|daarover|ervoor|vorige|eerder)\\b.*")
+                || text.matches("^(this|that|those|there|it|previous|earlier)\\b.*")) {
+            return true;
+        }
+        return containsAny(text,
+                "wat je zei", "wat jij zei", "je antwoord", "jouw antwoord", "je uitleg", "jouw uitleg",
+                "leg dat uit", "leg dit uit", "dat verder uitleggen", "dit verder uitleggen", "die vorige",
+                "what you said", "your answer", "your explanation", "explain that", "explain this",
+                "that explanation", "this explanation", "the previous answer"
+        );
+    }
+
+    private boolean isTerseContinuation(String text) {
+        String stripped = text.replaceAll("[?!.,]+$", "").trim();
+        return SetLike.TERSE.contains(stripped)
+                || stripped.startsWith("maar ")
+                || stripped.startsWith("en ")
+                || stripped.startsWith("but ")
+                || stripped.startsWith("and ");
+    }
+
+    private void cleanupExpiredSessions(long timeoutMillis) {
+        long now = clock.getAsLong();
+        long previous = lastCleanupMillis.get();
+        if (previous != Long.MIN_VALUE && now - previous < CLEANUP_INTERVAL_MILLIS) {
+            return;
+        }
+        if (!lastCleanupMillis.compareAndSet(previous, now)) {
+            return;
+        }
+        long maximumAge = Math.max(1L, timeoutMillis);
+        sessions.forEach((key, session) -> {
+            synchronized (session) {
+                if (now - session.lastActivityMillis > maximumAge) {
+                    sessions.remove(key, session);
+                }
+            }
+        });
+    }
+
+    private boolean containsAny(String text, String... phrases) {
+        for (String phrase : phrases) {
+            if (text.contains(phrase)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Snapshot snapshot(Session session) {
@@ -118,7 +187,7 @@ public class AssistantConversationManager {
         }
         String promptContext = context.toString().trim();
         if (promptContext.length() > MAX_PROMPT_CHARACTERS) {
-            promptContext = promptContext.substring(promptContext.length() - MAX_PROMPT_CHARACTERS);
+            promptContext = "…" + promptContext.substring(promptContext.length() - MAX_PROMPT_CHARACTERS + 1);
         }
         return new Snapshot(
                 true,
@@ -161,7 +230,7 @@ public class AssistantConversationManager {
 
         public AssistantDialogueContext asDialogueContext() {
             return new AssistantDialogueContext(
-                    active, pendingAnswer, previousIntent, previousUserMessage, previousAssistantMessage
+                    active, pendingAnswer, previousIntent, previousUserMessage, previousAssistantMessage, promptContext
             );
         }
     }
@@ -182,5 +251,15 @@ public class AssistantConversationManager {
         private AssistantIntent previousIntent;
         private String previousUserMessage = "";
         private String previousAssistantMessage = "";
+    }
+
+    private static final class SetLike {
+        private static final java.util.Set<String> TERSE = java.util.Set.of(
+                "ja", "nee", "ok", "oke", "oké", "waarom", "hoezo", "wacht", "huh", "yes", "no", "okay",
+                "why", "wait", "hmm"
+        );
+
+        private SetLike() {
+        }
     }
 }

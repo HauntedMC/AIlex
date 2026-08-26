@@ -10,18 +10,13 @@ import java.util.Map;
 /**
  * Compiles independently sourced assistant context into a bounded prompt.
  *
- * <p>The current player request is always retained. Trusted live state and active dialogue outrank
- * durable memory, retrieved articles, and finally raw historical chat. The estimator intentionally
- * errs slightly high so a Minecraft response cannot accidentally inherit an enormous transcript.</p>
+ * <p>The current request is always retained. Active dialogue and trusted live state outrank durable memory and
+ * retrieved knowledge. Source ceilings scale with the route budget instead of imposing tiny global constants, so a
+ * complex grounded request can use materially more context without making ordinary chat expensive.</p>
  */
 public final class ContextCompiler {
 
     private static final int CHARACTERS_PER_TOKEN_ESTIMATE = 4;
-    private static final int MAX_BASE_PROMPT_TOKENS = 700;
-    private static final int MAX_DIALOGUE_TOKENS = 450;
-    private static final int MAX_LIVE_TOKENS = 800;
-    private static final int MAX_MEMORY_TOKENS = 450;
-    private static final int MAX_EVIDENCE_TOKENS = 1600;
 
     public CompiledContext compile(
             AssistantMode mode,
@@ -33,34 +28,34 @@ public final class ContextCompiler {
             List<ContextSource> evidence,
             String historicalChat
     ) {
-        int budget = Math.max(256, maximumInputTokens);
+        int budget = Math.max(512, maximumInputTokens);
         StringBuilder output = new StringBuilder();
         Map<String, Integer> tokensBySource = new LinkedHashMap<>();
 
-        int used = appendRequired(output, tokensBySource, "request", basePrompt,
-                Math.min(MAX_BASE_PROMPT_TOKENS, budget));
+        int requestCap = Math.min(budget, Math.max(1_000, budget / 4));
+        int used = appendRequired(output, tokensBySource, "request", basePrompt, requestCap);
         int remaining = Math.max(0, budget - used);
 
         if (dialogue != null && dialogue.active() && remaining > 0) {
-            String dialogueText = dialogueText(dialogue);
-            int allocated = Math.min(remaining, MAX_DIALOGUE_TOKENS);
-            used += append(output, tokensBySource, "dialogue", "Active dialogue state", dialogueText, allocated, true);
+            int allocated = Math.min(remaining, dialogueCap(mode, budget));
+            used += append(output, tokensBySource, "dialogue", "Active player-assistant dialogue",
+                    dialogueText(dialogue), allocated, true);
             remaining = Math.max(0, budget - used);
         }
         if (!blank(liveContext) && remaining > 0) {
-            int allocated = Math.min(remaining, MAX_LIVE_TOKENS);
+            int allocated = Math.min(remaining, liveCap(mode, budget));
             used += append(output, tokensBySource, "live", "Trusted live Minecraft context", liveContext,
                     allocated, false);
             remaining = Math.max(0, budget - used);
         }
         if (!blank(durableMemory) && remaining > 0) {
-            int allocated = Math.min(remaining, MAX_MEMORY_TOKENS);
-            used += append(output, tokensBySource, "memory", "Saved assistant memory", durableMemory,
+            int allocated = Math.min(remaining, memoryCap(mode, budget));
+            used += append(output, tokensBySource, "memory", "Relevant saved assistant memory", durableMemory,
                     allocated, false);
             remaining = Math.max(0, budget - used);
         }
         if (evidence != null && !evidence.isEmpty() && remaining > 0) {
-            int evidenceBudget = Math.min(remaining, MAX_EVIDENCE_TOKENS);
+            int evidenceBudget = Math.min(remaining, evidenceCap(mode, budget));
             for (ContextSource source : evidence) {
                 if (evidenceBudget <= 0 || remaining <= 0) {
                     break;
@@ -75,12 +70,44 @@ public final class ContextCompiler {
             }
         }
         if (!blank(historicalChat) && remaining > 0) {
-            used += append(output, tokensBySource, "history", "Relevant recent chat history", historicalChat,
+            used += append(output, tokensBySource, "history", "Relevant recent untrusted chat history", historicalChat,
                     remaining, true);
         }
 
         String prompt = output.toString().trim();
         return new CompiledContext(prompt, estimateTokens(prompt), Map.copyOf(tokensBySource));
+    }
+
+    private int dialogueCap(AssistantMode mode, int budget) {
+        return switch (mode) {
+            case FAST, HANDOFF -> Math.max(700, budget / 4);
+            case GROUNDED -> Math.max(1_600, budget / 3);
+            case DELIBERATE -> Math.max(2_400, budget / 3);
+        };
+    }
+
+    private int liveCap(AssistantMode mode, int budget) {
+        return switch (mode) {
+            case FAST, HANDOFF -> Math.max(900, budget / 3);
+            case GROUNDED -> Math.max(2_400, budget * 2 / 5);
+            case DELIBERATE -> Math.max(4_000, budget * 2 / 5);
+        };
+    }
+
+    private int memoryCap(AssistantMode mode, int budget) {
+        return switch (mode) {
+            case FAST, HANDOFF -> Math.max(700, budget / 4);
+            case GROUNDED -> Math.max(1_800, budget / 3);
+            case DELIBERATE -> Math.max(3_000, budget / 3);
+        };
+    }
+
+    private int evidenceCap(AssistantMode mode, int budget) {
+        return switch (mode) {
+            case FAST, HANDOFF -> Math.max(900, budget * 2 / 5);
+            case GROUNDED -> Math.max(3_000, budget * 3 / 5);
+            case DELIBERATE -> Math.max(6_000, budget * 3 / 5);
+        };
     }
 
     private int appendRequired(
@@ -137,7 +164,12 @@ public final class ContextCompiler {
     private String dialogueText(AssistantDialogueContext dialogue) {
         StringBuilder value = new StringBuilder("pending_answer=").append(dialogue.pendingAnswer());
         if (dialogue.previousIntent() != null) {
-            value.append(" | previous_intent=").append(dialogue.previousIntent().name().toLowerCase(java.util.Locale.ROOT));
+            value.append(" | previous_intent=")
+                    .append(dialogue.previousIntent().name().toLowerCase(java.util.Locale.ROOT));
+        }
+        if (!dialogue.recentTurns().isBlank()) {
+            value.append("\n").append(dialogue.recentTurns());
+            return value.toString();
         }
         if (!dialogue.previousUserMessage().isBlank()) {
             value.append("\nprevious_user=").append(dialogue.previousUserMessage());

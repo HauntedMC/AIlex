@@ -4,6 +4,9 @@ package nl.hauntedmc.ailex.assistant.infrastructure.memory;
 public enum MemoryKind {
     PREFERENCE,
     FACT,
+    OPINION,
+    INTEREST,
+    GOAL,
     RELATIONSHIP,
     EPISODE,
     EVENT

@@ -1,89 +1,77 @@
-config_version: 2
-
 openai:
   api_key: ""
   model: "gpt-5.6-luna"
-  # Default cap for direct/proactive fallback chat; assistant layers use their profile cap below.
-  max_output_tokens: 120
-  # Valid values: none, low, medium, high, xhigh, max. Layer-specific values below take precedence.
+  # Default cap for direct/proactive fallback chat; assistant profiles use their own limits below.
+  max_output_tokens: 200
+  # Valid values: none, low, medium, high, xhigh, max.
   reasoning_effort: "low"
-  # Do not retain player chat at the API provider unless you explicitly need stored responses.
+  # Player chat is not retained by the API provider.
   store_responses: false
-  # A failed upstream request must not occupy an AI worker indefinitely.
   request_timeout_seconds: 20
-  # Evidence-first assistant pipeline. It is read-only: it never executes commands or changes world state.
   assistant:
     enabled: true
-    # adaptive keeps ordinary chat on Luna, factual work on Terra, and expensive reasoning on Sol.
+    # Adaptive keeps ordinary chat cheap while factual/current-state work gets stronger grounding and reasoning.
     mode: "adaptive"
     total_deadline_seconds: 15
-    # Allows one malformed-output retry and one grounded→deliberate escalation when genuinely needed.
     max_model_calls: 3
     max_tool_rounds: 2
     structured_output: true
     routing:
-      # Unsupported or ambiguous input falls back to this language. Current supported codes: nl, en, de.
       default_language: "nl"
       allowed_languages: ["nl", "en", "de"]
       language_detection: true
       clarify_only_when_required: true
     context:
-      # These are hard prompt-assembly ceilings, not targets. Most requests should stay far below them.
-      max_input_tokens_fast: 1000
-      max_input_tokens_grounded: 2800
-      max_input_tokens_deliberate: 4800
+      # Hard ceilings, not targets. ContextCompiler selects only useful sources and can use more space when needed.
+      max_input_tokens_fast: 3000
+      max_input_tokens_grounded: 9000
+      max_input_tokens_deliberate: 18000
     retrieval:
-      # Hybrid retrieval is local-only: BM25 + aliases/phrases + multilingual concept expansion + dense hash signal.
+      # Local hybrid retrieval: BM25 + aliases/phrases + multilingual concepts + compact dense similarity.
       hybrid_enabled: true
-      max_chunks: 5
-      max_evidence_characters: 6500
+      max_chunks: 10
+      max_evidence_characters: 24000
       query_cache_seconds: 300
       exclude_expired: true
-    # Each semantic layer has its own capability/latency profile.
     models:
       fast:
         model: "gpt-5.6-luna"
         reasoning_effort: "low"
-        max_output_tokens: 96
+        # FAST can still use structured JSON for memory-writing turns; leave enough room for the envelope.
+        max_output_tokens: 220
       grounded:
         model: "gpt-5.6-terra"
         reasoning_effort: "medium"
-        max_output_tokens: 220
+        max_output_tokens: 360
       deliberate:
         model: "gpt-5.6-sol"
         reasoning_effort: "high"
-        max_output_tokens: 360
+        max_output_tokens: 640
     tools:
-      # Capability ceiling for selective live context. RequiredContextPlanner chooses the minimum source set per turn.
+      # Read-only capability ceiling. Player-helpful state is allowed; secrets and infrastructure internals are not.
       read_only: true
       allowed: ["knowledge", "requester", "world", "nearby", "server", "npc", "session"]
       redact_other_players: true
     verification:
       enabled: true
       minimum_confidence: "medium"
-      # The model's general knowledge remains available. Local Markdown and live Bukkit metadata
-      # are additional context for more accurate answers, not a limit on what it can answer.
     delivery:
       max_lines_fast: 1
-      max_lines_grounded: 2
-      max_lines_deliberate: 3
-      max_line_characters: 220
+      max_lines_grounded: 3
+      max_lines_deliberate: 4
+      max_line_characters: 240
     memory:
-      # Memory V2 persists typed, non-sensitive records to assistant-memory.db (SQLite/WAL).
-      # Raw chat transcripts are not durable memory. Existing 1.4 YAML memory is imported once on upgrade.
+      # Typed semantic and episodic memory is persisted to assistant-memory.db using SQLite/WAL.
       enabled: true
-      retention_days: 90
-      max_shared_facts: 128
-      max_player_facts: 24
-      # Only this permission may add shared facts, preventing arbitrary players from poisoning server-wide memory.
-      # Leave empty only if every player should be able to teach AIlex shared facts.
+      max_shared_facts: 1024
+      max_player_memories: 256
+      max_context_characters: 8000
+      # Only trusted staff may turn player statements into network-wide learned facts.
       shared_write_permission: "ailex.admin"
     reliability:
       circuit_breaker_enabled: true
       cache_static_answers: true
       shadow_mode: false
-    # One privacy-conscious routing and completion line per assistant request for server administrators.
-    # Chat messages, prompts, preference values and response text are never logged unless explicitly enabled below.
     observability:
       enabled: true
       include_requester_name: true
@@ -91,59 +79,53 @@ openai:
       max_response_preview_characters: 240
   chat:
     enabled: true
-    # Leave empty for all players. Set a permission (for example, ailex.chat) for a staff-only bot.
+    # Leave empty for all players. Set a permission for restricted access.
     access_permission: "ailex.chat"
-    # requester (recommended), nearby, or server. Private replies avoid leaking player context to global chat.
+    # requester, nearby, or server.
     response_visibility: "server"
     nearby_response_radius: 32
-    # Direct requests have priority. Excess direct requests wait in a small bounded queue instead of disappearing.
     max_concurrent_requests: 4
     max_queued_requests: 8
-    # Short replies without another bot mention can continue the latest player↔NPC conversation during this window.
-    session_timeout_seconds: 60
+    # Active player↔assistant working memory remains available for natural multi-turn conversations.
+    session_timeout_seconds: 300
     feedback:
       access_denied: "Je kunt AIlex hier niet gebruiken."
       queued: "Ik ben nog even bezig; ik pak je bericht hierna."
       queued_replaced: "Ik ben nog bezig; ik pak je nieuwste bericht hierna."
       busy: "Ik heb het nu te druk om dit betrouwbaar te verwerken. Probeer het zo nog eens."
       failure: "Mijn AI-service gaf geen bruikbaar antwoord. Probeer het nog eens."
-    # Used only while npc.enabled is false. No Citizens NPC is created in this mode.
     standalone:
       enabled: false
       mention: "AIlex"
       display_name: "<#7C3AED>[<#C4B5FD>AIlex<#7C3AED>]</#7C3AED>"
-      system_prompt: "Je bent AIlex, een slimme en vriendelijke Minecraft-assistent voor HauntedMC. Antwoord kort, concreet en eerlijk in het Nederlands. Gebruik alleen betrouwbare kennis en volg altijd de veiligheidsregels."
-  # Carefully limited, opt-in behaviour for bots that can contribute without being named.
-  # Proactive work is lower priority than every direct player request.
+      system_prompt: "Je bent AIlex, een slimme en vriendelijke Minecraft-assistent voor HauntedMC. Antwoord concreet, eerlijk en contextbewust. Gebruik live serverinformatie en betrouwbare HauntedMC-kennis wanneer relevant, onthoud expliciete niet-gevoelige spelersinformatie en corrigeer eerder geleerde informatie wanneer de speler die expliciet verbetert."
+  # Carefully limited behaviour for bots that can contribute without being named. Direct requests always have priority.
   proactive_chat:
     enabled: true
-    # server (recommended), nearby, or requester. Proactive replies are intended to feel like public chat.
     response_visibility: "server"
     cooldown_seconds: 120
     join:
       enabled: true
-      # An occasional greeting, never one for every join.
       probability: 0.15
       cooldown_seconds: 120
-      # {player_name} is mandatory: join greetings without that exact name are not sent.
       prompt: "Een speler met de naam {player_name} is zojuist gejoined. Geef precies één korte, persoonlijke begroeting direct aan {player_name}. Je antwoord MOET de exacte naam {player_name} bevatten. Gebruik geen generieke serverwelkomsttekst, slogan, uitleg, 'gg' of avontuur-wens. Houd het natuurlijk en eenvoudig, bijvoorbeeld in de stijl van 'Hey, welkom terug {player_name}!'."
     questions:
       enabled: true
-      # Only messages containing ? which are not addressed to an online player are considered.
       probability: 0.3
+      # AIlex tracks a tiny in-memory speaker window to avoid interrupting player-to-player conversations.
+      # Explicit broadcast questions such as "weet iemand...?" remain eligible even during active conversation.
+      conversation_window_seconds: 45
+      minimum_speaker_alternations: 2
     collective:
       enabled: true
-      # Distinct players must use one of these terms inside the window before the bot may join in.
       terms: ["gg", "wp", "well played", "welkom", "welcome", "congrats", "gefeliciteerd", "nice"]
       minimum_distinct_players: 2
       window_seconds: 45
       probability: 0.7
     idle:
       enabled: true
-      # The bot must itself have been quiet this long; this is not a timer for every quiet chat period.
       silence_seconds: 1800
       check_interval_seconds: 60
-      # Each eligible check has this small chance to send one useful, context-aware line.
       probability: 0.02
       minimum_online_players: 1
       recent_chat_window_seconds: 600
@@ -154,65 +136,55 @@ openai:
     enabled: true
     max_responses_per_player: 10
     window_seconds: 600
-    # Grant this permission to staff roles that should not consume a player response slot. Leave empty to disable this bypass.
     bypass_permission: "ailex.rate_limit.bypass"
-    # Server operators bypass the limit too, so the owner can test and administer AIlex without waiting.
     bypass_operators: true
     feedback:
       enabled: true
-      # Shown privately to the player. {remaining_seconds} is replaced with the wait time.
       message: "Je hebt de AI-limiet bereikt. Probeer het over {remaining_seconds} seconden opnieuw."
   knowledge:
     enabled: true
-    # Legacy selector limit. Assistant V2 additionally applies its own route-specific prompt budget after retrieval.
-    max_characters: 12000
-    # Put larger, reviewed knowledge articles in plugins/AIlex/knowledge/*.md or *.txt.
-    # Files must contain concise, factual bullets. Never place secrets, staff notes, player reports,
-    # API keys, IP addresses, sanctions, or personal data there: contents are sent to the model.
+    max_characters: 24000
+    # Reviewed knowledge articles are indexed locally. Never put secrets, staff notes, reports, API keys,
+    # IP addresses, sanctions or personal data here because retrieved evidence can be sent to the model.
     external:
       enabled: true
       directory: "knowledge"
-      max_files: 20
-      max_characters: 30000
+      max_files: 64
+      max_characters: 120000
     prompt: |-
       BETROUWBARE HAUNTEDMC-KENNIS — gebruik de thematische bestanden in knowledge/ voor commands, gamemodes,
-      ranks, regels en recente updates. Bij een verschil heeft een live officieel menu, /help, /ranks, de website
-      of de Store voorrang.
+      ranks, regels, systemen en actuele serverdetails. Bij een verschil heeft live serverstate of expliciet
+      bijgewerkte officiële kennis voorrang. Gebruik open-ended knowledge discovery voor vragen als "vertel een feitje".
       - HauntedMC is een Nederlandse Minecraft-community voor Nederlandse en Engelse spelers. Deel alleen de
         officiële adressen: play.hauntedmc.nl, https://hauntedmc.nl en https://store.hauntedmc.nl.
-      - De actieve gamemode-categorieën zijn Survival, Creative en Minigames. Er zijn ook events en regelmatige
-        updates. Verzin nooit commands, warps, prijzen, ranks, resetdatums, rewards of live status.
-      - Houd antwoorden gericht op HauntedMC. Voor een onbekende, gewijzigde of tijdgebonden servervraag: verwijs
-        naar /help, /ranks, de officiële website, de Store of staff.
+      - De actieve gamemode-categorieën zijn Survival, Creative en Minigames. Er zijn ook events en regelmatige updates.
+      - Verzin nooit commands, warps, prijzen, ranks, resetdatums, rewards of live status. Gebruik beschikbare evidence.
       - Behandel geen reports, appeals, straffen, aankopen, refunds of accountherstel. Vraag nooit om wachtwoorden,
         betaalgegevens, e-mailadressen of verificatiecodes.
   chat_context:
     enabled: true
-    # Raw transcript context is short-lived working state. Disk persistence is opt-in because durable assistant
-    # facts/preferences/events live in typed SQLite Memory V2 instead.
+    # Ambient/raw chat is short-lived context only. Durable knowledge belongs in typed semantic/episodic memory.
     persist_to_disk: false
-    max_message_characters: 360
-    max_context_characters: 7000
+    max_message_characters: 720
+    max_context_characters: 14000
     include_timestamps: true
     timestamp_format: "HH:mm:ss"
     general_chat:
       enabled: true
-      max_messages: 120
+      max_messages: 160
       max_age_seconds: 3600
-      max_context_characters: 1800
+      max_context_characters: 3000
     conversation:
       enabled: true
-      max_messages: 40
-      max_age_seconds: 7200
-      max_context_characters: 2400
+      max_messages: 80
+      max_age_seconds: 21600
+      max_context_characters: 6000
     bot_memory:
       enabled: true
-      max_messages: 60
-      max_age_seconds: 10800
-      max_context_characters: 1800
+      max_messages: 100
+      max_age_seconds: 21600
+      max_context_characters: 4000
 npc:
-  # Set false to run the assistant without creating or loading any Citizens NPCs.
-  # Players can still mention the standalone chat assistant configured under openai.chat.standalone.
   enabled: true
   defaults:
     entity:

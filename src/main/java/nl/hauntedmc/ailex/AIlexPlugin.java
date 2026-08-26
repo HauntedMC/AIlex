@@ -2,6 +2,7 @@ package nl.hauntedmc.ailex;
 
 import nl.hauntedmc.ailex.assistant.adapter.paper.AssistantChatListener;
 import nl.hauntedmc.ailex.assistant.application.AssistantService;
+import nl.hauntedmc.ailex.assistant.infrastructure.live.AssistantContextProviderRegistry;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantEventMemoryService;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantMemoryService;
 import nl.hauntedmc.ailex.assistant.runtime.AssistantRequestTracer;
@@ -32,6 +33,7 @@ public class AIlexPlugin extends JavaPlugin {
     private OpenAiResponsesClient openAiResponsesClient;
     private AssistantMemoryService assistantMemoryService;
     private AssistantEventMemoryService assistantEventMemoryService;
+    private AssistantContextProviderRegistry assistantContextProviderRegistry;
     private AssistantService assistantService;
     private AssistantRequestTracer assistantRequestTracer;
     private AssistantChatListener assistantChatListener;
@@ -40,8 +42,6 @@ public class AIlexPlugin extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
         saveBuiltInKnowledge();
-        // Memory V2 creates assistant-memory.db itself. Existing 1.4 YAML files in the data folder are
-        // migration inputs only and are intentionally never recreated or overwritten by 1.5.
 
         ConfigHandler.init(this);
         DataHandler.init(this);
@@ -52,6 +52,7 @@ public class AIlexPlugin extends JavaPlugin {
         openAiResponsesClient = new OpenAiResponsesClient(this);
         assistantMemoryService = new AssistantMemoryService(this);
         assistantEventMemoryService = new AssistantEventMemoryService(this);
+        assistantContextProviderRegistry = new AssistantContextProviderRegistry();
         assistantService = new AssistantService(this);
         npcManager = new NpcManager(this::isNpcEnabled);
 
@@ -148,6 +149,11 @@ public class AIlexPlugin extends JavaPlugin {
     /** Public integration surface for meaningful custom HauntedMC events. */
     public AssistantEventMemoryService getAssistantEventMemoryService() {
         return assistantEventMemoryService;
+    }
+
+    /** Public read-only integration surface for player-safe feature state. */
+    public AssistantContextProviderRegistry getAssistantContextProviderRegistry() {
+        return assistantContextProviderRegistry;
     }
 
     public AssistantRequestTracer getAssistantRequestTracer() {

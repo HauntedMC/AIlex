@@ -5,6 +5,8 @@ import nl.hauntedmc.ailex.assistant.domain.AssistantMode;
 import nl.hauntedmc.ailex.assistant.domain.AssistantSettings;
 import org.junit.jupiter.api.Test;
 
+import java.util.Set;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -27,8 +29,10 @@ class RequiredContextPlannerTest {
     @Test
     void eventRecallShouldUseEpisodicMemoryWithoutWorldSnapshot() {
         RequiredContextPlanner.Plan plan = planner.plan(
-                AssistantIntent.EVENT_RECALL, AssistantMode.GROUNDED,
-                "wat gebeurde er net met die chatgame?", AssistantSettings.defaults()
+                AssistantIntent.EVENT_RECALL,
+                AssistantMode.GROUNDED,
+                "wat gebeurde er net met die chatgame?",
+                AssistantSettings.defaults()
         );
 
         assertTrue(plan.eventMemory());
@@ -37,21 +41,37 @@ class RequiredContextPlannerTest {
     }
 
     @Test
-    void heldItemQuestionShouldRequestOnlyRequesterLiveState() {
+    void heldItemQuestionShouldUseCompactRequesterStateWithoutFullInventoryScan() {
         RequiredContextPlanner.Plan plan = planner.plan(
-                AssistantIntent.LIVE_STATE, AssistantMode.GROUNDED, "wat heb ik in mijn hand?", AssistantSettings.defaults()
+                AssistantIntent.LIVE_STATE,
+                AssistantMode.GROUNDED,
+                "wat heb ik in mijn hand?",
+                AssistantSettings.defaults()
         );
 
-        assertEquals(
-                java.util.Set.of(RequiredContextPlanner.LiveSource.REQUESTER),
-                plan.liveSources()
+        assertEquals(Set.of(RequiredContextPlanner.LiveSource.REQUESTER), plan.liveSources());
+        assertFalse(plan.liveSources().contains(RequiredContextPlanner.LiveSource.INVENTORY));
+    }
+
+    @Test
+    void customPlayerFeatureQuestionShouldRequestRequesterContext() {
+        RequiredContextPlanner.Plan plan = planner.plan(
+                AssistantIntent.LIVE_STATE,
+                AssistantMode.GROUNDED,
+                "wat is mijn rank en saldo?",
+                AssistantSettings.defaults()
         );
+
+        assertEquals(Set.of(RequiredContextPlanner.LiveSource.REQUESTER), plan.liveSources());
     }
 
     @Test
     void nearbyQuestionShouldNotAutomaticallyCaptureServerState() {
         RequiredContextPlanner.Plan plan = planner.plan(
-                AssistantIntent.LIVE_STATE, AssistantMode.GROUNDED, "welke spelers zijn dichtbij?", AssistantSettings.defaults()
+                AssistantIntent.LIVE_STATE,
+                AssistantMode.GROUNDED,
+                "welke spelers zijn dichtbij?",
+                AssistantSettings.defaults()
         );
 
         assertTrue(plan.liveSources().contains(RequiredContextPlanner.LiveSource.NEARBY));
@@ -61,16 +81,22 @@ class RequiredContextPlannerTest {
     @Test
     void lagQuestionShouldRequestServerPerformanceOnly() {
         RequiredContextPlanner.Plan plan = planner.plan(
-                AssistantIntent.LIVE_STATE, AssistantMode.GROUNDED, "heeft de server lag?", AssistantSettings.defaults()
+                AssistantIntent.LIVE_STATE,
+                AssistantMode.GROUNDED,
+                "heeft de server lag?",
+                AssistantSettings.defaults()
         );
 
-        assertEquals(java.util.Set.of(RequiredContextPlanner.LiveSource.SERVER), plan.liveSources());
+        assertEquals(Set.of(RequiredContextPlanner.LiveSource.SERVER), plan.liveSources());
     }
 
     @Test
     void serverFactShouldRetrieveKnowledgeWithoutLiveSnapshot() {
         RequiredContextPlanner.Plan plan = planner.plan(
-                AssistantIntent.SERVER_FACT, AssistantMode.GROUNDED, "hoe werkt /claim?", AssistantSettings.defaults()
+                AssistantIntent.SERVER_FACT,
+                AssistantMode.GROUNDED,
+                "hoe werkt /claim?",
+                AssistantSettings.defaults()
         );
 
         assertTrue(plan.knowledge());

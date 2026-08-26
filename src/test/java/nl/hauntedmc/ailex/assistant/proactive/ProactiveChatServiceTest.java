@@ -38,6 +38,54 @@ class ProactiveChatServiceTest {
     }
 
     @Test
+    void shouldNotInterruptAnAlternatingConversationBetweenTwoPlayers() {
+        AtomicLong now = new AtomicLong(1_000L);
+        ProactiveChatService service = new ProactiveChatService(() -> settings(true, false), now::get);
+        Player alex = player("Alex");
+        Player sam = player("Sam");
+        List<Player> online = List.of(alex, sam);
+        List<ProactiveChatTrigger> triggers = new ArrayList<>();
+
+        service.onChat(alex, "ik ben bij de shop", () -> online, (player, trigger) -> {
+            triggers.add(trigger);
+            return true;
+        });
+        now.addAndGet(2_000L);
+        service.onChat(sam, "ik kom eraan", () -> online, (player, trigger) -> {
+            triggers.add(trigger);
+            return true;
+        });
+        now.addAndGet(2_000L);
+        service.onChat(alex, "waar ben je nu?", () -> online, (player, trigger) -> {
+            triggers.add(trigger);
+            return true;
+        });
+
+        assertEquals(0, triggers.size());
+    }
+
+    @Test
+    void explicitBroadcastCanBreakOutOfAPlayerConversation() {
+        AtomicLong now = new AtomicLong(1_000L);
+        ProactiveChatService service = new ProactiveChatService(() -> settings(true, false), now::get);
+        Player alex = player("Alex");
+        Player sam = player("Sam");
+        List<Player> online = List.of(alex, sam);
+        List<ProactiveChatTrigger> triggers = new ArrayList<>();
+
+        service.onChat(alex, "ik ben bij de shop", () -> online, (player, trigger) -> true);
+        now.addAndGet(2_000L);
+        service.onChat(sam, "ik kom eraan", () -> online, (player, trigger) -> true);
+        now.addAndGet(2_000L);
+        service.onChat(alex, "Weet iemand hoe ik /vote gebruik?", () -> online, (player, trigger) -> {
+            triggers.add(trigger);
+            return true;
+        });
+
+        assertEquals(1, triggers.size());
+    }
+
+    @Test
     void collectiveReactionsShouldRequireDistinctPlayers() {
         AtomicLong now = new AtomicLong(1_000L);
         ProactiveChatService service = new ProactiveChatService(() -> settings(false, true), now::get);
@@ -63,7 +111,7 @@ class ProactiveChatServiceTest {
         return new ProactiveChatSettings(
                 true, "server", 120_000L,
                 new ProactiveChatSettings.JoinSettings(false, 0.0D, 300_000L, "Hoi {player_name}"),
-                new ProactiveChatSettings.QuestionSettings(questionsEnabled, 1.0D),
+                new ProactiveChatSettings.QuestionSettings(questionsEnabled, 1.0D, 45_000L, 2),
                 new ProactiveChatSettings.CollectiveSettings(
                         collectiveEnabled, List.of("gg", "wp"), 2, 45_000L, 1.0D
                 ),

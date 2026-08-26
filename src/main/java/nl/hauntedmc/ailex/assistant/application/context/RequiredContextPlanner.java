@@ -9,8 +9,8 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * Deterministic context policy. It chooses the minimum trusted data sources required for a turn before any
- * expensive retrieval or Bukkit snapshot work is performed.
+ * Deterministic context policy. It exposes capabilities broadly while selecting only the safe source families
+ * that can materially help the current turn.
  */
 public final class RequiredContextPlanner {
 
@@ -18,14 +18,14 @@ public final class RequiredContextPlanner {
         AssistantIntent effectiveIntent = intent == null ? AssistantIntent.CONVERSATION : intent;
         String text = message == null ? "" : message.toLowerCase(Locale.ROOT);
         boolean knowledge = settings.toolAllowed("knowledge") && switch (effectiveIntent) {
-            case SERVER_FACT, GAMEPLAY_HELP, SUPPORT -> true;
+            case SERVER_FACT, KNOWLEDGE_DISCOVERY, GAMEPLAY_HELP, SUPPORT -> true;
             case CONTEXT_FOLLOWUP -> mode != AssistantMode.FAST && containsServerTopic(text);
             default -> false;
         };
+
         boolean durableMemory = settings.toolAllowed("session") && switch (effectiveIntent) {
-            case MEMORY_RECALL, EVENT_RECALL, CONTEXT_FOLLOWUP -> true;
-            case CONVERSATION -> hasPreferenceOrPersonalSignal(text);
-            default -> false;
+            case SAFETY, SUPPORT -> false;
+            default -> true;
         };
         boolean eventMemory = settings.toolAllowed("session") && effectiveIntent == AssistantIntent.EVENT_RECALL;
 
@@ -34,8 +34,14 @@ public final class RequiredContextPlanner {
             if (settings.toolAllowed("requester") && requesterSignal(text)) {
                 live.add(LiveSource.REQUESTER);
             }
+            if (settings.toolAllowed("requester") && inventorySignal(text)) {
+                live.add(LiveSource.INVENTORY);
+            }
             if (settings.toolAllowed("world") && worldSignal(text)) {
                 live.add(LiveSource.WORLD);
+            }
+            if (settings.toolAllowed("world") && targetSignal(text)) {
+                live.add(LiveSource.TARGET);
             }
             if (settings.toolAllowed("nearby") && nearbySignal(text)) {
                 live.add(LiveSource.NEARBY);
@@ -47,7 +53,6 @@ public final class RequiredContextPlanner {
                 live.add(LiveSource.NPC);
             }
             if (live.isEmpty()) {
-                // Unknown live-state wording gets the two safest compact sources, never a full snapshot dump.
                 if (settings.toolAllowed("requester")) {
                     live.add(LiveSource.REQUESTER);
                 }
@@ -60,21 +65,36 @@ public final class RequiredContextPlanner {
     }
 
     private boolean requesterSignal(String text) {
-        return containsAny(text, "health", "gezondheid", "leven", "hp", "honger", "food", "gamemode", "game mode",
+        return containsAny(text,
+                "health", "gezondheid", "leven", "hp", "honger", "food", "gamemode", "game mode",
                 "level", "xp", "ervaring", "experience", "item", "hand", "holding", "vasthoud", "vast", "effect",
-                "armor", "armour", "pantser", "ping", "latency", "playtime", "speeltijd", "gespeeld");
+                "armor", "armour", "pantser", "ping", "latency", "playtime", "speeltijd", "gespeeld", "saturation",
+                "air", "lucht", "fire", "brand", "flying", "vliegen", "swimming", "zwemmen", "sprinting", "rennen",
+                "rank", "balance", "saldo", "money", "geld", "currency", "valuta", "credits", "crowns", "essence",
+                "claim", "combattag", "combat-tag", "tagged", "autopickup", "fly", "god", "vanish", "queue",
+                "lottery", "loterij", "friends", "vrienden", "perk", "perks"
+        );
+    }
+
+    private boolean inventorySignal(String text) {
+        return containsAny(text,
+                "inventory", "inventaris", "equipment", "uitrusting", "armor", "armour", "pantser", "hotbar", "slot",
+                "storage", "opslag", "backpack", "rugzak"
+        );
     }
 
     private boolean worldSignal(String text) {
         return containsAny(text, "waar", "where", "hier", "here", "positie", "position", "coord", "locatie",
                 "location", "world", "wereld", "biome", "bioom", "weer", "weather", "tijd", "time", "light",
                 "licht", "difficulty", "moeilijkheid", "environment", "omgeving", "dimension", "dimensie", "facing",
-                "richting");
+                "richting", "hoogte", "height", "sea level", "zeeniveau");
+    }
+
+    private boolean targetSignal(String text) {
+        return containsAny(text, "kijk", "looking", "target", "blok", "block", "voor me", "in front", "ray");
     }
 
     private boolean serverSignal(String text) {
-        // Generic words such as "spelers"/"players" are deliberately not enough: a nearby-player question
-        // should not also capture global server population. "online" still covers player-count questions.
         return containsAny(text, "online", "tps", "mspt", "performance", "lag", "server", "uptime", "versie",
                 "version");
     }
@@ -91,12 +111,7 @@ public final class RequiredContextPlanner {
 
     private boolean containsServerTopic(String text) {
         return containsAny(text, "server", "command", "/", "rank", "plot", "claim", "vote", "economy", "survival",
-                "creative", "minigame", "haunted");
-    }
-
-    private boolean hasPreferenceOrPersonalSignal(String text) {
-        return containsAny(text, "onthoud", "remember", "ik hou", "ik vind", "mijn favoriete", "i like", "i love",
-                "i prefer", "my favorite");
+                "creative", "minigame", "haunted", "feit", "fact");
     }
 
     private boolean containsAny(String text, String... values) {
@@ -110,7 +125,9 @@ public final class RequiredContextPlanner {
 
     public enum LiveSource {
         REQUESTER,
+        INVENTORY,
         WORLD,
+        TARGET,
         SERVER,
         NEARBY,
         NPC

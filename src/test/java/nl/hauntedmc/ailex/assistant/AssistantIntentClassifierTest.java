@@ -14,6 +14,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 class AssistantIntentClassifierTest {
 
     @Test
@@ -46,6 +47,62 @@ class AssistantIntentClassifierTest {
         assertEquals(AssistantIntent.LIVE_STATE, heldItem.intent());
         assertEquals(AssistantMode.GROUNDED, heldItem.mode());
         assertEquals(AssistantIntent.LIVE_STATE, ping.intent());
+    }
+
+    @Test
+    void shouldRouteWorldAndDimensionQuestionsAsLive() {
+        assertEquals(AssistantIntent.LIVE_STATE,
+                AssistantIntentClassifier.analyze("In welke world ben ik?").intent());
+        assertEquals(AssistantIntent.LIVE_STATE,
+                AssistantIntentClassifier.analyze("What dimension am I in?").intent());
+    }
+
+    @Test
+    void shouldRouteCurrentHauntedMcFeatureStateToLiveProviders() {
+        assertEquals(AssistantIntent.LIVE_STATE,
+                AssistantIntentClassifier.analyze("Wat is mijn rank?").intent());
+        assertEquals(AssistantIntent.LIVE_STATE,
+                AssistantIntentClassifier.analyze("Hoeveel geld heb ik?").intent());
+        assertEquals(AssistantIntent.LIVE_STATE,
+                AssistantIntentClassifier.analyze("Ben ik combat tagged?").intent());
+        assertEquals(AssistantIntent.LIVE_STATE,
+                AssistantIntentClassifier.analyze("Staat mijn AutoPickup aan?").intent());
+    }
+
+    @Test
+    void shouldRouteFreshSemanticMemoryRecallToGroundedMemory() {
+        AssistantIntentClassifier.Analysis dutch = AssistantIntentClassifier.analyze("Wat weet je van mij?");
+        AssistantIntentClassifier.Analysis english = AssistantIntentClassifier.analyze(
+                "What do you remember about me?"
+        );
+
+        assertEquals(AssistantIntent.MEMORY_RECALL, dutch.intent());
+        assertEquals(AssistantMode.GROUNDED, dutch.mode());
+        assertEquals(AssistantIntent.MEMORY_RECALL, english.intent());
+    }
+
+    @Test
+    void shouldRouteFreshEventRecallToEpisodicMemory() {
+        AssistantIntentClassifier.Analysis dutch = AssistantIntentClassifier.analyze(
+                "Wat gebeurde er vorige keer?"
+        );
+        AssistantIntentClassifier.Analysis english = AssistantIntentClassifier.analyze(
+                "What happened last time?"
+        );
+
+        assertEquals(AssistantIntent.EVENT_RECALL, dutch.intent());
+        assertEquals(AssistantMode.GROUNDED, dutch.mode());
+        assertEquals(AssistantIntent.EVENT_RECALL, english.intent());
+    }
+
+    @Test
+    void shouldNotConfuseOrdinaryKnowledgeWithPersonalMemoryRecall() {
+        AssistantIntentClassifier.Analysis analysis = AssistantIntentClassifier.analyze(
+                "Weet je hoe ik een wolf tem in Minecraft?"
+        );
+
+        assertEquals(AssistantIntent.GAMEPLAY_HELP, analysis.intent());
+        assertEquals(AssistantMode.GROUNDED, analysis.mode());
     }
 
     @Test
@@ -93,7 +150,8 @@ class AssistantIntentClassifierTest {
                 false,
                 AssistantIntent.EVENT_RECALL,
                 "wat gaat er mis haunty",
-                "De chatgame lijkt vastgelopen."
+                "De chatgame lijkt vastgelopen.",
+                ""
         );
 
         AssistantIntentClassifier.Analysis analysis = AssistantIntentClassifier.analyze("haunty?", dialogue);
@@ -109,6 +167,7 @@ class AssistantIntentClassifierTest {
                 true,
                 AssistantIntent.CONVERSATION,
                 "haunty?",
+                "",
                 ""
         );
 
