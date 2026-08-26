@@ -10,7 +10,7 @@ import nl.hauntedmc.ailex.ai.movement.behaviour.MovementBehaviour;
 import nl.hauntedmc.ailex.npc.NPC;
 import nl.hauntedmc.ailex.npc.NPCData;
 import nl.hauntedmc.ailex.util.LoggerUtils;
-import nl.hauntedmc.ailex.util.ReflectionUtils;
+import nl.hauntedmc.ailex.application.registry.BuiltinTypeRegistry;
 
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -50,9 +50,9 @@ public class MainCommand implements CommandExecutor, TabCompleter {
      */
     public MainCommand(AIlexPlugin plugin) {
         this.plugin = plugin;
-        behaviourMap = ReflectionUtils.getBehaviourMap();
-        actionMap = ReflectionUtils.getActionMap();
-        npcTypeMap = ReflectionUtils.getNPCTypeMap();
+        behaviourMap = BuiltinTypeRegistry.getBehaviourMap();
+        actionMap = BuiltinTypeRegistry.getActionMap();
+        npcTypeMap = BuiltinTypeRegistry.getNPCTypeMap();
     }
 
     /**
@@ -76,11 +76,28 @@ public class MainCommand implements CommandExecutor, TabCompleter {
             if (args.length == 1) {
                 if (args[0].equalsIgnoreCase("reload")) {
                     ConfigHandler.getInstance().reload();
-                    plugin.reloadChatGPTClient();
+                    plugin.reloadOpenAiResponsesClient();
                     LoggerUtils.logInfo("AIlex configuration reloaded.");
                     sendCommandMessage(player, "AIlex configuration reloaded.");
                     return true;
                 }
+            }
+
+            if (args.length >= 1 && args[0].equalsIgnoreCase("ai")) {
+                String action = args.length >= 2 ? args[1].toLowerCase(Locale.ROOT) : "status";
+                if (plugin.getAssistantService() == null) {
+                    sendCommandMessage(player, "Assistant engine is unavailable.");
+                    return true;
+                }
+                switch (action) {
+                    case "status" -> sendCommandMessage(player, "Assistant " + plugin.getAssistantService().status());
+                    case "rebuild-index" -> {
+                        plugin.getAssistantService().reload();
+                        sendCommandMessage(player, "Assistant knowledge index rebuilt.");
+                    }
+                    default -> sendCommandMessage(player, "Usage: /ailex ai <status|rebuild-index>");
+                }
+                return true;
             }
 
             if (args.length >= 2) {
@@ -97,13 +114,13 @@ public class MainCommand implements CommandExecutor, TabCompleter {
                     case "action":
                         if (args.length >= 3) {
                             String actionType = args[2].toLowerCase();
-                            if (plugin.getNPCHandler().getNPCRegistry().containsKey(id)) {
+                            if (plugin.getNpcManager().getNPCRegistry().containsKey(id)) {
                                 Class<? extends Actionable> actionClass = actionMap.get(actionType);
                                 if (actionClass != null) {
                                     try {
                                         ActionContext actionContext = new ActionContext.Builder().setTargetEntity(player).setTargetLocation(player.getLocation()).setPriority(1).build();
                                         Actionable action = actionClass.getDeclaredConstructor(ActionContext.class).newInstance(actionContext);
-                                        plugin.getNPCHandler().getNPCRegistry().get(id).queueAction(action);
+                                        plugin.getNpcManager().getNPCRegistry().get(id).queueAction(action);
                                         sendCommandMessage(player, "NPC " + id + " is doing action "
                                                 + action.getFriendlyName() + ".");
                                     } catch (Exception e) {
@@ -121,12 +138,12 @@ public class MainCommand implements CommandExecutor, TabCompleter {
                         return true;
 
                     case "cancelaction":
-                        if (plugin.getNPCHandler().getNPCRegistry().containsKey(id)) {
-                            Actionable currentAction = plugin.getNPCHandler().getNPCRegistry().get(id).getCurrentAction();
+                        if (plugin.getNpcManager().getNPCRegistry().containsKey(id)) {
+                            Actionable currentAction = plugin.getNpcManager().getNPCRegistry().get(id).getCurrentAction();
                             if (currentAction != null) {
                                 sendCommandMessage(player, "NPC " + id + " canceled action: "
                                         + currentAction.getFriendlyName());
-                                plugin.getNPCHandler().getNPCRegistry().get(id).cancelCurrentAction();
+                                plugin.getNpcManager().getNPCRegistry().get(id).cancelCurrentAction();
                             } else {
                                 sendCommandMessage(player, "NPC " + id + " is currently idle.");
                             }
@@ -149,7 +166,7 @@ public class MainCommand implements CommandExecutor, TabCompleter {
                                         ConfigHandler.getInstance().getDefaultNPCProperties()
                                 );
                                 try {
-                                    plugin.getNPCHandler().createNPC(npcClass, npcData);
+                                    plugin.getNpcManager().createNPC(npcClass, npcData);
                                     sendCommandMessage(player, "NPC " + id + " of type " + type
                                             + " created at your location.");
                                 }
@@ -165,8 +182,8 @@ public class MainCommand implements CommandExecutor, TabCompleter {
                         return true;
 
                     case "currentaction":
-                        if (plugin.getNPCHandler().getNPCRegistry().containsKey(id)) {
-                            Actionable currentAction = plugin.getNPCHandler().getNPCRegistry().get(id).getCurrentAction();
+                        if (plugin.getNpcManager().getNPCRegistry().containsKey(id)) {
+                            Actionable currentAction = plugin.getNpcManager().getNPCRegistry().get(id).getCurrentAction();
                             if (currentAction != null) {
                                 sendCommandMessage(player, "NPC " + id + " is executing action: "
                                         + currentAction.getFriendlyName() + ".");
@@ -180,7 +197,7 @@ public class MainCommand implements CommandExecutor, TabCompleter {
 
                     case "remove":
                         try {
-                            plugin.getNPCHandler().removeNPC(id);
+                            plugin.getNpcManager().removeNPC(id);
                             sendCommandMessage(player, "NPC " + id + " has been removed.");
                         }
                         catch (IllegalArgumentException e) {
@@ -190,7 +207,7 @@ public class MainCommand implements CommandExecutor, TabCompleter {
 
                     case "save":
                         try {
-                            plugin.getNPCHandler().saveNPC(id);
+                            plugin.getNpcManager().saveNPC(id);
                             sendCommandMessage(player, "NPC " + id + " has been saved.");
                         }
                         catch (IllegalArgumentException e) {
@@ -202,14 +219,14 @@ public class MainCommand implements CommandExecutor, TabCompleter {
                         if (args.length >= 4) {
                             String settingType = args[2].toLowerCase();
                             String option = args[3].toLowerCase();
-                            if (plugin.getNPCHandler().getNPCRegistry().containsKey(id)) {
+                            if (plugin.getNpcManager().getNPCRegistry().containsKey(id)) {
                                 switch (settingType) {
                                     case "movebehaviour":
                                         Class<? extends MovementBehaviour> behaviourClass = behaviourMap.get(option);
                                         if (behaviourClass != null) {
                                             try {
                                                 MovementBehaviour behaviour = behaviourClass.getDeclaredConstructor().newInstance();
-                                                plugin.getNPCHandler().getNPCRegistry().get(id).setMovementBehaviour(behaviour);
+                                                plugin.getNpcManager().getNPCRegistry().get(id).setMovementBehaviour(behaviour);
                                                 sendCommandMessage(player, "Set movement behaviour of NPC " + id
                                                         + " to " + option + ".");
                                             } catch (Exception e) {
@@ -260,6 +277,7 @@ public class MainCommand implements CommandExecutor, TabCompleter {
     public @NotNull List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                                 @NotNull String alias, @NotNull String[] args) {
         final List<String> subcommands = Arrays.asList( "action",
+                                                        "ai",
                                                         "cancelaction",
                                                         "create",
                                                         "currentaction",
@@ -284,6 +302,10 @@ public class MainCommand implements CommandExecutor, TabCompleter {
                 return suggestNpcIds("");
             }
             return filterByPrefix(subcommands, args[0]);
+        }
+
+        if ("ai".equals(subcommand)) {
+            return args.length == 2 ? filterByPrefix(Arrays.asList("status", "rebuild-index"), args[1]) : List.of();
         }
 
         switch (subcommand) {
@@ -333,7 +355,7 @@ public class MainCommand implements CommandExecutor, TabCompleter {
 
     private List<String> suggestNpcIds(String prefix) {
         return filterByPrefix(
-                plugin.getNPCHandler().getNPCRegistry().keySet().stream()
+                plugin.getNpcManager().getNPCRegistry().keySet().stream()
                         .map(String::valueOf)
                         .collect(Collectors.toList()),
                 prefix

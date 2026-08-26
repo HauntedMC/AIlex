@@ -1,9 +1,11 @@
-package nl.hauntedmc.ailex.npc;
+package nl.hauntedmc.ailex.npc.lifecycle;
 
 import net.citizensnpcs.api.CitizensAPI;
 import net.citizensnpcs.api.npc.NPCRegistry;
 
 import nl.hauntedmc.ailex.config.DataHandler;
+import nl.hauntedmc.ailex.npc.NPC;
+import nl.hauntedmc.ailex.npc.NPCData;
 import nl.hauntedmc.ailex.util.PacketUtils;
 
 import java.util.ArrayList;
@@ -12,23 +14,35 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import java.util.function.BooleanSupplier;
 
 /**
  * Registry for NPCs spawned by AIlex
  */
-public class NPCHandler {
+public class NpcManager {
 
     private static final String AILEX_MANAGED_METADATA_KEY = "ailex.managed";
     private static final String AILEX_INTERNAL_ID_METADATA_KEY = "ailex.internal-id";
-    private static final String CITIZENS_SHOULD_SAVE_KEY = "should-save";
 
     private final HashMap<Integer, NPC> npcRegistry;
+    private final BooleanSupplier spawningEnabled;
 
     /**
-     * Constructor for the NPCHandler
+     * Creates the lifecycle manager for AIlex-owned NPCs.
      */
-    public NPCHandler() {
+    public NpcManager() {
+        this(() -> true);
+    }
+
+    /**
+     * Creates an NPC manager with an explicit spawn policy.
+     *
+     * @param spawningEnabled supplies whether this plugin may create Citizens NPCs
+     */
+    public NpcManager(BooleanSupplier spawningEnabled) {
         npcRegistry = new HashMap<>();
+        this.spawningEnabled = spawningEnabled == null ? () -> true : spawningEnabled;
     }
 
     /**
@@ -38,6 +52,9 @@ public class NPCHandler {
      * @param <T> the type of the NPC
      */
     public <T extends NPC> void createNPC(Class<T> npcClass, NPCData npcData) {
+        if (!spawningEnabled.getAsBoolean()) {
+            throw new IllegalStateException("NPC spawning is disabled in config.yml.");
+        }
         if (!npcRegistry.containsKey(npcData.getId())) {
             try {
                 // Create a new instance of the NPC
@@ -105,6 +122,9 @@ public class NPCHandler {
      * This method will create and register all NPCs that are saved in the data config
      */
     public void loadNPCs() {
+        if (!spawningEnabled.getAsBoolean()) {
+            return;
+        }
         Map<Integer, NPCData> npcDataMap = DataHandler.loadNPCs();
         removeManagedCitizensNpcEntries(npcDataMap);
 
@@ -124,6 +144,20 @@ public class NPCHandler {
      */
     public HashMap<Integer, NPC> getNPCRegistry() {
         return npcRegistry;
+    }
+
+    /**
+     * Returns whether the Citizens NPC belongs to the active AIlex registry.
+     * External Citizens NPCs must never be initialized, reset, or respawned by this plugin.
+     *
+     * @param citizensId the Citizens NPC UUID
+     * @return true only for an NPC created by this manager
+     */
+    public boolean ownsCitizensNpc(UUID citizensId) {
+        if (citizensId == null) {
+            return false;
+        }
+        return npcRegistry.values().stream().anyMatch(npc -> citizensId.equals(npc.getCitizensEntityID()));
     }
 
     /**
@@ -158,7 +192,6 @@ public class NPCHandler {
     private void removeManagedCitizensNpcEntries(Map<Integer, NPCData> npcDataMap) {
         NPCRegistry citizensRegistry = CitizensAPI.getNPCRegistry();
         Set<Integer> trackedNpcIds = new HashSet<>(npcDataMap.keySet());
-        Set<String> expectedDisplayNames = buildExpectedDisplayNames(npcDataMap);
         List<net.citizensnpcs.api.npc.NPC> staleCitizensNpcs = new ArrayList<>();
 
         for (net.citizensnpcs.api.npc.NPC citizensNpc : citizensRegistry) {
@@ -168,11 +201,7 @@ public class NPCHandler {
             Integer internalIdValue = citizensNpc.data().get(AILEX_INTERNAL_ID_METADATA_KEY, Integer.MIN_VALUE);
             boolean matchesTrackedInternalId = internalIdValue != null && trackedNpcIds.contains(internalIdValue);
 
-            Boolean shouldSaveValue = citizensNpc.data().get(CITIZENS_SHOULD_SAVE_KEY, true);
-            boolean shouldSave = !Boolean.FALSE.equals(shouldSaveValue);
-            boolean matchesLegacyEphemeralName = !shouldSave && expectedDisplayNames.contains(citizensNpc.getName());
-
-            if (managedByAIlex || matchesTrackedInternalId || matchesLegacyEphemeralName) {
+            if (managedByAIlex || matchesTrackedInternalId) {
                 staleCitizensNpcs.add(citizensNpc);
             }
         }
@@ -188,25 +217,4 @@ public class NPCHandler {
         citizensRegistry.saveToStore();
     }
 
-    private Set<String> buildExpectedDisplayNames(Map<Integer, NPCData> npcDataMap) {
-        Set<String> expectedDisplayNames = new HashSet<>();
-        for (NPCData npcData : npcDataMap.values()) {
-            NPCProperties properties = npcData.getProperties() == null ? NPCProperties.defaultValues() : npcData.getProperties();
-            expectedDisplayNames.add(joinParts(properties.getPrefix(), npcData.getName()));
-        }
-        return expectedDisplayNames;
-    }
-
-    private static String joinParts(String... parts) {
-        StringBuilder output = new StringBuilder();
-        for (String part : parts) {
-            if (part != null && !part.isBlank()) {
-                if (output.length() > 0) {
-                    output.append(' ');
-                }
-                output.append(part);
-            }
-        }
-        return output.toString();
-    }
 }

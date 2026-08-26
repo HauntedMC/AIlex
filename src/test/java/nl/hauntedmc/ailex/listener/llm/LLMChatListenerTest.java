@@ -3,9 +3,9 @@ package nl.hauntedmc.ailex.listener.llm;
 import io.papermc.paper.event.player.AsyncChatEvent;
 import net.kyori.adventure.text.Component;
 import nl.hauntedmc.ailex.AIlexPlugin;
-import nl.hauntedmc.ailex.ai.llm.ChatGPTClient;
+import nl.hauntedmc.ailex.infrastructure.openai.OpenAiResponsesClient;
 import nl.hauntedmc.ailex.npc.NPC;
-import nl.hauntedmc.ailex.npc.NPCHandler;
+import nl.hauntedmc.ailex.npc.lifecycle.NpcManager;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -47,7 +47,7 @@ class LLMChatListenerTest {
         listener.onChat(event);
 
         verify(event, never()).renderer(any());
-        verifyNoInteractions(plugin.getChatGPTClient());
+        verifyNoInteractions(plugin.getOpenAiResponsesClient());
     }
 
     @Test
@@ -59,7 +59,7 @@ class LLMChatListenerTest {
         registry.put(1, npc);
 
         AIlexPlugin plugin = mockPluginWithNpcRegistry(registry);
-        ChatGPTClient chatClient = plugin.getChatGPTClient();
+        OpenAiResponsesClient chatClient = plugin.getOpenAiResponsesClient();
         LLMChatListener listener = new LLMChatListener(plugin);
 
         Player player = mock(Player.class);
@@ -79,7 +79,7 @@ class LLMChatListenerTest {
         registry.put(1, npc);
 
         AIlexPlugin plugin = mockPluginWithNpcRegistry(registry);
-        ChatGPTClient chatClient = plugin.getChatGPTClient();
+        OpenAiResponsesClient chatClient = plugin.getOpenAiResponsesClient();
         LLMChatListener listener = new LLMChatListener(plugin);
 
         Player player = mock(Player.class);
@@ -124,20 +124,20 @@ class LLMChatListenerTest {
     }
 
     @Test
-    void buildSystemPromptShouldAppendConfiguredBaseKnowledge() {
+    void buildSystemPromptShouldAppendConfiguredKnowledge() {
         NPC npc = mock(NPC.class);
         when(npc.getSystemPrompt()).thenReturn("NPC persona");
         AIlexPlugin plugin = mockPluginWithNpcRegistry(new HashMap<>());
         YamlConfiguration config = new YamlConfiguration();
-        config.set("openai.base_knowledge.enabled", true);
-        config.set("openai.base_knowledge.max_characters", 12);
-        config.set("openai.base_knowledge.prompt", "HauntedMC heeft Survival.");
+        config.set("openai.knowledge.enabled", true);
+        config.set("openai.knowledge.max_characters", 12);
+        config.set("openai.knowledge.prompt", "HauntedMC heeft Survival.");
         config.set("openai.chat_context.memory_instruction", "");
         when(plugin.getConfig()).thenReturn(config);
 
         String prompt = new LLMChatListener(plugin).buildSystemPrompt(npc);
 
-        assertEquals("NPC persona\n\n[Betrouwbare HauntedMC-basiskennis]\nHauntedMC he", prompt);
+        assertEquals("NPC persona\n\n[Betrouwbare HauntedMC-kennis]\nHauntedMC he", prompt);
     }
 
     @Test
@@ -200,12 +200,12 @@ class LLMChatListenerTest {
 
     private static AIlexPlugin mockPluginWithNpcRegistry(HashMap<Integer, NPC> registry) {
         AIlexPlugin plugin = mock(AIlexPlugin.class);
-        NPCHandler npcHandler = mock(NPCHandler.class);
-        ChatGPTClient chatGPTClient = mock(ChatGPTClient.class);
+        NpcManager npcManager = mock(NpcManager.class);
+        OpenAiResponsesClient openAiClient = mock(OpenAiResponsesClient.class);
 
-        when(plugin.getNPCHandler()).thenReturn(npcHandler);
-        when(plugin.getChatGPTClient()).thenReturn(chatGPTClient);
-        when(npcHandler.getNPCRegistry()).thenReturn(registry);
+        when(plugin.getNpcManager()).thenReturn(npcManager);
+        when(plugin.getOpenAiResponsesClient()).thenReturn(openAiClient);
+        when(npcManager.getNPCRegistry()).thenReturn(registry);
         return plugin;
     }
 }

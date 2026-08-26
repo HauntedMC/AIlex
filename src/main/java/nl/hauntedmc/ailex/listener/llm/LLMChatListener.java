@@ -11,11 +11,13 @@ import nl.hauntedmc.ailex.listener.llm.proactive.ProactiveChatService;
 import nl.hauntedmc.ailex.listener.llm.proactive.ProactiveChatSettings;
 import nl.hauntedmc.ailex.listener.llm.proactive.ProactiveChatTrigger;
 import nl.hauntedmc.ailex.npc.NPC;
-import nl.hauntedmc.ailex.npc.NPCHandler;
+import nl.hauntedmc.ailex.npc.lifecycle.NpcManager;
 import nl.hauntedmc.ailex.npc.NPCProperties;
 import nl.hauntedmc.ailex.util.FormatterUtils;
 import nl.hauntedmc.ailex.util.LoggerUtils;
-import nl.hauntedmc.ailex.ai.llm.ChatGPTClient;
+import nl.hauntedmc.ailex.infrastructure.openai.OpenAiResponsesClient;
+import nl.hauntedmc.ailex.assistant.application.AssistantService;
+import nl.hauntedmc.ailex.assistant.domain.AssistantReply;
 
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
@@ -58,13 +60,15 @@ public class LLMChatListener implements Listener {
     private static final String CHAT_RESPONSE_VISIBILITY_PATH = CHAT_PATH + ".response_visibility";
     private static final String CHAT_NEARBY_RADIUS_PATH = CHAT_PATH + ".nearby_response_radius";
     private static final String CHAT_MAX_CONCURRENT_REQUESTS_PATH = CHAT_PATH + ".max_concurrent_requests";
+    private static final String STANDALONE_CHAT_PATH = CHAT_PATH + ".standalone";
+    private static final int STANDALONE_CHAT_ID = 0;
     private static final int DEFAULT_MAX_RESPONSES_PER_PLAYER = 20;
     private static final long DEFAULT_RATE_LIMIT_WINDOW_SECONDS = 60L * 60L;
     private static final int DEFAULT_MAX_CONCURRENT_REQUESTS = 4;
     private static final int DEFAULT_NEARBY_RESPONSE_RADIUS = 32;
-    private static final String BASE_KNOWLEDGE_PATH = "openai.base_knowledge";
-    private static final int DEFAULT_BASE_KNOWLEDGE_MAX_CHARACTERS = 6000;
-    private static final int MAX_BASE_KNOWLEDGE_CHARACTERS = 12000;
+    private static final String KNOWLEDGE_PATH = "openai.knowledge";
+    private static final int DEFAULT_KNOWLEDGE_MAX_CHARACTERS = 6000;
+    private static final int MAX_KNOWLEDGE_CHARACTERS = 12000;
     private static final String CHAT_CONTEXT_PATH = "openai.chat_context";
     private static final String METADATA_PATH = CHAT_CONTEXT_PATH + ".metadata";
     private static final int DEFAULT_CONTEXT_MESSAGE_MAX_CHARACTERS = 480;
@@ -93,6 +97,7 @@ public class LLMChatListener implements Listener {
     private final ChatContextStore chatContextStore;
     private final KnowledgeRepository knowledgeRepository;
     private final ProactiveChatService proactiveChatService;
+    private final AssistantService assistantService;
     private BukkitTask idleConversationTask;
     static final String PLACEHOLDER_PLAYER_NAME = "{player_name}";
     static final String PLACEHOLDER_PLAYER_DISPLAY_NAME = "{player_display_name}";
@@ -111,6 +116,8 @@ public class LLMChatListener implements Listener {
         this.chatContextStore = new ChatContextStore(System::currentTimeMillis);
         this.knowledgeRepository = new KnowledgeRepository(plugin);
         this.proactiveChatService = new ProactiveChatService(() -> ProactiveChatSettings.from(plugin.getConfig()));
+        AssistantService pluginAssistantService = plugin.getAssistantService();
+        this.assistantService = pluginAssistantService == null ? new AssistantService(plugin) : pluginAssistantService;
     }
 
     /**
@@ -152,8 +159,8 @@ public class LLMChatListener implements Listener {
      */
     void forwardChatToAI(Player source, Component message) {
         proactiveChatService.recordPlayerMessage();
-        NPCHandler npcHandler = plugin.getNPCHandler();
-        if (npcHandler == null) {
+        NpcManager npcManager = plugin.getNpcManager();
+        if (npcManager == null) {
             return;
         }
 
@@ -162,7 +169,7 @@ public class LLMChatListener implements Listener {
         ChatContextStore.ContextSettings contextSettings = getChatContextSettings();
 
         // If an NPC is mentioned in the message forward chat to AI
-        for (NPC npc : npcHandler.getNPCRegistry().values()) {
+        for (NPC npc : npcManager.getNPCRegistry().values()) {
             if (!npc.isChatEnabled()) {
                 continue;
             }
@@ -197,6 +204,9 @@ public class LLMChatListener implements Listener {
                             npc,
                             contextSettings
                     );
+                    AssistantService.PreparedRequest assistantRequest = assistantService.prepare(
+                            source, npc, chatMessage, systemPrompt, contextualPrompt
+                    );
                     chatContextStore.recordGeneralChat(sourceName, chatMessage, contextSettings);
                     chatContextStore.recordConversation(
                             sourceId,
@@ -210,11 +220,18 @@ public class LLMChatListener implements Listener {
                     @Override
                     public void run() {
                         try {
-                            ChatGPTClient chatGPTClient = plugin.getChatGPTClient();
-                            if (chatGPTClient == null) {
+                            OpenAiResponsesClient openAiClient = plugin.getOpenAiResponsesClient();
+                            if (openAiClient == null) {
                                 return;
                             }
-                            String response = chatGPTClient.getChatResponse(systemPrompt, contextualPrompt);
+                            String response;
+                            if (assistantRequest.settings().enabled()) {
+                                AssistantReply assistantReply = assistantService.respond(assistantRequest);
+                                response = String.join("\n", assistantReply.lines());
+                            } else {
+                                response = openAiClient.getChatResponse(systemPrompt, contextualPrompt);
+                                assistantService.recordDirectResponse(assistantRequest, response);
+                            }
                             if (response == null || response.isBlank()) {
                                 return;
                             }
@@ -246,8 +263,81 @@ public class LLMChatListener implements Listener {
             }
         }
 
+        if (!plugin.isNpcEnabled() && isStandaloneChatEnabled() && isNpcMentioned(chatMessage, standaloneMention())) {
+            submitStandaloneResponse(source, chatMessage, contextSettings);
+            return;
+        }
+
         chatContextStore.recordGeneralChat(source.getName(), chatMessage, contextSettings);
         proactiveChatService.onChat(source, chatMessage, this::getOnlinePlayers, this::submitProactiveResponse);
+    }
+
+    /** Handles mention-based assistant chat when physical Citizens NPCs are disabled. */
+    private void submitStandaloneResponse(Player source, String chatMessage, ChatContextStore.ContextSettings contextSettings) {
+        if (!mayUseChat(source)) {
+            chatContextStore.recordGeneralChat(source.getName(), chatMessage, contextSettings);
+            return;
+        }
+        if (!responseRateLimiter.tryAcquire(source.getUniqueId())) {
+            sendRateLimitFeedback(source);
+            chatContextStore.recordGeneralChat(source.getName(), chatMessage, contextSettings);
+            return;
+        }
+        if (!requestGate.tryAcquire(source.getUniqueId(), getMaximumConcurrentRequests())) {
+            chatContextStore.recordGeneralChat(source.getName(), chatMessage, contextSettings);
+            return;
+        }
+
+        UUID sourceId = source.getUniqueId();
+        String sourceName = source.getName();
+        String assistantName = standaloneMention();
+        String systemPrompt = standaloneSystemPrompt();
+        String userPrompt = "Bericht van speler " + sourceName + ": \"" + chatMessage
+                + "\". Antwoord als " + assistantName + " in maximaal één korte chatregel, zonder speaker label.";
+        String contextualPrompt = appendContext(userPrompt, chatMessage, source, null, contextSettings);
+        try {
+            AssistantService.PreparedRequest assistantRequest = assistantService.prepare(
+                    source, null, chatMessage, systemPrompt, contextualPrompt
+            );
+            chatContextStore.recordGeneralChat(sourceName, chatMessage, contextSettings);
+            chatContextStore.recordConversation(sourceId, STANDALONE_CHAT_ID, sourceName, chatMessage, contextSettings);
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    try {
+                        OpenAiResponsesClient openAiClient = plugin.getOpenAiResponsesClient();
+                        if (openAiClient == null) {
+                            return;
+                        }
+                        String response;
+                        if (assistantRequest.settings().enabled()) {
+                            response = String.join("\n", assistantService.respond(assistantRequest).lines());
+                        } else {
+                            response = openAiClient.getChatResponse(systemPrompt, contextualPrompt);
+                            assistantService.recordDirectResponse(assistantRequest, response);
+                        }
+                        if (response == null || response.isBlank()) {
+                            return;
+                        }
+                        Component result = FormatterUtils.serializer.deserialize(standaloneDisplayName() + ": ")
+                                .append(Component.text(response, NamedTextColor.WHITE));
+                        chatContextStore.recordConversation(
+                                sourceId, STANDALONE_CHAT_ID, assistantName, response, contextSettings
+                        );
+                        chatContextStore.recordBotMemory(STANDALONE_CHAT_ID, assistantName, response, contextSettings);
+                        proactiveChatService.recordBotResponse();
+                        Bukkit.getScheduler().runTask(plugin, () -> deliverResponse(source, result));
+                    } catch (Exception exception) {
+                        LoggerUtils.logError("Could not complete standalone AI chat: " + exception.getMessage());
+                    } finally {
+                        requestGate.release(sourceId);
+                    }
+                }
+            }.runTaskAsynchronously(plugin);
+        } catch (RuntimeException exception) {
+            requestGate.release(sourceId);
+            LoggerUtils.logError("Could not prepare standalone AI chat: " + exception.getMessage());
+        }
     }
 
     /**
@@ -266,11 +356,11 @@ public class LLMChatListener implements Listener {
     }
 
     private NPC findAvailableNpc() {
-        NPCHandler npcHandler = plugin.getNPCHandler();
-        if (npcHandler == null) {
+        NpcManager npcManager = plugin.getNpcManager();
+        if (npcManager == null) {
             return null;
         }
-        return npcHandler.getNPCRegistry().values().stream()
+        return npcManager.getNPCRegistry().values().stream()
                 .filter(NPC::isChatEnabled)
                 .findFirst()
                 .orElse(null);
@@ -293,16 +383,31 @@ public class LLMChatListener implements Listener {
         String userPrompt = "Proactieve aanleiding: \"" + trigger.context() + "\"\n" + trigger.instruction()
                 + " Antwoord als " + npcName + " in exact één korte, gewone chatregel, zonder speaker label.";
         String contextualPrompt = appendContext(userPrompt, trigger.context(), contextPlayer, npc, contextSettings);
+        AssistantService.PreparedRequest assistantRequest;
+        try {
+            assistantRequest = assistantService.prepare(
+                    contextPlayer, npc, trigger.context(), systemPrompt, contextualPrompt
+            );
+        } catch (RuntimeException exception) {
+            requestGate.release(requestId);
+            LoggerUtils.logError("Could not prepare proactive AI chat: " + exception.getMessage());
+            return false;
+        }
 
         new BukkitRunnable() {
             @Override
             public void run() {
                 try {
-                    ChatGPTClient chatGPTClient = plugin.getChatGPTClient();
-                    if (chatGPTClient == null) {
+                    OpenAiResponsesClient openAiClient = plugin.getOpenAiResponsesClient();
+                    if (openAiClient == null) {
                         return;
                     }
-                    String response = chatGPTClient.getChatResponse(systemPrompt, contextualPrompt);
+                    String response = assistantRequest.settings().enabled()
+                            ? String.join("\n", assistantService.respond(assistantRequest).lines())
+                            : openAiClient.getChatResponse(systemPrompt, contextualPrompt);
+                    if (!assistantRequest.settings().enabled()) {
+                        assistantService.recordDirectResponse(assistantRequest, response);
+                    }
                     if (response == null || response.isBlank() || !trigger.accepts(response)) {
                         return;
                     }
@@ -340,6 +445,33 @@ public class LLMChatListener implements Listener {
             index = normalizedMessage.indexOf(normalizedName, index + normalizedName.length());
         }
         return false;
+    }
+
+    private boolean isStandaloneChatEnabled() {
+        FileConfiguration config = plugin.getConfig();
+        return config == null || config.getBoolean(STANDALONE_CHAT_PATH + ".enabled", true);
+    }
+
+    private String standaloneMention() {
+        FileConfiguration config = plugin.getConfig();
+        String mention = config == null ? "AIlex" : config.getString(STANDALONE_CHAT_PATH + ".mention", "AIlex");
+        return mention == null || mention.isBlank() ? "AIlex" : mention.trim();
+    }
+
+    private String standaloneDisplayName() {
+        FileConfiguration config = plugin.getConfig();
+        String displayName = config == null ? "AIlex" : config.getString(
+                STANDALONE_CHAT_PATH + ".display_name", "AIlex"
+        );
+        return displayName == null || displayName.isBlank() ? "AIlex" : displayName.trim();
+    }
+
+    private String standaloneSystemPrompt() {
+        FileConfiguration config = plugin.getConfig();
+        String systemPrompt = config == null ? "" : config.getString(STANDALONE_CHAT_PATH + ".system_prompt", "");
+        return systemPrompt == null || systemPrompt.isBlank()
+                ? NPCProperties.DEFAULT_SYSTEM_PROMPT
+                : systemPrompt.trim();
     }
 
     private boolean isMentionCharacter(char character) {
@@ -440,12 +572,12 @@ public class LLMChatListener implements Listener {
 
         String chatContext = chatContextStore.buildContext(
                 source.getUniqueId(),
-                npc.getId(),
-                npc.getName(),
+                npc == null ? STANDALONE_CHAT_ID : npc.getId(),
+                npc == null ? standaloneMention() : npc.getName(),
                 chatMessage,
                 contextSettings
         );
-        String metadata = shouldIncludeMetadata(chatMessage) ? buildMetadata(source, npc) : "";
+        String metadata = npc != null && shouldIncludeMetadata(chatMessage) ? buildMetadata(source, npc) : "";
         if (chatContext.isBlank() && metadata.isBlank()) {
             return userPrompt;
         }
@@ -848,15 +980,18 @@ public class LLMChatListener implements Listener {
             systemPrompt = NPCProperties.DEFAULT_SYSTEM_PROMPT;
         }
 
-        String baseKnowledge = getBaseKnowledge(chatMessage);
+        FileConfiguration config = plugin.getConfig();
+        boolean assistantOwnsRetrieval = config != null && config.contains("openai.assistant.enabled")
+                && config.getBoolean("openai.assistant.enabled", false);
+        String knowledge = assistantOwnsRetrieval ? "" : getKnowledge(chatMessage);
         String memoryInstruction = getMemoryInstruction(npc.getName());
-        if (baseKnowledge.isBlank() && memoryInstruction.isBlank()) {
+        if (knowledge.isBlank() && memoryInstruction.isBlank()) {
             return systemPrompt;
         }
 
         StringBuilder prompt = new StringBuilder(systemPrompt);
-        if (!baseKnowledge.isBlank()) {
-            prompt.append("\n\n[Betrouwbare HauntedMC-basiskennis]\n").append(baseKnowledge);
+        if (!knowledge.isBlank()) {
+            prompt.append("\n\n[Betrouwbare HauntedMC-kennis]\n").append(knowledge);
         }
         if (!memoryInstruction.isBlank()) {
             prompt.append("\n\n[Gebruik van chatgeheugen]\n").append(memoryInstruction);
@@ -879,13 +1014,13 @@ public class LLMChatListener implements Listener {
         return instruction.trim().replace("{npc_name}", npcName);
     }
 
-    private String getBaseKnowledge(String chatMessage) {
+    private String getKnowledge(String chatMessage) {
         FileConfiguration config = plugin.getConfig();
-        if (config == null || !config.getBoolean(BASE_KNOWLEDGE_PATH + ".enabled", true)) {
+        if (config == null || !config.getBoolean(KNOWLEDGE_PATH + ".enabled", true)) {
             return "";
         }
 
-        String configuredKnowledge = config.getString(BASE_KNOWLEDGE_PATH + ".prompt", "");
+        String configuredKnowledge = config.getString(KNOWLEDGE_PATH + ".prompt", "");
         String externalKnowledge = knowledgeRepository.loadExternalKnowledge();
         String knowledge = joinKnowledge(configuredKnowledge, externalKnowledge);
         if (knowledge.isBlank()) {
@@ -893,9 +1028,9 @@ public class LLMChatListener implements Listener {
         }
 
         int maxCharacters = Math.clamp(
-                config.getInt(BASE_KNOWLEDGE_PATH + ".max_characters", DEFAULT_BASE_KNOWLEDGE_MAX_CHARACTERS),
+                config.getInt(KNOWLEDGE_PATH + ".max_characters", DEFAULT_KNOWLEDGE_MAX_CHARACTERS),
                 1,
-                MAX_BASE_KNOWLEDGE_CHARACTERS
+                MAX_KNOWLEDGE_CHARACTERS
         );
         return KnowledgeSelector.select(knowledge, chatMessage, maxCharacters);
     }

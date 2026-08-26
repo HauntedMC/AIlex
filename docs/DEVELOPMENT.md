@@ -29,7 +29,7 @@ Useful commands during development:
 
 - Keep action and movement responsibilities separated.
 - Prefer explicit stop/guard conditions over hidden side effects.
-- Keep config keys backward-compatible where possible.
+- Remove obsolete configuration keys and their code paths in the same change.
 - Isolate external API/network logic from core movement primitives.
 - Favor small, testable units over broad command handlers.
 

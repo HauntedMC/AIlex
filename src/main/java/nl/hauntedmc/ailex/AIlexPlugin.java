@@ -8,9 +8,12 @@ import nl.hauntedmc.ailex.listener.citizens.NPCDeathListener;
 import nl.hauntedmc.ailex.listener.citizens.NPCSpawnListener;
 import nl.hauntedmc.ailex.listener.player.PlayerJoinListener;
 import nl.hauntedmc.ailex.listener.player.PlayerLeaveListener;
-import nl.hauntedmc.ailex.npc.NPCHandler;
+import nl.hauntedmc.ailex.npc.lifecycle.NpcManager;
 import nl.hauntedmc.ailex.util.LoggerUtils;
-import nl.hauntedmc.ailex.ai.llm.ChatGPTClient;
+import nl.hauntedmc.ailex.infrastructure.openai.OpenAiResponsesClient;
+import nl.hauntedmc.ailex.assistant.application.AssistantService;
+import nl.hauntedmc.ailex.assistant.application.command.AssistantMemoryCommand;
+import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantMemoryService;
 
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.command.PluginCommand;
@@ -21,8 +24,10 @@ import org.bukkit.command.PluginCommand;
  */
 public class AIlexPlugin extends JavaPlugin {
 
-    private NPCHandler npcHandler;
-    private ChatGPTClient chatGPTClient;
+    private NpcManager npcManager;
+    private OpenAiResponsesClient openAiResponsesClient;
+    private AssistantMemoryService assistantMemoryService;
+    private AssistantService assistantService;
 
     /**
      * Called when the plugin is enabled
@@ -37,8 +42,10 @@ public class AIlexPlugin extends JavaPlugin {
         // Initialize different parts of the plugin
         ConfigHandler.init(this);
         DataHandler.init(this);
-        chatGPTClient = new ChatGPTClient(this);
-        npcHandler = new NPCHandler();
+        openAiResponsesClient = new OpenAiResponsesClient(this);
+        assistantMemoryService = new AssistantMemoryService(this);
+        assistantService = new AssistantService(this);
+        npcManager = new NpcManager(this::isNpcEnabled);
 
         // Register all commands and listeners
         registerCommands();
@@ -46,8 +53,8 @@ public class AIlexPlugin extends JavaPlugin {
 
         // Delay NPC loading one tick so all dependent plugins have fully enabled.
         getServer().getScheduler().runTask(this, () -> {
-            if (isEnabled()) {
-                npcHandler.loadNPCs();
+            if (isEnabled() && isNpcEnabled()) {
+                npcManager.loadNPCs();
             }
         });
 
@@ -60,12 +67,12 @@ public class AIlexPlugin extends JavaPlugin {
      */
     @Override
     public void onDisable() {
-        if (npcHandler != null) {
+        if (npcManager != null) {
             // Unload all NPCs
-            npcHandler.unloadAllNPCs();
+            npcManager.unloadAllNPCs();
 
             // Clear the NPCRegistry after removing all NPCs
-            npcHandler.clearNPCRegistry();
+            npcManager.clearNPCRegistry();
         }
 
         LoggerUtils.logInfo("AIlex has been disabled");
@@ -84,6 +91,12 @@ public class AIlexPlugin extends JavaPlugin {
         MainCommand mainCommand = new MainCommand(this);
         ailexCommand.setExecutor(mainCommand);
         ailexCommand.setTabCompleter(mainCommand);
+
+        PluginCommand memoryCommand = getCommand("ailexmemory");
+        if (memoryCommand == null) {
+            throw new IllegalStateException("The ailexmemory command is missing from plugin.yml");
+        }
+        memoryCommand.setExecutor(new AssistantMemoryCommand(assistantMemoryService));
     }
 
     /**
@@ -111,26 +124,44 @@ public class AIlexPlugin extends JavaPlugin {
     }
 
     /**
-     * Get the NPC handler
-     * @return The NPC handler
+     * Returns the lifecycle manager for AIlex-owned NPCs.
+     * @return the NPC lifecycle manager
      */
-    public NPCHandler getNPCHandler() {
-        return npcHandler;
+    public NpcManager getNpcManager() {
+        return npcManager;
+    }
+
+    /** Returns whether AIlex may create and manage physical Citizens NPCs. */
+    public boolean isNpcEnabled() {
+        return getConfig().getBoolean("npc.enabled", true);
     }
 
     /**
-     * Get the ChatGPTClient
-     * @return The ChatGPTClient
+     * Returns the configured OpenAI Responses API client.
+     * @return the OpenAI Responses API client
      */
-    public ChatGPTClient getChatGPTClient() {
-        return chatGPTClient;
+    public OpenAiResponsesClient getOpenAiResponsesClient() {
+        return openAiResponsesClient;
+    }
+
+    /** Returns the bounded read-only assistant application service. */
+    public AssistantService getAssistantService() {
+        return assistantService;
+    }
+
+    /** Returns player-controlled preference memory. */
+    public AssistantMemoryService getAssistantMemoryService() {
+        return assistantMemoryService;
     }
 
     /**
      * Recreate the OpenAI client after configuration changes.
      */
-    public void reloadChatGPTClient() {
-        chatGPTClient = new ChatGPTClient(this);
+    public void reloadOpenAiResponsesClient() {
+        openAiResponsesClient = new OpenAiResponsesClient(this);
+        if (assistantService != null) {
+            assistantService.reload();
+        }
     }
 
     /**

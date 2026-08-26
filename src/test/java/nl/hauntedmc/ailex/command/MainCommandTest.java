@@ -1,7 +1,7 @@
 package nl.hauntedmc.ailex.command;
 
 import nl.hauntedmc.ailex.AIlexPlugin;
-import nl.hauntedmc.ailex.npc.NPCHandler;
+import nl.hauntedmc.ailex.npc.lifecycle.NpcManager;
 import nl.hauntedmc.ailex.testutil.ConfigTestSupport;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -40,9 +40,9 @@ class MainCommandTest {
     @Test
     void suggestShouldIncludeKnownSubcommandsWithoutArguments() {
         AIlexPlugin plugin = mock(AIlexPlugin.class);
-        NPCHandler npcHandler = mock(NPCHandler.class);
-        when(plugin.getNPCHandler()).thenReturn(npcHandler);
-        when(npcHandler.getNPCRegistry()).thenReturn(new HashMap<>());
+        NpcManager npcManager = mock(NpcManager.class);
+        when(plugin.getNpcManager()).thenReturn(npcManager);
+        when(npcManager.getNPCRegistry()).thenReturn(new HashMap<>());
 
         MainCommand command = new MainCommand(plugin);
         CommandSender source = mock(CommandSender.class);
@@ -57,12 +57,12 @@ class MainCommandTest {
     @Test
     void suggestShouldReturnNpcIdsForIdBasedSubcommands() {
         AIlexPlugin plugin = mock(AIlexPlugin.class);
-        NPCHandler npcHandler = mock(NPCHandler.class);
+        NpcManager npcManager = mock(NpcManager.class);
         HashMap<Integer, nl.hauntedmc.ailex.npc.NPC> registry = new HashMap<>();
         registry.put(3, mock(nl.hauntedmc.ailex.npc.NPC.class));
         registry.put(7, mock(nl.hauntedmc.ailex.npc.NPC.class));
-        when(plugin.getNPCHandler()).thenReturn(npcHandler);
-        when(npcHandler.getNPCRegistry()).thenReturn(registry);
+        when(plugin.getNpcManager()).thenReturn(npcManager);
+        when(npcManager.getNPCRegistry()).thenReturn(registry);
 
         MainCommand command = new MainCommand(plugin);
         CommandSender source = mock(CommandSender.class);
@@ -76,9 +76,9 @@ class MainCommandTest {
     @Test
     void suggestShouldReturnActionSuggestionsForActionSubcommand() {
         AIlexPlugin plugin = mock(AIlexPlugin.class);
-        NPCHandler npcHandler = mock(NPCHandler.class);
-        when(plugin.getNPCHandler()).thenReturn(npcHandler);
-        when(npcHandler.getNPCRegistry()).thenReturn(new HashMap<>());
+        NpcManager npcManager = mock(NpcManager.class);
+        when(plugin.getNpcManager()).thenReturn(npcManager);
+        when(npcManager.getNPCRegistry()).thenReturn(new HashMap<>());
 
         MainCommand command = new MainCommand(plugin);
         CommandSender source = mock(CommandSender.class);
@@ -94,11 +94,11 @@ class MainCommandTest {
     @Test
     void suggestShouldReturnBehaviourOptionsForSetMoveBehaviour() {
         AIlexPlugin plugin = mock(AIlexPlugin.class);
-        NPCHandler npcHandler = mock(NPCHandler.class);
+        NpcManager npcManager = mock(NpcManager.class);
         HashMap<Integer, nl.hauntedmc.ailex.npc.NPC> registry = new HashMap<>();
         registry.put(1, mock(nl.hauntedmc.ailex.npc.NPC.class));
-        when(plugin.getNPCHandler()).thenReturn(npcHandler);
-        when(npcHandler.getNPCRegistry()).thenReturn(registry);
+        when(plugin.getNpcManager()).thenReturn(npcManager);
+        when(npcManager.getNPCRegistry()).thenReturn(registry);
 
         MainCommand command = new MainCommand(plugin);
         CommandSender source = mock(CommandSender.class);
@@ -114,11 +114,11 @@ class MainCommandTest {
     @Test
     void suggestShouldReturnNpcTypesForCreateSubcommand() {
         AIlexPlugin plugin = mock(AIlexPlugin.class);
-        NPCHandler npcHandler = mock(NPCHandler.class);
+        NpcManager npcManager = mock(NpcManager.class);
         HashMap<Integer, nl.hauntedmc.ailex.npc.NPC> registry = new HashMap<>();
         registry.put(1, mock(nl.hauntedmc.ailex.npc.NPC.class));
-        when(plugin.getNPCHandler()).thenReturn(npcHandler);
-        when(npcHandler.getNPCRegistry()).thenReturn(registry);
+        when(plugin.getNpcManager()).thenReturn(npcManager);
+        when(npcManager.getNPCRegistry()).thenReturn(registry);
 
         MainCommand command = new MainCommand(plugin);
         CommandSender source = mock(CommandSender.class);
@@ -130,12 +130,12 @@ class MainCommandTest {
     @Test
     void suggestShouldKeepIdSuggestionsWhenIdArgumentIsCurrentToken() {
         AIlexPlugin plugin = mock(AIlexPlugin.class);
-        NPCHandler npcHandler = mock(NPCHandler.class);
+        NpcManager npcManager = mock(NpcManager.class);
         HashMap<Integer, nl.hauntedmc.ailex.npc.NPC> registry = new HashMap<>();
         registry.put(3, mock(nl.hauntedmc.ailex.npc.NPC.class));
         registry.put(7, mock(nl.hauntedmc.ailex.npc.NPC.class));
-        when(plugin.getNPCHandler()).thenReturn(npcHandler);
-        when(npcHandler.getNPCRegistry()).thenReturn(registry);
+        when(plugin.getNpcManager()).thenReturn(npcManager);
+        when(npcManager.getNPCRegistry()).thenReturn(registry);
 
         MainCommand command = new MainCommand(plugin);
         CommandSender source = mock(CommandSender.class);
@@ -150,9 +150,9 @@ class MainCommandTest {
     @Test
     void suggestShouldReturnEmptyListForUnknownPattern() {
         AIlexPlugin plugin = mock(AIlexPlugin.class);
-        NPCHandler npcHandler = mock(NPCHandler.class);
-        when(plugin.getNPCHandler()).thenReturn(npcHandler);
-        when(npcHandler.getNPCRegistry()).thenReturn(new HashMap<>());
+        NpcManager npcManager = mock(NpcManager.class);
+        when(plugin.getNpcManager()).thenReturn(npcManager);
+        when(npcManager.getNPCRegistry()).thenReturn(new HashMap<>());
 
         MainCommand command = new MainCommand(plugin);
         CommandSender source = mock(CommandSender.class);
@@ -164,9 +164,9 @@ class MainCommandTest {
     @Test
     void executeShouldExplainWhenSenderIsNotAPlayer() {
         AIlexPlugin plugin = mock(AIlexPlugin.class);
-        NPCHandler npcHandler = mock(NPCHandler.class);
-        when(plugin.getNPCHandler()).thenReturn(npcHandler);
-        when(npcHandler.getNPCRegistry()).thenReturn(new HashMap<>());
+        NpcManager npcManager = mock(NpcManager.class);
+        when(plugin.getNpcManager()).thenReturn(npcManager);
+        when(npcManager.getNPCRegistry()).thenReturn(new HashMap<>());
 
         MainCommand command = new MainCommand(plugin);
         CommandSender source = mock(CommandSender.class);
@@ -179,11 +179,11 @@ class MainCommandTest {
     @Test
     void executeShouldSendUsageDirectlyToThePlayer() {
         AIlexPlugin plugin = mock(AIlexPlugin.class);
-        NPCHandler npcHandler = mock(NPCHandler.class);
+        NpcManager npcManager = mock(NpcManager.class);
         Player player = mock(Player.class);
         CommandSender source = player;
-        when(plugin.getNPCHandler()).thenReturn(npcHandler);
-        when(npcHandler.getNPCRegistry()).thenReturn(new HashMap<>());
+        when(plugin.getNpcManager()).thenReturn(npcManager);
+        when(npcManager.getNPCRegistry()).thenReturn(new HashMap<>());
 
         new MainCommand(plugin).onCommand(source, mock(Command.class), "ailex", new String[]{});
 
@@ -199,7 +199,7 @@ class MainCommandTest {
         new MainCommand(plugin).onCommand(player, mock(Command.class), "ailex", new String[]{"reload"});
 
         verify(player).sendMessage(any(net.kyori.adventure.text.Component.class));
-        verify(plugin, never()).reloadChatGPTClient();
+        verify(plugin, never()).reloadOpenAiResponsesClient();
     }
 
     private Collection<String> tabComplete(MainCommand command, CommandSender sender, String[] args) {

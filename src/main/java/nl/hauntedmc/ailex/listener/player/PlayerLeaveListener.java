@@ -30,6 +30,6 @@ public class PlayerLeaveListener implements Listener {
      */
     @EventHandler(ignoreCancelled = true)
     public void onPlayerJoin(PlayerJoinEvent event) {
-        plugin.getNPCHandler().getNPCRegistry().values().forEach(npc -> PacketUtils.sendPlayerInfoRemovePacket(event.getPlayer(), npc));
+        plugin.getNpcManager().getNPCRegistry().values().forEach(npc -> PacketUtils.sendPlayerInfoRemovePacket(event.getPlayer(), npc));
     }
 }

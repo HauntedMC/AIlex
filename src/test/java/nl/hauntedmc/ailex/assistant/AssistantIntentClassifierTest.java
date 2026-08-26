@@ -1,0 +1,98 @@
+package nl.hauntedmc.ailex.assistant;
+
+import nl.hauntedmc.ailex.assistant.application.routing.AssistantIntentClassifier;
+import nl.hauntedmc.ailex.assistant.domain.AssistantIntent;
+import nl.hauntedmc.ailex.assistant.domain.AssistantMode;
+import nl.hauntedmc.ailex.assistant.domain.AssistantSettings;
+
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.junit.jupiter.api.Test;
+
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+class AssistantIntentClassifierTest {
+
+    @Test
+    void shouldRouteServerCommandsToGroundedEvidence() {
+        AssistantIntentClassifier.Analysis analysis = AssistantIntentClassifier.analyze(
+                "Hoe werkt /plot claim op HauntedMC?"
+        );
+
+        assertEquals(AssistantIntent.SERVER_FACT, analysis.intent());
+        assertEquals(AssistantMode.GROUNDED, analysis.mode());
+    }
+
+    @Test
+    void shouldRouteLiveQuestionsToDeliberateMode() {
+        AssistantIntentClassifier.Analysis analysis = AssistantIntentClassifier.analyze(
+                "Welk biome is hier dichtbij?"
+        );
+
+        assertEquals(AssistantIntent.LIVE_STATE, analysis.intent());
+        assertEquals(AssistantMode.DELIBERATE, analysis.mode());
+    }
+
+    @Test
+    void shouldKeepCasualConversationFast() {
+        AssistantIntentClassifier.Analysis analysis = AssistantIntentClassifier.analyze("hey bot, alles goed?");
+
+        assertEquals(AssistantIntent.CONVERSATION, analysis.intent());
+        assertEquals(AssistantMode.FAST, analysis.mode());
+    }
+
+    @Test
+    void shouldUseIndependentModelProfilesForEachAssistantLayer() {
+        YamlConfiguration config = new YamlConfiguration();
+        config.set("openai.model", "gpt-5.6-luna");
+        config.set("openai.reasoning_effort", "low");
+        config.set("openai.assistant.models.grounded.model", "gpt-5.6-terra");
+        config.set("openai.assistant.models.grounded.reasoning_effort", "medium");
+        config.set("openai.assistant.models.grounded.max_output_tokens", 320);
+        config.set("openai.assistant.models.deliberate.model", "gpt-5.6-sol");
+        config.set("openai.assistant.models.deliberate.reasoning_effort", "high");
+        config.set("openai.assistant.observability.enabled", true);
+        config.set("openai.assistant.observability.include_response_preview", true);
+        config.set("openai.assistant.observability.max_response_preview_characters", 120);
+
+        AssistantSettings settings = AssistantSettings.from(config);
+
+        assertEquals("gpt-5.6-luna", settings.profileFor(AssistantMode.FAST).model());
+        assertEquals("gpt-5.6-terra", settings.profileFor(AssistantMode.GROUNDED).model());
+        assertEquals("medium", settings.profileFor(AssistantMode.GROUNDED).reasoningEffort());
+        assertEquals(320, settings.profileFor(AssistantMode.GROUNDED).maxOutputTokens());
+        assertEquals("gpt-5.6-sol", settings.profileFor(AssistantMode.DELIBERATE).model());
+        assertEquals("high", settings.profileFor(AssistantMode.DELIBERATE).reasoningEffort());
+        assertTrue(settings.diagnosticLogging());
+        assertTrue(settings.logResponsePreview());
+        assertEquals(120, settings.maxResponsePreviewCharacters());
+    }
+
+    @Test
+    void shouldDefaultUnknownLanguageToDutchAndAllowOnlyConfiguredEnglishDetection() {
+        assertEquals("nl", AssistantIntentClassifier.detectLanguage(
+                "bonjour, comment ça va?", "nl", Set.of("nl", "en")
+        ));
+        assertEquals("en", AssistantIntentClassifier.detectLanguage(
+                "How do I claim this plot?", "nl", Set.of("nl", "en")
+        ));
+        assertEquals("nl", AssistantIntentClassifier.detectLanguage(
+                "How do I claim this plot?", "nl", Set.of("nl")
+        ));
+    }
+
+    @Test
+    void shouldNormalizeConfiguredLanguageListAndKeepDutchFallback() {
+        YamlConfiguration config = new YamlConfiguration();
+        config.set("openai.assistant.routing.default_language", "English");
+        config.set("openai.assistant.routing.allowed_languages", java.util.List.of("english", "french"));
+
+        AssistantSettings settings = AssistantSettings.from(config);
+
+        assertEquals("en", settings.defaultLanguage());
+        assertEquals(Set.of("nl", "en"), settings.allowedLanguages());
+        assertFalse(settings.languageAllowed("fr"));
+    }
+}

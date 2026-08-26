@@ -1,4 +1,4 @@
-package nl.hauntedmc.ailex.util;
+package nl.hauntedmc.ailex.application.registry;
 
 import nl.hauntedmc.ailex.ai.action.Actionable;
 import nl.hauntedmc.ailex.ai.action.move.FleePlayerAction;
@@ -29,7 +29,7 @@ import java.util.Map;
  * Scanning plugin classes during a hot reload can discover classes from an old plugin
  * classloader, which makes otherwise identical classes fail casts at runtime.</p>
  */
-public final class ReflectionUtils {
+public final class BuiltinTypeRegistry {
 
     private static final Map<String, Class<? extends MovementBehaviour>> BEHAVIOUR_MAP = new LinkedHashMap<>();
     private static final Map<String, Class<? extends Actionable>> ACTION_MAP = new LinkedHashMap<>();
@@ -55,7 +55,7 @@ public final class ReflectionUtils {
         NPC_TYPE_MAP.put("ailex_npc", AilexNPC.class);
     }
 
-    private ReflectionUtils() {
+    private BuiltinTypeRegistry() {
     }
 
     /**

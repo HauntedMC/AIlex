@@ -10,6 +10,9 @@ commands:
     description: Main command for AIlex
     usage: /ailex <subcommand>
     permission: ailex.admin
+  ailexmemory:
+    description: Manage opt-in AIlex preference memory
+    usage: /ailexmemory <on|off|show|forget>
 permissions:
   ailex.admin:
     description: Allows management of AIlex NPCs and configuration reloads.

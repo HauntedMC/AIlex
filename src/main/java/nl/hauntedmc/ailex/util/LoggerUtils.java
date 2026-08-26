@@ -1,7 +1,7 @@
 package nl.hauntedmc.ailex.util;
 
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import nl.hauntedmc.ailex.AIlexPlugin;
 
@@ -47,7 +47,7 @@ public class LoggerUtils {
      */
     private static void log(Level level, String message) {
         Component component = FormatterUtils.serializer.deserialize(message);
-        AIlexPlugin.getPlugin().getLogger().log(level, LegacyComponentSerializer.legacySection().serialize(component));
+        AIlexPlugin.getPlugin().getLogger().log(level, PlainTextComponentSerializer.plainText().serialize(component));
     }
 
 

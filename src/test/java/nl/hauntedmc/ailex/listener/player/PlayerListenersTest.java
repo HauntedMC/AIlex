@@ -2,7 +2,7 @@ package nl.hauntedmc.ailex.listener.player;
 
 import nl.hauntedmc.ailex.AIlexPlugin;
 import nl.hauntedmc.ailex.npc.NPC;
-import nl.hauntedmc.ailex.npc.NPCHandler;
+import nl.hauntedmc.ailex.npc.lifecycle.NpcManager;
 import nl.hauntedmc.ailex.util.PacketUtils;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -19,7 +19,7 @@ class PlayerListenersTest {
     @Test
     void joinListenerShouldSendAddPacketForAllNpcs() {
         AIlexPlugin plugin = mock(AIlexPlugin.class);
-        NPCHandler npcHandler = mock(NPCHandler.class);
+        NpcManager npcManager = mock(NpcManager.class);
         NPC npcA = mock(NPC.class);
         NPC npcB = mock(NPC.class);
         Player player = mock(Player.class);
@@ -29,8 +29,8 @@ class PlayerListenersTest {
         registry.put(1, npcA);
         registry.put(2, npcB);
 
-        when(plugin.getNPCHandler()).thenReturn(npcHandler);
-        when(npcHandler.getNPCRegistry()).thenReturn(registry);
+        when(plugin.getNpcManager()).thenReturn(npcManager);
+        when(npcManager.getNPCRegistry()).thenReturn(registry);
         when(event.getPlayer()).thenReturn(player);
 
         try (MockedStatic<PacketUtils> mockedPackets = org.mockito.Mockito.mockStatic(PacketUtils.class)) {
@@ -43,7 +43,7 @@ class PlayerListenersTest {
     @Test
     void leaveListenerShouldSendRemovePacketForAllNpcs() {
         AIlexPlugin plugin = mock(AIlexPlugin.class);
-        NPCHandler npcHandler = mock(NPCHandler.class);
+        NpcManager npcManager = mock(NpcManager.class);
         NPC npcA = mock(NPC.class);
         NPC npcB = mock(NPC.class);
         Player player = mock(Player.class);
@@ -53,8 +53,8 @@ class PlayerListenersTest {
         registry.put(1, npcA);
         registry.put(2, npcB);
 
-        when(plugin.getNPCHandler()).thenReturn(npcHandler);
-        when(npcHandler.getNPCRegistry()).thenReturn(registry);
+        when(plugin.getNpcManager()).thenReturn(npcManager);
+        when(npcManager.getNPCRegistry()).thenReturn(registry);
         when(event.getPlayer()).thenReturn(player);
 
         try (MockedStatic<PacketUtils> mockedPackets = org.mockito.Mockito.mockStatic(PacketUtils.class)) {

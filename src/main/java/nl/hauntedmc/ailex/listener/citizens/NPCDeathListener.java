@@ -3,7 +3,6 @@ package nl.hauntedmc.ailex.listener.citizens;
 import net.citizensnpcs.api.event.NPCDeathEvent;
 
 import nl.hauntedmc.ailex.AIlexPlugin;
-import nl.hauntedmc.ailex.util.LoggerUtils;
 
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -30,9 +29,11 @@ public class NPCDeathListener implements Listener {
      */
     @EventHandler(ignoreCancelled = true)
     public void onEntityDeath(NPCDeathEvent event) {
-        LoggerUtils.logInfo("NPC died: " + event.getNPC().getName() + " [ID=" + event.getNPC().getId() + "] at " + event.getNPC().getStoredLocation());
-        plugin.getNPCHandler().getNPCRegistry().values().stream()
-                .filter(npc -> npc.getCitizensEntityID().equals(event.getNPC().getUniqueId()))
+        if (!plugin.getNpcManager().ownsCitizensNpc(event.getNPC().getUniqueId())) {
+            return;
+        }
+        plugin.getNpcManager().getNPCRegistry().values().stream()
+                .filter(npc -> event.getNPC().getUniqueId().equals(npc.getCitizensEntityID()))
                 .forEach(npc -> {
                     npc.clearActionQueue();
                     npc.cancelCurrentAction();

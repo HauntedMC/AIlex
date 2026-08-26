@@ -1,4 +1,4 @@
-package nl.hauntedmc.ailex.util;
+package nl.hauntedmc.ailex.application.registry;
 
 import nl.hauntedmc.ailex.testutil.ConfigTestSupport;
 import org.junit.jupiter.api.AfterEach;
@@ -9,7 +9,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class ReflectionUtilsTest {
+class BuiltinTypeRegistryTest {
 
     @BeforeEach
     void setUpConfig() {
@@ -42,7 +42,7 @@ class ReflectionUtilsTest {
 
     @Test
     void shouldRegisterCoreMovementBehaviourImplementations() {
-        Map<String, Class<? extends nl.hauntedmc.ailex.ai.movement.behaviour.MovementBehaviour>> behaviourMap = ReflectionUtils.getBehaviourMap();
+        Map<String, Class<? extends nl.hauntedmc.ailex.ai.movement.behaviour.MovementBehaviour>> behaviourMap = BuiltinTypeRegistry.getBehaviourMap();
 
         assertTrue(behaviourMap.containsKey("seek"));
         assertTrue(behaviourMap.containsKey("arrive"));
@@ -57,7 +57,7 @@ class ReflectionUtilsTest {
 
     @Test
     void shouldRegisterCoreActionImplementations() {
-        Map<String, Class<? extends nl.hauntedmc.ailex.ai.action.Actionable>> actionMap = ReflectionUtils.getActionMap();
+        Map<String, Class<? extends nl.hauntedmc.ailex.ai.action.Actionable>> actionMap = BuiltinTypeRegistry.getActionMap();
 
         assertTrue(actionMap.containsKey("movehere"));
         assertTrue(actionMap.containsKey("followplayer"));
@@ -68,7 +68,7 @@ class ReflectionUtilsTest {
 
     @Test
     void shouldRegisterAvailableNpcTypes() {
-        Map<String, Class<? extends nl.hauntedmc.ailex.npc.NPC>> npcTypeMap = ReflectionUtils.getNPCTypeMap();
+        Map<String, Class<? extends nl.hauntedmc.ailex.npc.NPC>> npcTypeMap = BuiltinTypeRegistry.getNPCTypeMap();
         assertTrue(npcTypeMap.containsKey("ailex_npc"));
     }
 }

@@ -18,7 +18,7 @@ import java.util.stream.Stream;
  */
 final class KnowledgeRepository {
 
-    private static final String BASE_KNOWLEDGE_PATH = "openai.base_knowledge";
+    private static final String KNOWLEDGE_PATH = "openai.knowledge";
     private static final int DEFAULT_MAX_FILES = 20;
     private static final int DEFAULT_MAX_CHARACTERS = 30000;
 
@@ -30,11 +30,11 @@ final class KnowledgeRepository {
 
     String loadExternalKnowledge() {
         FileConfiguration config = plugin.getConfig();
-        if (config == null || !config.getBoolean(BASE_KNOWLEDGE_PATH + ".external.enabled", true)) {
+        if (config == null || !config.getBoolean(KNOWLEDGE_PATH + ".external.enabled", true)) {
             return "";
         }
 
-        String directoryName = config.getString(BASE_KNOWLEDGE_PATH + ".external.directory", "knowledge");
+        String directoryName = config.getString(KNOWLEDGE_PATH + ".external.directory", "knowledge");
         if (directoryName == null || directoryName.isBlank()) {
             return "";
         }
@@ -49,9 +49,9 @@ final class KnowledgeRepository {
             return "";
         }
 
-        int maxFiles = Math.clamp(config.getInt(BASE_KNOWLEDGE_PATH + ".external.max_files", DEFAULT_MAX_FILES), 1, 100);
+        int maxFiles = Math.clamp(config.getInt(KNOWLEDGE_PATH + ".external.max_files", DEFAULT_MAX_FILES), 1, 100);
         int maxCharacters = Math.clamp(
-                config.getInt(BASE_KNOWLEDGE_PATH + ".external.max_characters", DEFAULT_MAX_CHARACTERS),
+                config.getInt(KNOWLEDGE_PATH + ".external.max_characters", DEFAULT_MAX_CHARACTERS),
                 1,
                 120000
         );

@@ -1,4 +1,4 @@
-package nl.hauntedmc.ailex.ai.llm;
+package nl.hauntedmc.ailex.infrastructure.openai;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -16,16 +16,47 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.configuration.file.FileConfiguration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-class ChatGPTClientTest {
+class OpenAiResponsesClientTest {
+
+    @Test
+    void shouldReturnRawStructuredOutputForAssistantValidation() throws Exception {
+        HttpClient httpClient = mock(HttpClient.class);
+        HttpResponse<String> response = mockStringResponse(200, """
+                {
+                  "output": [
+                    {
+                      "type": "message",
+                      "role": "assistant",
+                      "content": [
+                        { "type": "output_text", "text": "{\\\"lines\\\":[\\\"Hoi!\\\"],\\\"confidence\\\":\\\"high\\\"}" }
+                      ]
+                    }
+                  ]
+                }
+                """);
+        when(httpClient.send(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(response);
+        JsonObject format = new JsonObject();
+        format.addProperty("type", "json_schema");
+
+        try (MockedStatic<LoggerUtils> mockedLogger = org.mockito.Mockito.mockStatic(LoggerUtils.class)) {
+            ChatGPTClient client = new ChatGPTClient("key", "gpt-4.1-mini", httpClient);
+
+            assertEquals("{\"lines\":[\"Hoi!\"],\"confidence\":\"high\"}",
+                    client.getStructuredChatResponse("system", "hello", format));
+        }
+    }
 
     @Test
     void shouldUseResponsesApiWithConfiguredModelAndApiKey() throws Exception {
@@ -64,13 +95,10 @@ class ChatGPTClientTest {
             assertEquals("gpt-4.1-mini", payload.get("model").getAsString());
 
             JsonArray input = payload.getAsJsonArray("input");
-            assertEquals(3, input.size());
-            assertEquals(
-                    ChatGPTClient.SAFETY_SYSTEM_PROMPT,
-                    input.get(0).getAsJsonObject().getAsJsonArray("content").get(0).getAsJsonObject().get("text")
-                            .getAsString()
-            );
-            JsonObject contentObject = input.get(2)
+            assertEquals(1, input.size());
+            assertEquals(ChatGPTClient.SAFETY_SYSTEM_PROMPT,
+                    payload.get("instructions").getAsString().substring(0, ChatGPTClient.SAFETY_SYSTEM_PROMPT.length()));
+            JsonObject contentObject = input.get(0)
                     .getAsJsonObject()
                     .getAsJsonArray("content")
                     .get(0)
@@ -215,17 +243,39 @@ class ChatGPTClientTest {
             ).getAsJsonObject();
 
             JsonArray input = payload.getAsJsonArray("input");
-            assertEquals(4, input.size());
-            assertEquals(
-                    "system persona",
-                    input.get(1).getAsJsonObject().getAsJsonArray("content").get(0).getAsJsonObject().get("text")
-                            .getAsString()
-            );
+            assertEquals(1, input.size());
+            assertTrue(payload.get("instructions").getAsString().contains("system persona"));
             assertEquals(
                     "hello",
-                    input.get(3).getAsJsonObject().getAsJsonArray("content").get(0).getAsJsonObject().get("text")
+                    input.get(0).getAsJsonObject().getAsJsonArray("content").get(0).getAsJsonObject().get("text")
                             .getAsString()
             );
+        }
+    }
+
+    @Test
+    void shouldApplyPerRequestAssistantModelProfile() throws Exception {
+        HttpClient httpClient = mock(HttpClient.class);
+        JsonObject format = new JsonObject();
+        format.addProperty("type", "json_schema");
+        OpenAiResponsesClient.RequestOptions options = new OpenAiResponsesClient.RequestOptions(
+                "gpt-5.6-terra", 320, "medium", Duration.ofSeconds(7), "ailex-hash", "ailex-cache", "low"
+        );
+
+        try (MockedStatic<LoggerUtils> mockedLogger = org.mockito.Mockito.mockStatic(LoggerUtils.class)) {
+            ChatGPTClient client = new ChatGPTClient("key", "gpt-5.6-luna", httpClient);
+            JsonObject payload = JsonParser.parseString(
+                    client.createRequestBody("persona", "hello", format, options)
+            ).getAsJsonObject();
+            HttpRequest request = client.createHttpRequest("persona", "hello", options);
+
+            assertEquals("gpt-5.6-terra", payload.get("model").getAsString());
+            assertEquals(320, payload.get("max_output_tokens").getAsInt());
+            assertEquals("medium", payload.getAsJsonObject("reasoning").get("effort").getAsString());
+            assertEquals("ailex-hash", payload.get("safety_identifier").getAsString());
+            assertEquals("ailex-cache", payload.get("prompt_cache_key").getAsString());
+            assertEquals("low", payload.getAsJsonObject("text").get("verbosity").getAsString());
+            assertEquals(Duration.ofSeconds(7), request.timeout().orElseThrow());
         }
     }
 
@@ -384,5 +434,36 @@ class ChatGPTClientTest {
         when(response.statusCode()).thenReturn(statusCode);
         when(response.body()).thenReturn(body);
         return response;
+    }
+}
+
+/** Keeps the existing constructor-focused tests readable while exercising the renamed client. */
+final class ChatGPTClient extends OpenAiResponsesClient {
+    ChatGPTClient(String apiKey, String model, HttpClient httpClient) {
+        super(apiKey, model, httpClient);
+    }
+
+    ChatGPTClient(String apiKey, String model, HttpClient httpClient, boolean safetyEnabled, String safetySystemPrompt) {
+        super(apiKey, model, httpClient, safetyEnabled, safetySystemPrompt);
+    }
+
+    ChatGPTClient(
+            String apiKey, String model, HttpClient httpClient, boolean safetyEnabled, String safetySystemPrompt,
+            int maxOutputTokens, String reasoningEffort, boolean storeResponses
+    ) {
+        super(apiKey, model, httpClient, safetyEnabled, safetySystemPrompt, maxOutputTokens, reasoningEffort,
+                storeResponses);
+    }
+
+    ChatGPTClient(
+            String apiKey, String model, HttpClient httpClient, boolean safetyEnabled, String safetySystemPrompt,
+            int maxOutputTokens, String reasoningEffort, boolean storeResponses, Duration requestTimeout
+    ) {
+        super(apiKey, model, httpClient, safetyEnabled, safetySystemPrompt, maxOutputTokens, reasoningEffort,
+                storeResponses, requestTimeout);
+    }
+
+    ChatGPTClient(FileConfiguration config) {
+        super(config);
     }
 }
