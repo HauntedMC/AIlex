@@ -6,7 +6,7 @@ import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
 
-/** Central, bounded configuration view for the assistant subsystem. */
+/** Central bounded configuration view for the assistant subsystem. */
 public record AssistantSettings(
         boolean enabled, String mode, int totalDeadlineSeconds, int maxModelCalls, int maxToolRounds,
         boolean languageDetection, String defaultLanguage, Set<String> allowedLanguages,
@@ -43,28 +43,28 @@ public record AssistantSettings(
                 config.getBoolean(PATH + ".retrieval.hybrid_enabled", true),
                 Math.clamp(config.getInt(PATH + ".retrieval.query_cache_seconds", 300), 0, 3600),
                 config.getBoolean(PATH + ".retrieval.exclude_expired", true),
-                Math.clamp(config.getInt(PATH + ".retrieval.max_evidence_characters", 6500), 500, 12000),
-                Math.clamp(config.getInt(PATH + ".retrieval.max_chunks", 5), 1, 10),
-                profile(config, "fast", defaultModel, defaultEffort, Math.min(defaultOutputTokens, 200)),
-                profile(config, "grounded", defaultModel, defaultEffort, Math.max(defaultOutputTokens, 320)),
-                profile(config, "deliberate", defaultModel, defaultEffort, Math.max(defaultOutputTokens, 480)),
+                Math.clamp(config.getInt(PATH + ".retrieval.max_evidence_characters", 24_000), 500, 60_000),
+                Math.clamp(config.getInt(PATH + ".retrieval.max_chunks", 10), 1, 20),
+                profile(config, "fast", defaultModel, defaultEffort, Math.min(defaultOutputTokens, 220)),
+                profile(config, "grounded", defaultModel, defaultEffort, Math.max(defaultOutputTokens, 360)),
+                profile(config, "deliberate", defaultModel, defaultEffort, Math.max(defaultOutputTokens, 640)),
                 config.getBoolean(PATH + ".tools.read_only", true),
                 Set.copyOf(config.getStringList(PATH + ".tools.allowed").stream()
                         .map(value -> value.toLowerCase(Locale.ROOT)).toList()),
                 config.getBoolean(PATH + ".tools.redact_other_players", true),
-                Math.clamp(config.getInt(PATH + ".delivery.max_lines_fast", 1), 1, 3),
-                Math.clamp(config.getInt(PATH + ".delivery.max_lines_grounded", 2), 1, 3),
-                Math.clamp(config.getInt(PATH + ".delivery.max_lines_deliberate", 3), 1, 3),
-                Math.clamp(config.getInt(PATH + ".delivery.max_line_characters", 220), 80, 300),
-                Math.clamp(config.getInt(PATH + ".context.max_input_tokens_fast", 1000), 256, 8000),
-                Math.clamp(config.getInt(PATH + ".context.max_input_tokens_grounded", 2800), 512, 12000),
-                Math.clamp(config.getInt(PATH + ".context.max_input_tokens_deliberate", 4800), 1024, 20000),
+                Math.clamp(config.getInt(PATH + ".delivery.max_lines_fast", 1), 1, 4),
+                Math.clamp(config.getInt(PATH + ".delivery.max_lines_grounded", 3), 1, 5),
+                Math.clamp(config.getInt(PATH + ".delivery.max_lines_deliberate", 4), 1, 6),
+                Math.clamp(config.getInt(PATH + ".delivery.max_line_characters", 240), 80, 320),
+                Math.clamp(config.getInt(PATH + ".context.max_input_tokens_fast", 3_000), 512, 16_000),
+                Math.clamp(config.getInt(PATH + ".context.max_input_tokens_grounded", 9_000), 1_024, 32_000),
+                Math.clamp(config.getInt(PATH + ".context.max_input_tokens_deliberate", 18_000), 2_048, 64_000),
                 config.getBoolean(PATH + ".structured_output", true),
                 config.getBoolean(PATH + ".verification.enabled", true),
                 config.getString(PATH + ".verification.minimum_confidence", "medium"),
                 config.getBoolean("openai.knowledge.external.enabled", true),
-                Math.clamp(config.getInt("openai.knowledge.external.max_files", 20), 1, 100),
-                Math.clamp(config.getInt("openai.knowledge.external.max_characters", 30000), 1, 120000),
+                Math.clamp(config.getInt("openai.knowledge.external.max_files", 64), 1, 256),
+                Math.clamp(config.getInt("openai.knowledge.external.max_characters", 120_000), 1, 500_000),
                 config.getBoolean(PATH + ".reliability.circuit_breaker_enabled", true),
                 config.getBoolean(PATH + ".reliability.cache_static_answers", true),
                 config.getBoolean(PATH + ".reliability.shadow_mode", false),
@@ -77,13 +77,13 @@ public record AssistantSettings(
 
     public static AssistantSettings defaults() {
         return new AssistantSettings(true, "adaptive", 15, 3, 2, true, "nl", Set.of("nl", "en"), true, true,
-                300, true, 6500, 5,
-                new ModelProfile("gpt-5.6-luna", "low", 160),
-                new ModelProfile("gpt-5.6-terra", "medium", 320),
-                new ModelProfile("gpt-5.6-sol", "high", 480),
+                300, true, 24_000, 10,
+                new ModelProfile("gpt-5.6-luna", "low", 180),
+                new ModelProfile("gpt-5.6-terra", "medium", 360),
+                new ModelProfile("gpt-5.6-sol", "high", 640),
                 true, Set.of("knowledge", "requester", "world", "nearby", "server", "npc", "session"), true,
-                1, 2, 3, 220, 1000, 2800, 4800,
-                true, true, "medium", true, 20, 30000, true, true, false,
+                1, 3, 4, 240, 3_000, 9_000, 18_000,
+                true, true, "medium", true, 64, 120_000, true, true, false,
                 true, true, false, 240);
     }
 
