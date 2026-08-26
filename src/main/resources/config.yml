@@ -13,8 +13,9 @@ openai:
     # Adaptive keeps ordinary chat cheap while factual/current-state work gets stronger grounding and reasoning.
     mode: "adaptive"
     total_deadline_seconds: 18
+    # Two read/planning calls + answer + one evidence-driven escalation remain inside this hard request budget.
     max_model_calls: 4
-    # One bounded information-seeking round leaves budget for the answer and a grounded escalation when necessary.
+    # Complex grounded/deliberate questions may perform two bounded information-seeking rounds.
     max_tool_rounds: 2
     structured_output: true
     routing:
@@ -96,6 +97,7 @@ openai:
         enabled: true
         interval_minutes: 15
       retention:
+        # Low-value transient traces may decay under interference; durable semantic facts never vanish merely by age.
         enabled: true
         interval_minutes: 30
       storage:
