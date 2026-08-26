@@ -1,5 +1,6 @@
 package nl.hauntedmc.ailex.assistant.domain;
 
+import nl.hauntedmc.ailex.assistant.action.AssistantActionProposal;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryCandidate;
 
 import java.util.HashMap;
@@ -8,13 +9,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** Validated player-facing assistant output; evidence remains internal by default. */
+/** Validated player-facing assistant output; evidence remains internal and action proposals remain non-authoritative. */
 public record AssistantReply(
         List<String> lines,
         Set<String> evidenceIds,
         String confidence,
         String handoff,
         List<MemoryCandidate> memoryCandidates,
+        List<AssistantActionProposal> actionProposals,
         Map<Integer, Set<String>> claimEvidence,
         boolean valid
 ) {
@@ -24,6 +26,7 @@ public record AssistantReply(
         confidence = confidence == null ? "" : confidence.trim();
         handoff = handoff == null ? "" : handoff.trim();
         memoryCandidates = memoryCandidates == null ? List.of() : List.copyOf(memoryCandidates);
+        actionProposals = actionProposals == null ? List.of() : List.copyOf(actionProposals);
         Map<Integer, Set<String>> normalized = new HashMap<>();
         if (claimEvidence != null) {
             claimEvidence.forEach((line, ids) -> {
@@ -44,8 +47,21 @@ public record AssistantReply(
         }
     }
 
+    /** Source-compatible constructor for callers that do not use embodied actions. */
+    public AssistantReply(
+            List<String> lines,
+            Set<String> evidenceIds,
+            String confidence,
+            String handoff,
+            List<MemoryCandidate> memoryCandidates,
+            Map<Integer, Set<String>> claimEvidence,
+            boolean valid
+    ) {
+        this(lines, evidenceIds, confidence, handoff, memoryCandidates, List.of(), claimEvidence, valid);
+    }
+
     public static AssistantReply invalid() {
-        return new AssistantReply(List.of(), Set.of(), "", "", List.of(), Map.of(), false);
+        return new AssistantReply(List.of(), Set.of(), "", "", List.of(), List.of(), Map.of(), false);
     }
 
     public static AssistantReply unavailable() {
@@ -55,12 +71,15 @@ public record AssistantReply(
     public static AssistantReply fromPlainText(String text) {
         String safe = text == null ? "" : text.replaceAll("\\s+", " ").trim();
         return new AssistantReply(
-                safe.isBlank() ? List.of() : List.of(safe), Set.of(), "", "", List.of(), Map.of(), !safe.isBlank()
+                safe.isBlank() ? List.of() : List.of(safe), Set.of(), "", "", List.of(), List.of(), Map.of(),
+                !safe.isBlank()
         );
     }
 
     public AssistantReply withHandoff(String value) {
-        return new AssistantReply(lines, evidenceIds, confidence, value, memoryCandidates, claimEvidence, valid);
+        return new AssistantReply(
+                lines, evidenceIds, confidence, value, memoryCandidates, actionProposals, claimEvidence, valid
+        );
     }
 
     public Set<String> coveredEvidenceIds() {
