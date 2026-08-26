@@ -27,23 +27,31 @@ class AssistantGroundingPolicyTest {
     }
 
     @Test
-    void evidenceMustMatchTheRouteSourceFamily() {
+    void positiveEvidenceMustMatchTheRouteSourceFamily() {
         assertTrue(AssistantGroundingPolicy.hasRequiredEvidence(
                 AssistantIntent.SERVER_FACT, Set.of("knowledge.claims.0")
         ));
-        assertTrue(AssistantGroundingPolicy.hasRequiredEvidence(
+        assertFalse(AssistantGroundingPolicy.hasRequiredEvidence(
                 AssistantIntent.SERVER_FACT, Set.of("knowledge.none")
         ));
         assertFalse(AssistantGroundingPolicy.hasRequiredEvidence(
                 AssistantIntent.SERVER_FACT, Set.of("memory.fact")
         ));
+
         assertTrue(AssistantGroundingPolicy.hasRequiredEvidence(
+                AssistantIntent.LIVE_STATE, Set.of("live.requester")
+        ));
+        assertFalse(AssistantGroundingPolicy.hasRequiredEvidence(
                 AssistantIntent.LIVE_STATE, Set.of("live.requester.none")
         ));
         assertFalse(AssistantGroundingPolicy.hasRequiredEvidence(
                 AssistantIntent.LIVE_STATE, Set.of("knowledge.claims.0")
         ));
+
         assertTrue(AssistantGroundingPolicy.hasRequiredEvidence(
+                AssistantIntent.MEMORY_RECALL, Set.of("memory.fact")
+        ));
+        assertFalse(AssistantGroundingPolicy.hasRequiredEvidence(
                 AssistantIntent.MEMORY_RECALL, Set.of("memory.none")
         ));
     }
