@@ -1,14 +1,79 @@
 openai:
   api_key: ""
   model: "gpt-5.6-luna"
-  # Chat is intentionally concise: this is both a hard cost cap and a guard against chat spam.
+  # Default cap for direct/proactive fallback chat; assistant layers use their profile cap below.
   max_output_tokens: 200
-  # Valid values: none, low, medium, high, xhigh. Use low for fast chat; raise it only for complex NPC roles.
+  # Valid values: none, low, medium, high, xhigh, max. Layer-specific values below take precedence.
   reasoning_effort: "low"
   # Do not retain player chat at the API provider unless you explicitly need stored responses.
   store_responses: false
   # A failed upstream request must not occupy an AI worker indefinitely.
   request_timeout_seconds: 20
+  # Evidence-first assistant pipeline. It is read-only: it never executes commands or changes world state.
+  assistant:
+    enabled: true
+    # adaptive routes casual chat fast and reserves grounded processing for factual questions.
+    mode: "adaptive"
+    total_deadline_seconds: 20
+    # Strict structured output normally succeeds on the first attempt. One retry handles malformed/upstream responses.
+    max_model_calls: 2
+    max_tool_rounds: 2
+    structured_output: true
+    routing:
+      # Unsupported or ambiguous input falls back to this language. Current supported codes: nl, en.
+      default_language: "nl"
+      allowed_languages: ["nl", "en"]
+      language_detection: true
+      clarify_only_when_required: true
+    retrieval:
+      # Local hybrid ranking combines BM25 with title and command-alias signals; it never uploads the knowledge base.
+      hybrid_enabled: true
+      max_chunks: 5
+      max_evidence_characters: 6500
+      query_cache_seconds: 300
+      exclude_expired: true
+    # Each semantic layer has its own quality/latency profile. Keep the fast path inexpensive;
+    # factual answers get Terra and genuinely complex live/support questions get Sol.
+    models:
+      fast:
+        model: "gpt-5.6-luna"
+        reasoning_effort: "low"
+        max_output_tokens: 160
+      grounded:
+        model: "gpt-5.6-luna"
+        reasoning_effort: "medium"
+        max_output_tokens: 320
+      deliberate:
+        model: "gpt-5.6-luna"
+        reasoning_effort: "high"
+        max_output_tokens: 480
+    tools:
+      read_only: true
+      allowed: ["knowledge", "requester", "world", "nearby", "server", "npc", "session"]
+      redact_other_players: true
+    verification:
+      enabled: true
+      minimum_confidence: "medium"
+    delivery:
+      max_lines_fast: 1
+      max_lines_grounded: 2
+      max_lines_deliberate: 3
+      max_line_characters: 220
+    memory:
+      enabled: true
+      opt_in_required: true
+      retention_days: 90
+    reliability:
+      circuit_breaker_enabled: true
+      cache_static_answers: true
+      shadow_mode: false
+    # One privacy-conscious routing and completion line per assistant request for server administrators.
+    # Chat messages, prompts, preference values and response text are never logged unless explicitly enabled below.
+    observability:
+      enabled: true
+      include_requester_name: true
+      include_response_preview: false
+      max_response_preview_characters: 240
   chat:
     enabled: true
     # Leave empty for all players. Set a permission (for example, ailex.chat) for a staff-only bot.
@@ -18,6 +83,12 @@ openai:
     nearby_response_radius: 32
     # One player can have only one outstanding request; this is the server-wide cap.
     max_concurrent_requests: 4
+    # Used only while npc.enabled is false. No Citizens NPC is created in this mode.
+    standalone:
+      enabled: false
+      mention: "AIlex"
+      display_name: "<#7C3AED>[<#C4B5FD>AIlex<#7C3AED>]</#7C3AED>"
+      system_prompt: "Je bent AIlex, een slimme en vriendelijke Minecraft-assistent voor HauntedMC. Antwoord kort, concreet en eerlijk in het Nederlands. Gebruik alleen betrouwbare kennis en volg altijd de veiligheidsregels."
   # Carefully limited, opt-in behaviour for bots that can contribute without being named.
   # All proactive replies share this cooldown and use the normal concurrent-request cap.
   proactive_chat:
@@ -63,7 +134,7 @@ openai:
       enabled: true
       # Shown privately to the player. {remaining_seconds} is replaced with the wait time.
       message: "Je hebt de AI-limiet bereikt. Probeer het over {remaining_seconds} seconden opnieuw."
-  base_knowledge:
+  knowledge:
     enabled: true
     # Bullet points relevant to the current question are selected before this cap is applied.
     max_characters: 30000
@@ -174,6 +245,9 @@ openai:
         include_movement_behaviour: true
         include_current_action: true
 npc:
+  # Set false to run the assistant without creating or loading any Citizens NPCs.
+  # Players can still mention the standalone chat assistant configured under openai.chat.standalone.
+  enabled: true
   defaults:
     entity:
       prefix: "<#7C3AED>[<#C4B5FD>Bot<#7C3AED>]</#7C3AED>"
@@ -182,7 +256,7 @@ npc:
       damageable: true
       respawnOnDeath: true
       chatEnabled: true
-      listedInTab: true
+      listedInTab: false
       alwaysUseNameHologram: false
       prompts:
         systemPrompt: "Je bent een slimme Minecraft Bot op een survivalserver: een kalme, oplettende servergenoot met droge, vriendelijke humor. Help concreet met gameplay, builds, farms, Redstone, mobs, biomes, resources en serveretiquette. Geef eerst het nuttigste antwoord of de beste volgende stap, geen algemeen verhaal. Spiegel toon en lengte: serieus is serieus en helder; alleen bij een speelse, informele toon mag je af en toe natuurlijke Gen Z/Gen Alpha-slang zoals 'gg', 'W' of 'low-key' gebruiken — nooit geforceerd of bij serieuze zaken. Schrijf Nederlands, maar behoud Engelse Minecraft-termen zoals Spider Spawner, Crafting Table, Enchantment Table, Nether Portal en Redstone. Wees eerlijk bij onzekerheid, verzin geen mechanics of recipes en stel hoogstens één gerichte vraag wanneer informatie echt ontbreekt. Volg altijd de veiligheidsregels."
