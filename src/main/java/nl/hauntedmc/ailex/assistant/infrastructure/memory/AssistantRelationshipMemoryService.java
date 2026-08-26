@@ -23,10 +23,10 @@ public final class AssistantRelationshipMemoryService {
         if (memory == null || playerId == null || npcId == null || npcId.isBlank()) {
             return empty();
         }
-        List<MemoryRecord> records = memory.search(
-                playerId, npcId, "relationship profile interests goals projects preferences episodes",
-                Set.of(MemoryKind.values()), 96
-        );
+        String player = playerId.toString();
+        List<MemoryRecord> records = memory.activeSnapshot().stream()
+                .filter(record -> visibleToRelationship(record, player, npcId))
+                .toList();
         Set<String> evidence = new HashSet<>();
         records.forEach(record -> evidence.add("memory." + record.id()));
 
@@ -87,7 +87,19 @@ public final class AssistantRelationshipMemoryService {
         append(parts, "shared_episodes", profile.sharedEpisodes());
         append(parts, "interaction_preferences", profile.interactionPreferences());
         append(parts, "unresolved_commitments", profile.unresolvedCommitments());
-        return String.join(" | ", parts);
+        String context = String.join(" | ", parts);
+        return context.length() <= 1_600 ? context : context.substring(0, 1_599) + "…";
+    }
+
+    private boolean visibleToRelationship(MemoryRecord record, String playerId, String npcId) {
+        return switch (record.scope()) {
+            case PLAYER -> record.subjectId().equals(playerId);
+            case PLAYER_NPC -> record.subjectId().equals(playerId) && record.relationId().equals(npcId);
+            case EVENT -> record.subjectId().equals(playerId)
+                    && (record.relationId().isBlank() || record.relationId().equals(npcId));
+            case NPC -> record.subjectId().equals(npcId) && record.tags().contains("experience");
+            case SHARED -> false;
+        };
     }
 
     private java.util.Optional<String> value(
