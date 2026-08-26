@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** Responses API client with privacy controls, stable cache routing, and first-class usage accounting. */
 public class OpenAiResponsesClient {
@@ -46,6 +47,13 @@ public class OpenAiResponsesClient {
     private final String reasoningEffort;
     private final boolean storeResponses;
     private final Duration requestTimeout;
+    private final AtomicLong requestCount = new AtomicLong();
+    private final AtomicLong successfulRequestCount = new AtomicLong();
+    private final AtomicLong inputTokens = new AtomicLong();
+    private final AtomicLong cachedInputTokens = new AtomicLong();
+    private final AtomicLong cacheWriteTokens = new AtomicLong();
+    private final AtomicLong outputTokens = new AtomicLong();
+    private final AtomicLong totalTokens = new AtomicLong();
 
     public OpenAiResponsesClient(JavaPlugin plugin) {
         this(plugin.getConfig());
@@ -128,7 +136,7 @@ public class OpenAiResponsesClient {
         return getChatResponse(systemPrompt, userPrompt, RequestOptions.defaults());
     }
 
-    /** Backward-compatible text API. Prefer {@link #getChatResult} when usage telemetry is needed. */
+    /** Backward-compatible text API. Prefer {@link #getChatResult} when per-request usage telemetry is needed. */
     public String getChatResponse(String systemPrompt, String userPrompt, RequestOptions options) {
         return getChatResult(systemPrompt, userPrompt, options).text();
     }
@@ -138,21 +146,14 @@ public class OpenAiResponsesClient {
         if (userPrompt == null || userPrompt.isBlank() || !isConfigured(options)) {
             return ResponseResult.failure(FALLBACK_RESPONSE, 0);
         }
-        return execute(
-                systemPrompt,
-                userPrompt,
-                null,
-                SYSTEM_RESPONSE_INSTRUCTION,
-                options,
-                true
-        );
+        return execute(systemPrompt, userPrompt, null, SYSTEM_RESPONSE_INSTRUCTION, options, true);
     }
 
     public String getStructuredChatResponse(String systemPrompt, String userPrompt, JsonObject responseFormat) {
         return getStructuredChatResponse(systemPrompt, userPrompt, responseFormat, RequestOptions.defaults());
     }
 
-    /** Backward-compatible structured text API. Prefer {@link #getStructuredChatResult} for usage accounting. */
+    /** Backward-compatible structured text API. Prefer {@link #getStructuredChatResult} for per-request usage. */
     public String getStructuredChatResponse(
             String systemPrompt, String userPrompt, JsonObject responseFormat, RequestOptions options
     ) {
@@ -176,6 +177,26 @@ public class OpenAiResponsesClient {
         );
     }
 
+    /** Cumulative usage for this client instance, including calls made through legacy String-returning APIs. */
+    public UsageSnapshot usageSnapshot() {
+        Usage usage = new Usage(
+                inputTokens.get(), cachedInputTokens.get(), cacheWriteTokens.get(), outputTokens.get(), totalTokens.get()
+        );
+        return new UsageSnapshot(requestCount.get(), successfulRequestCount.get(), usage);
+    }
+
+    /** Compact operator-facing representation used by /ailex diagnostics. */
+    public String usageStatus() {
+        UsageSnapshot snapshot = usageSnapshot();
+        return "calls=" + snapshot.requests()
+                + ", success=" + snapshot.successfulRequests()
+                + ", input=" + snapshot.usage().inputTokens()
+                + ", cached=" + snapshot.usage().cachedInputTokens()
+                + ", cache_write=" + snapshot.usage().cacheWriteTokens()
+                + ", output=" + snapshot.usage().outputTokens()
+                + ", cache_hit=" + String.format(Locale.ROOT, "%.1f%%", snapshot.usage().cacheHitRatio() * 100.0D);
+    }
+
     private ResponseResult execute(
             String systemPrompt,
             String userPrompt,
@@ -184,12 +205,14 @@ public class OpenAiResponsesClient {
             RequestOptions options,
             boolean normalize
     ) {
+        requestCount.incrementAndGet();
         HttpRequest request = createHttpRequest(systemPrompt, userPrompt, responseFormat, responseInstruction, options);
         try {
             HttpResponse<String> response = httpClient.send(
                     request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
             );
             Usage usage = extractUsage(response.body());
+            recordUsage(usage);
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 String error = extractErrorMessage(response.body());
                 LoggerUtils.logWarning(error.isBlank()
@@ -202,6 +225,7 @@ public class OpenAiResponsesClient {
                 LoggerUtils.logWarning("OpenAI response did not contain assistant text.");
                 return ResponseResult.failure(normalize ? FALLBACK_RESPONSE : "", response.statusCode(), usage);
             }
+            successfulRequestCount.incrementAndGet();
             return new ResponseResult(normalize ? normalizeResponse(text) : text.trim(), usage, response.statusCode(), true);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
@@ -214,6 +238,17 @@ public class OpenAiResponsesClient {
             LoggerUtils.logError("OpenAI response parsing failed: " + exception.getMessage());
             return ResponseResult.failure(normalize ? FALLBACK_RESPONSE : "", 0);
         }
+    }
+
+    private void recordUsage(Usage usage) {
+        if (usage == null) {
+            return;
+        }
+        inputTokens.addAndGet(usage.inputTokens());
+        cachedInputTokens.addAndGet(usage.cachedInputTokens());
+        cacheWriteTokens.addAndGet(usage.cacheWriteTokens());
+        outputTokens.addAndGet(usage.outputTokens());
+        totalTokens.addAndGet(usage.totalTokens());
     }
 
     private boolean isConfigured() {
@@ -392,6 +427,13 @@ public class OpenAiResponsesClient {
 
         public double cacheHitRatio() {
             return inputTokens <= 0L ? 0.0D : Math.clamp((double) cachedInputTokens / inputTokens, 0.0D, 1.0D);
+        }
+    }
+
+    /** Cumulative counters for one client lifecycle. Reloading the OpenAI client intentionally starts a new window. */
+    public record UsageSnapshot(long requests, long successfulRequests, Usage usage) {
+        public UsageSnapshot {
+            usage = usage == null ? Usage.empty() : usage;
         }
     }
 
