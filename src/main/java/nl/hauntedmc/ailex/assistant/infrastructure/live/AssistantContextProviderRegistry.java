@@ -35,7 +35,7 @@ public final class AssistantContextProviderRegistry {
         return providers.size();
     }
 
-    /** Collects compact provider-qualified metadata for the current request. */
+    /** Collects compact provider-qualified current-player metadata for the request. */
     public String collect(Player player, String playerMessage) {
         if (player == null || providers.isEmpty()) {
             return "";
@@ -59,7 +59,8 @@ public final class AssistantContextProviderRegistry {
                 if (fact == null || !fact.valid() || facts >= MAX_PROVIDER_FACTS) {
                     continue;
                 }
-                String part = "integration_" + entry.getKey().replace('.', '_') + '_' + fact.key() + '=' + fact.value();
+                String part = "player_integration_" + entry.getKey().replace('.', '_') + '_'
+                        + fact.key() + '=' + fact.value();
                 if (output.length() + part.length() + 3 > MAX_TOTAL_CHARACTERS) {
                     return output.toString();
                 }
