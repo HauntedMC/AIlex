@@ -60,27 +60,33 @@ public final class RequiredContextPlanner {
     }
 
     private boolean requesterSignal(String text) {
-        return containsAny(text, "health", "leven", "hp", "honger", "food", "gamemode", "game mode",
-                "level", "xp", "item", "hand", "holding", "effect", "armor", "pantser", "ping", "playtime");
+        return containsAny(text, "health", "gezondheid", "leven", "hp", "honger", "food", "gamemode", "game mode",
+                "level", "xp", "ervaring", "experience", "item", "hand", "holding", "vasthoud", "vast", "effect",
+                "armor", "armour", "pantser", "ping", "latency", "playtime", "speeltijd", "gespeeld");
     }
 
     private boolean worldSignal(String text) {
         return containsAny(text, "waar", "where", "hier", "here", "positie", "position", "coord", "locatie",
-                "location", "world", "wereld", "biome", "weer", "weather", "tijd", "time", "light", "licht");
+                "location", "world", "wereld", "biome", "bioom", "weer", "weather", "tijd", "time", "light",
+                "licht", "difficulty", "moeilijkheid", "environment", "omgeving", "dimension", "dimensie", "facing",
+                "richting");
     }
 
     private boolean serverSignal(String text) {
         // Generic words such as "spelers"/"players" are deliberately not enough: a nearby-player question
         // should not also capture global server population. "online" still covers player-count questions.
-        return containsAny(text, "online", "tps", "mspt", "server", "uptime", "versie", "version");
+        return containsAny(text, "online", "tps", "mspt", "performance", "lag", "server", "uptime", "versie",
+                "version");
     }
 
     private boolean nearbySignal(String text) {
-        return containsAny(text, "dichtbij", "nearby", "around", "om me heen", "naast me", "entities", "mobs");
+        return containsAny(text, "dichtbij", "nearby", "around", "near me", "om me heen", "naast me", "entities",
+                "entity", "mobs", "mob");
     }
 
     private boolean npcSignal(String text) {
-        return containsAny(text, "jij", "jou", "jouw", "you", "your", "npc", "bot", "waar sta je", "where are you");
+        return containsAny(text, "jij", "jou", "jouw", "you", "your", "npc", "bot", "waar sta je", "where are you",
+                "wat doe je", "what are you doing");
     }
 
     private boolean containsServerTopic(String text) {
