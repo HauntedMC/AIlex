@@ -22,7 +22,7 @@ import static org.mockito.Mockito.when;
 class AssistantExperienceMemoryServiceTest {
 
     @Test
-    void verifiedFailureShouldBecomeNpcScopedProceduralEpisode() {
+    void verifiedFailureShouldBecomeTypedNpcScopedProceduralEpisode() {
         AssistantMemoryService memory = mock(AssistantMemoryService.class);
         AssistantExperienceMemoryService experience = new AssistantExperienceMemoryService(memory);
 
@@ -35,7 +35,7 @@ class AssistantExperienceMemoryServiceTest {
         verify(memory).rememberTrusted(
                 eq(MemoryScope.NPC), eq("12"), eq(""), eq(MemoryKind.EPISODE),
                 eq("experience.grounding-server_fact"),
-                eq("lesson=Retrieve more evidence or abstain. | outcome=unverified"),
+                eq("type=failed_answer | lesson=Retrieve more evidence or abstain. | outcome=unverified"),
                 eq(0.98D), eq(0.92D), eq("runtime-verified-experience"), eq("unverified"),
                 anyLong(), any(Duration.class), tags.capture()
         );
@@ -43,6 +43,7 @@ class AssistantExperienceMemoryServiceTest {
         assertTrue(tags.getValue().contains("procedural"));
         assertTrue(tags.getValue().contains("verified"));
         assertTrue(tags.getValue().contains("failure"));
+        assertTrue(tags.getValue().contains("experience-failed-answer"));
         assertTrue(tags.getValue().contains("intent-server_fact"));
         assertTrue(tags.getValue().contains("knowledge.rules"));
     }
@@ -64,6 +65,27 @@ class AssistantExperienceMemoryServiceTest {
     }
 
     @Test
+    void strategyStatisticsUseHistoricalVersionsRatherThanOnlyCurrentEpisode() {
+        AssistantMemoryService memory = mock(AssistantMemoryService.class);
+        AssistantExperienceMemoryService experience = new AssistantExperienceMemoryService(memory);
+        UUID player = UUID.randomUUID();
+        String key = "experience.tool-route-server_fact";
+        when(memory.timeline(player, "12", key, 32)).thenReturn(List.of(
+                recordWithKey("one", key, Set.of("experience", "success")),
+                recordWithKey("two", key, Set.of("experience", "success")),
+                recordWithKey("three", key, Set.of("experience", "failure"))
+        ));
+
+        AssistantExperienceMemoryService.StrategyStatistics statistics = experience.statistics(
+                player, "12", "tool-route-server_fact"
+        );
+
+        assertEquals(2, statistics.successes());
+        assertEquals(1, statistics.failures());
+        assertEquals(2.0D / 3.0D, statistics.successRate(), 0.0001D);
+    }
+
+    @Test
     void incompleteExperienceIdentityShouldNotWrite() {
         AssistantMemoryService memory = mock(AssistantMemoryService.class);
         AssistantExperienceMemoryService experience = new AssistantExperienceMemoryService(memory);
@@ -73,8 +95,16 @@ class AssistantExperienceMemoryServiceTest {
     }
 
     private static MemoryRecord record(String id, MemoryScope scope, Set<String> tags) {
+        return recordWithKey(id, "experience.test", scope, tags);
+    }
+
+    private static MemoryRecord recordWithKey(String id, String key, Set<String> tags) {
+        return recordWithKey(id, key, MemoryScope.NPC, tags);
+    }
+
+    private static MemoryRecord recordWithKey(String id, String key, MemoryScope scope, Set<String> tags) {
         return new MemoryRecord(
-                id, scope, "12", "", MemoryKind.EPISODE, "experience.test", "lesson=test",
+                id, scope, "12", "", MemoryKind.EPISODE, key, "lesson=test",
                 0.9D, 0.8D, "runtime-verified-experience", "accepted",
                 1L, 1L, 1L, 0L, "", tags
         );
