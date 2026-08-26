@@ -78,6 +78,12 @@ public final class AssistantIntentClassifier {
         if (isKnowledgeDiscovery(normalized)) {
             return new Analysis(AssistantIntent.KNOWLEDGE_DISCOVERY, AssistantMode.GROUNDED, language);
         }
+        if (isDirectEventRecall(normalized) && !isCorrection(normalized)) {
+            return new Analysis(AssistantIntent.EVENT_RECALL, AssistantMode.GROUNDED, language);
+        }
+        if (isDirectMemoryRecall(normalized)) {
+            return new Analysis(AssistantIntent.MEMORY_RECALL, AssistantMode.GROUNDED, language);
+        }
         if (context.active() && containsAny(normalized, MEMORY_WORDS)) {
             return new Analysis(AssistantIntent.MEMORY_RECALL, AssistantMode.GROUNDED, language);
         }
@@ -118,6 +124,24 @@ public final class AssistantIntentClassifier {
                 "tell me something about haunted", "what do you know about haunted", "what do you know about the server",
                 "leuk feitje", "willekeurig feitje", "interessant feit", "vertel een feitje", "vertel iets over de server",
                 "vertel iets over haunted", "wat weet je over haunted", "wat weet je over de server", "server weetje"
+        );
+    }
+
+    private static boolean isDirectMemoryRecall(String message) {
+        return containsAnyPhrase(message,
+                "wat weet je van mij", "wat weet je over mij", "wat herinner je van mij", "wat herinner je over mij",
+                "wat heb je onthouden", "wat onthoud je van mij", "herinner je mij", "herinner je je mij",
+                "what do you remember about me", "what do you know about me", "what have you remembered about me",
+                "what have you saved about me", "do you remember me"
+        );
+    }
+
+    private static boolean isDirectEventRecall(String message) {
+        return containsAnyPhrase(message,
+                "wat gebeurde er", "wat is er gebeurd", "wat gebeurde vorige keer", "wat gebeurde er vorige keer",
+                "vorige keer gebeurde", "wat gebeurde eerder", "eerder vandaag gebeurde", "weet je nog wat er gebeurde",
+                "what happened", "what happened last time", "what happened earlier", "what happened before",
+                "last time what happened", "do you remember what happened"
         );
     }
 
