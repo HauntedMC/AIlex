@@ -14,6 +14,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
 class AssistantIntentClassifierTest {
 
     @Test
@@ -46,6 +47,18 @@ class AssistantIntentClassifierTest {
         assertEquals(AssistantIntent.LIVE_STATE, heldItem.intent());
         assertEquals(AssistantMode.GROUNDED, heldItem.mode());
         assertEquals(AssistantIntent.LIVE_STATE, ping.intent());
+    }
+
+    @Test
+    void shouldRouteCurrentHauntedMcFeatureStateToLiveProviders() {
+        assertEquals(AssistantIntent.LIVE_STATE,
+                AssistantIntentClassifier.analyze("Wat is mijn rank?").intent());
+        assertEquals(AssistantIntent.LIVE_STATE,
+                AssistantIntentClassifier.analyze("Hoeveel geld heb ik?").intent());
+        assertEquals(AssistantIntent.LIVE_STATE,
+                AssistantIntentClassifier.analyze("Ben ik combat tagged?").intent());
+        assertEquals(AssistantIntent.LIVE_STATE,
+                AssistantIntentClassifier.analyze("Staat mijn AutoPickup aan?").intent());
     }
 
     @Test
