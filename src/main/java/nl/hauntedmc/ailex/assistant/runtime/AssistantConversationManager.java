@@ -84,6 +84,10 @@ public class AssistantConversationManager {
                 .orElse(null);
     }
 
+    /**
+     * Decides whether an unmentioned message belongs to the active AIlex dialogue. A bare question mark is not enough:
+     * the turn must carry a conversational continuation, correction or explicit reference to prior assistant content.
+     */
     public boolean isLikelyFollowUp(String message, Snapshot snapshot) {
         if (snapshot == null || !snapshot.active() || message == null || message.isBlank()) {
             return false;
@@ -92,18 +96,20 @@ public class AssistantConversationManager {
         if (normalized.length() > 320) {
             return false;
         }
-        if (normalized.endsWith("?") || snapshot.pendingAnswer()) {
-            return startsLikeFollowUp(normalized) || normalized.length() <= 96;
+        if (startsLikeFollowUp(normalized) || correctionLikeFollowUp(normalized) || referencesPriorTurn(normalized)) {
+            return true;
         }
-        return startsLikeFollowUp(normalized) || correctionLikeFollowUp(normalized);
+        // While the model is still answering, allow terse acknowledgements/continuations but not an arbitrary new
+        // public question. This preserves fast conversational turns without capturing normal server chat.
+        return snapshot.pendingAnswer() && normalized.length() <= 32 && isTerseContinuation(normalized);
     }
 
     private boolean startsLikeFollowUp(String text) {
         return List.of(
                 "ja", "nee", "maar", "en ", "dus", "waarom", "hoezo", "wat dan", "welke", "waar dan",
                 "wacht", "bedoel", "huh", "uh", "ok", "oke", "oké", "yes", "no", "but", "and ",
-                "so ", "why", "how", "what", "which", "where", "wait", "i mean", "hmm", "eigenlijk",
-                "actually", "correctie", "correction"
+                "so ", "why", "how come", "what then", "which one", "where then", "wait", "i mean", "hmm",
+                "eigenlijk", "actually", "correctie", "correction"
         ).stream().anyMatch(text::startsWith);
     }
 
@@ -111,6 +117,20 @@ public class AssistantConversationManager {
         return text.contains("klopt niet") || text.contains("niet waar") || text.contains("je hebt het fout")
                 || text.contains("je zit fout") || text.contains("that's wrong") || text.contains("you are wrong")
                 || text.contains("you're wrong") || text.contains("not correct");
+    }
+
+    private boolean referencesPriorTurn(String text) {
+        return text.matches(".*\\b(dit|dat|die|deze|daar|daarmee|daarover|ervoor|vorige|eerder|antwoord|uitleg)\\b.*")
+                || text.matches(".*\\b(this|that|those|there|it|previous|earlier|answer|explanation|what you said)\\b.*");
+    }
+
+    private boolean isTerseContinuation(String text) {
+        String stripped = text.replaceAll("[?!.,]+$", "").trim();
+        return SetLike.TERSE.contains(stripped)
+                || stripped.startsWith("maar ")
+                || stripped.startsWith("en ")
+                || stripped.startsWith("but ")
+                || stripped.startsWith("and ");
     }
 
     private Snapshot snapshot(Session session) {
@@ -189,5 +209,15 @@ public class AssistantConversationManager {
         private AssistantIntent previousIntent;
         private String previousUserMessage = "";
         private String previousAssistantMessage = "";
+    }
+
+    private static final class SetLike {
+        private static final java.util.Set<String> TERSE = java.util.Set.of(
+                "ja", "nee", "ok", "oke", "oké", "waarom", "hoezo", "wacht", "huh", "yes", "no", "okay",
+                "why", "wait", "hmm"
+        );
+
+        private SetLike() {
+        }
     }
 }
