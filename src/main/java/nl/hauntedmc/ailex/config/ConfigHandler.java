@@ -95,7 +95,6 @@ public class ConfigHandler {
             // Memory V2, so an upgrade explicitly turns raw transcript persistence off. Operators may opt in again.
             current.set("openai.chat_context.persist_to_disk", false);
             current.set("config_version", 2);
-            LoggerUtils.logInfo("Migrated AIlex config to v2: disabled legacy raw chat transcript persistence.");
         }
     }
 
