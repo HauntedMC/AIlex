@@ -9,13 +9,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Regression coverage for the production incident where repeated addressed Haunty turns disappeared while busy. */
 class HauntyIncidentRegressionTest {
 
     @Test
-    void pendingHauntyConversationShouldRecogniseTheQuestionMarkAsAContinuation() {
+    void pendingHauntyConversationShouldRequireAContextualUnmentionedContinuation() {
         AtomicLong clock = new AtomicLong(1_000L);
         AssistantConversationManager conversations = new AssistantConversationManager(clock::get);
         UUID player = UUID.randomUUID();
@@ -24,7 +25,8 @@ class HauntyIncidentRegressionTest {
         AssistantConversationManager.Snapshot unresolved = conversations.snapshot(player, 7, 60_000L);
 
         assertTrue(unresolved.pendingAnswer());
-        assertTrue(conversations.isLikelyFollowUp("haunty?", unresolved));
+        assertTrue(conversations.isLikelyFollowUp("waarom?", unresolved));
+        assertFalse(conversations.isLikelyFollowUp("haunty?", unresolved));
         AssistantConversationManager.ActiveTarget target = conversations.activeTarget(player, 60_000L);
         assertEquals(7, target.npcId());
         assertTrue(target.snapshot().pendingAnswer());
