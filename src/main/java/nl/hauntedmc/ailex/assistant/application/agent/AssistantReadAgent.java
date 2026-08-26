@@ -3,9 +3,9 @@ package nl.hauntedmc.ailex.assistant.application.agent;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import nl.hauntedmc.ailex.assistant.application.AssistantService;
+import nl.hauntedmc.ailex.assistant.application.prompt.AssistantPromptComposer;
 import nl.hauntedmc.ailex.assistant.domain.AssistantIntent;
 import nl.hauntedmc.ailex.assistant.domain.AssistantMode;
-import nl.hauntedmc.ailex.assistant.application.prompt.AssistantPromptComposer;
 import nl.hauntedmc.ailex.assistant.infrastructure.knowledge.LocalKnowledgeIndex;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantExperienceMemoryService;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantMemoryService;
@@ -187,15 +187,12 @@ public final class AssistantReadAgent {
         boolean memoryPresent = request.memory() != null && !request.memory().isBlank();
         Set<String> liveIds = request.snapshot().filtered(request.contextPlan().liveSources()).sourceIds();
         return "request=" + clean(request.message())
-                + "
-route=" + request.analysis().intent().name().toLowerCase(Locale.ROOT)
+                + "\nroute=" + request.analysis().intent().name().toLowerCase(Locale.ROOT)
                 + " mode=" + request.analysis().mode().name().toLowerCase(Locale.ROOT)
-                + "
-reviewed_evidence=" + evidence
+                + "\nreviewed_evidence=" + evidence
                 + " memory_present=" + memoryPresent
                 + " live_evidence=" + (liveIds.isEmpty() ? "none" : String.join(",", liveIds))
-                + "
-" + promptComposer.plannerContract();
+                + "\n" + promptComposer.plannerContract();
     }
 
     private Duration remainingForRound(Duration totalRemaining, int callsAlreadyMade) {
