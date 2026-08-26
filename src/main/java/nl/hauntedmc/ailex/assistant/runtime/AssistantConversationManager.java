@@ -11,6 +11,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongSupplier;
 
 /**
@@ -21,14 +22,17 @@ public class AssistantConversationManager {
 
     private static final int MAX_TURNS = 24;
     private static final int MAX_PROMPT_CHARACTERS = 6_000;
+    private static final long CLEANUP_INTERVAL_MILLIS = 60_000L;
     private final Map<SessionKey, Session> sessions = new ConcurrentHashMap<>();
     private final LongSupplier clock;
+    private final AtomicLong lastCleanupMillis = new AtomicLong(Long.MIN_VALUE);
 
     public AssistantConversationManager(LongSupplier clock) {
         this.clock = clock;
     }
 
     public Snapshot snapshot(UUID playerId, int npcId, long timeoutMillis) {
+        cleanupExpiredSessions(timeoutMillis);
         SessionKey key = new SessionKey(playerId, npcId);
         Session session = sessions.get(key);
         if (session == null) {
@@ -67,6 +71,7 @@ public class AssistantConversationManager {
     }
 
     public ActiveTarget activeTarget(UUID playerId, long timeoutMillis) {
+        cleanupExpiredSessions(timeoutMillis);
         long now = clock.getAsLong();
         return sessions.entrySet().stream()
                 .filter(entry -> entry.getKey().playerId().equals(playerId))
@@ -74,6 +79,7 @@ public class AssistantConversationManager {
                     Session session = entry.getValue();
                     synchronized (session) {
                         if (now - session.lastActivityMillis > timeoutMillis) {
+                            sessions.remove(entry.getKey(), session);
                             return null;
                         }
                         return new ActiveTarget(entry.getKey().npcId(), snapshot(session), session.lastActivityMillis);
@@ -120,8 +126,16 @@ public class AssistantConversationManager {
     }
 
     private boolean referencesPriorTurn(String text) {
-        return text.matches(".*\\b(dit|dat|die|deze|daar|daarmee|daarover|ervoor|vorige|eerder|antwoord|uitleg)\\b.*")
-                || text.matches(".*\\b(this|that|those|there|it|previous|earlier|answer|explanation|what you said)\\b.*");
+        if (text.matches("^(dit|dat|die|deze|daar|daarmee|daarover|ervoor|vorige|eerder)\\b.*")
+                || text.matches("^(this|that|those|there|it|previous|earlier)\\b.*")) {
+            return true;
+        }
+        return containsAny(text,
+                "wat je zei", "wat jij zei", "je antwoord", "jouw antwoord", "je uitleg", "jouw uitleg",
+                "leg dat uit", "leg dit uit", "dat verder uitleggen", "dit verder uitleggen", "die vorige",
+                "what you said", "your answer", "your explanation", "explain that", "explain this",
+                "that explanation", "this explanation", "the previous answer"
+        );
     }
 
     private boolean isTerseContinuation(String text) {
@@ -131,6 +145,34 @@ public class AssistantConversationManager {
                 || stripped.startsWith("en ")
                 || stripped.startsWith("but ")
                 || stripped.startsWith("and ");
+    }
+
+    private void cleanupExpiredSessions(long timeoutMillis) {
+        long now = clock.getAsLong();
+        long previous = lastCleanupMillis.get();
+        if (previous != Long.MIN_VALUE && now - previous < CLEANUP_INTERVAL_MILLIS) {
+            return;
+        }
+        if (!lastCleanupMillis.compareAndSet(previous, now)) {
+            return;
+        }
+        long maximumAge = Math.max(1L, timeoutMillis);
+        sessions.forEach((key, session) -> {
+            synchronized (session) {
+                if (now - session.lastActivityMillis > maximumAge) {
+                    sessions.remove(key, session);
+                }
+            }
+        });
+    }
+
+    private boolean containsAny(String text, String... phrases) {
+        for (String phrase : phrases) {
+            if (text.contains(phrase)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Snapshot snapshot(Session session) {
