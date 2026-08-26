@@ -1,24 +1,13 @@
 # AIlex Docs
 
-This folder is the practical guide for running, upgrading, maintaining and contributing to AIlex.
+This folder contains the practical guides for running, configuring, maintaining and contributing to AIlex.
 
-## Start here
+## Server operators
 
-For server operators:
+- [Configuration](CONFIGURATION.md) — assistant models, context budgets, live-data capabilities, knowledge, memory, proactive chat and diagnostics.
+- [Architecture](ARCHITECTURE.md) — request reliability, dialogue state, context planning, retrieval, memory, live integrations and inference flow.
 
-- [AIlex 1.5 Migration](MIGRATION-1.5.md) — required reading when upgrading from 1.4.x.
-- [Configuration](CONFIGURATION.md) — production settings, Memory V2, model/token budgets and diagnostics.
-- [Architecture](ARCHITECTURE.md) — request reliability, conversation state, context planning, retrieval, memory and inference flow.
-
-For contributors:
-
-- [Development](DEVELOPMENT.md) — local setup and day-to-day workflow.
-- [Testing](TESTING.md) — test strategy and local validation commands.
-- [Contributing Guide](../CONTRIBUTING.md) — pull request expectations.
-
-## AIlex 1.5 operational checks
-
-After upgrading, verify:
+Useful production checks:
 
 ```text
 /ailex ai status
@@ -27,13 +16,17 @@ After upgrading, verify:
 /ailex trace recent
 ```
 
-Then test one direct NPC question, a short follow-up without repeating the NPC name, one current-state question and one server-fact question.
+A basic operational test should cover a direct NPC question, a multi-turn follow-up, a live-state question such as the current biome or held item, a server-knowledge question, an open-ended fact request, a remembered preference/correction, and a proactive public question while ensuring AIlex stays out of a player-to-player conversation.
+
+## Contributors
+
+- [Development](DEVELOPMENT.md) — local setup and day-to-day workflow.
+- [Testing](TESTING.md) — test strategy and local validation commands.
+- [Contributing Guide](../CONTRIBUTING.md) — pull request expectations.
 
 ## Release flow
 
-Releases are tag-driven:
-
 1. Ensure lint and tests are green on the target branch.
-2. Confirm migration/config documentation matches the shipped defaults.
-3. Bump/tag the release using the project release workflow.
-4. Push branch + tag and monitor the release workflow.
+2. Confirm configuration and architecture documentation match the shipped behavior.
+3. Create the release using the project release workflow.
+4. Monitor the release workflow and verify the produced artifact.
