@@ -77,8 +77,10 @@ public final class RequiredContextPlanner {
     }
 
     private boolean inventorySignal(String text) {
-        return containsAny(text, "inventory", "inventaris", "items", "item", "equipment", "uitrusting", "armor",
-                "armour", "pantser", "offhand", "hand", "holding", "vasthoud", "hotbar", "slot");
+        return containsAny(text,
+                "inventory", "inventaris", "equipment", "uitrusting", "armor", "armour", "pantser", "hotbar", "slot",
+                "storage", "opslag", "backpack", "rugzak"
+        );
     }
 
     private boolean worldSignal(String text) {
