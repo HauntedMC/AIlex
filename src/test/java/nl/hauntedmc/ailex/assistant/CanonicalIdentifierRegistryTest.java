@@ -23,7 +23,7 @@ class CanonicalIdentifierRegistryTest {
     Path tempDir;
 
     @Test
-    void exactUnknownDiscordChannelProducesNegativeEvidenceWhenKindIsComplete() throws Exception {
+    void exactUnknownDiscordChannelProducesAbsenceAndCanonicalCorrectionEvidence() throws Exception {
         CanonicalIdentifierRegistry registry = registry("""
                 @complete\tdiscord-channel
                 discord-channel\t#announcements\tannouncements,aankondigingen\tOfficial announcements.
@@ -31,9 +31,11 @@ class CanonicalIdentifierRegistryTest {
 
         List<LocalKnowledgeIndex.KnowledgeChunk> evidence = registry.evidenceFor("Bestaat #aankondigingen?");
 
-        assertEquals(1, evidence.size());
-        assertTrue(evidence.getFirst().id().startsWith("entity.missing.discord-channel"));
-        assertTrue(evidence.getFirst().text().contains("`#aankondigingen` is not registered"));
+        assertEquals(2, evidence.size());
+        assertEquals("entity.discord-channel.announcements", evidence.get(0).id());
+        assertEquals("entity.missing.discord-channel.aankondigingen", evidence.get(1).id());
+        assertTrue(evidence.get(0).text().contains("`#announcements`"));
+        assertTrue(evidence.get(1).text().contains("`#aankondigingen` is not registered"));
     }
 
     @Test
@@ -46,7 +48,21 @@ class CanonicalIdentifierRegistryTest {
         List<LocalKnowledgeIndex.KnowledgeChunk> evidence = registry.evidenceFor("Wat is het aankondigingen kanaal?");
 
         assertEquals(1, evidence.size());
+        assertEquals("entity.discord-channel.announcements", evidence.getFirst().id());
         assertTrue(evidence.getFirst().text().contains("`#announcements`"));
+    }
+
+    @Test
+    void multiWordCommandResolvesAsOneCanonicalIdentifier() throws Exception {
+        CanonicalIdentifierRegistry registry = registry("""
+                command\t/lottery buy\tlottery ticket,lot kopen\tBuy lottery tickets.
+                """);
+
+        List<LocalKnowledgeIndex.KnowledgeChunk> evidence = registry.evidenceFor("Hoe werkt /lottery buy?");
+
+        assertEquals(1, evidence.size());
+        assertEquals("entity.command.lottery-buy", evidence.getFirst().id());
+        assertTrue(evidence.getFirst().text().contains("`/lottery buy`"));
     }
 
     @Test
