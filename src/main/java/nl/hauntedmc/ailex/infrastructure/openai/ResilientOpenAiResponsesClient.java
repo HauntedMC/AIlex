@@ -236,7 +236,8 @@ public final class ResilientOpenAiResponsesClient extends OpenAiResponsesClient 
         RATE_LIMITED(false, true, true),
         UPSTREAM(true, true, true),
         INVALID_RESPONSE(true, false, true),
-        TIMEOUT(false, true, true),
+        // Request deadlines are local/request-specific and must not make unrelated players think the provider is down.
+        TIMEOUT(false, false, true),
         TRANSPORT(false, true, false),
         AUTHENTICATION(false, false, true),
         REQUEST_REJECTED(false, false, true),
