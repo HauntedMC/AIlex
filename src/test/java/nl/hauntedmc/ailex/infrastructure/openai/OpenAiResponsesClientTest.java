@@ -209,7 +209,7 @@ class OpenAiResponsesClientTest {
     }
 
     @Test
-    void shouldNormalizeAssistantOutputToOneChatLine() throws Exception {
+    void shouldPreserveBoundedMultilineAssistantOutput() throws Exception {
         HttpClient httpClient = mock(HttpClient.class);
         HttpResponse<String> response = mockStringResponse(200, """
                 {
@@ -228,7 +228,7 @@ class OpenAiResponsesClientTest {
 
         try (MockedStatic<LoggerUtils> mockedLogger = org.mockito.Mockito.mockStatic(LoggerUtils.class)) {
             ChatGPTClient client = new ChatGPTClient("key", "gpt-4.1-mini", httpClient);
-            assertEquals("Hoi daar", client.getChatResponse("hello"));
+            assertEquals("Hoi\ndaar", client.getChatResponse("hello"));
         }
     }
 
