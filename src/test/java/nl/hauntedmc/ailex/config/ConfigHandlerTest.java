@@ -128,4 +128,34 @@ class ConfigHandlerTest {
         assertEquals("<grey>[Speler]", configuration.getString("npc.defaults.entity.prefix"));
         assertFalse(configuration.contains("obsolete.value"));
     }
+
+    @Test
+    void shouldMigrateOldAssistantDefaultsButPreserveOperatorOverrides() {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        YamlConfiguration configuration = new YamlConfiguration();
+        configuration.set("config_revision", 1);
+        configuration.set("openai.max_output_tokens", 200);
+        configuration.set("openai.assistant.context.max_input_tokens_fast", 3_000);
+        configuration.set("openai.assistant.context.max_input_tokens_grounded", 7_777);
+
+        String defaultsYaml = "config_revision: 2\n"
+                + "openai:\n"
+                + "  max_output_tokens: 240\n"
+                + "  assistant:\n"
+                + "    context:\n"
+                + "      max_input_tokens_fast: 4000\n"
+                + "      max_input_tokens_grounded: 12000\n";
+
+        when(plugin.getConfig()).thenReturn(configuration);
+        when(plugin.getResource("config.yml")).thenAnswer(
+                invocation -> new ByteArrayInputStream(defaultsYaml.getBytes(StandardCharsets.UTF_8))
+        );
+
+        ConfigHandler.init(plugin);
+
+        assertEquals(2, configuration.getInt("config_revision"));
+        assertEquals(240, configuration.getInt("openai.max_output_tokens"));
+        assertEquals(4_000, configuration.getInt("openai.assistant.context.max_input_tokens_fast"));
+        assertEquals(7_777, configuration.getInt("openai.assistant.context.max_input_tokens_grounded"));
+    }
 }
