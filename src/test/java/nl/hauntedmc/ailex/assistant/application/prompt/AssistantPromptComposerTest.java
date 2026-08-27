@@ -17,7 +17,8 @@ class AssistantPromptComposerTest {
         assertTrue(prompt.contains("INTERACTION CONTRACT"));
         String normalizedPrompt = prompt.replaceAll("\\s+", " ");
         assertTrue(normalizedPrompt.contains("procedural experience"));
-        assertTrue(normalizedPrompt.contains("Physical actions are proposals only"));
+        assertTrue(normalizedPrompt.contains("Chat generation has no authority to execute physical NPC actions"));
+        assertTrue(normalizedPrompt.contains("embodiment is a separate deterministic subsystem"));
     }
 
     @Test
