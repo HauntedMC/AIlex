@@ -41,6 +41,14 @@ public final class AssistantChatConfiguration {
         return TimeUnit.SECONDS.toMillis(integer(CHAT + ".session_timeout_seconds", 300, 30, 1_800));
     }
 
+    /**
+     * Whether an active dialogue may consume a later player chat line that does not mention the assistant again.
+     * Disabled by default so ordinary player conversation can never be silently routed into an AI request.
+     */
+    public boolean allowImplicitFollowUps() {
+        return bool(CHAT + ".allow_implicit_followups", false);
+    }
+
     public String responseVisibility() {
         return visibility(string(CHAT + ".response_visibility", "requester"));
     }
