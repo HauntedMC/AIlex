@@ -222,7 +222,9 @@ public final class AssistantChatController implements AutoCloseable {
         }
         if (assistantService == null) {
             requestTracer.transition(requestId, AssistantRequestTracer.State.UPSTREAM_FAILED, "assistant-service-unavailable");
-            sendFeedback(source, "failure", "Mijn AI-service is nu niet beschikbaar. Probeer het zo nog eens.");
+            sendAssistantFeedback(
+                    source, target, "failure", "Mijn AI-service is nu niet beschikbaar. Probeer het zo nog eens."
+            );
             return;
         }
         PlayerResponseRateLimiter.Permit permit = responseRateLimiter.acquire(
@@ -265,9 +267,17 @@ public final class AssistantChatController implements AutoCloseable {
             handleSubmission(source, requestId, submission);
         } catch (RuntimeException exception) {
             refundRateLimit(requestId);
-            requestTracer.transition(requestId, AssistantRequestTracer.State.UPSTREAM_FAILED, "prepare-or-dispatch");
+            String detail = providerFailureDetail(exception);
+            requestTracer.transition(requestId, AssistantRequestTracer.State.UPSTREAM_FAILED, detail);
             LoggerUtils.logError("Could not prepare or dispatch assistant chat request: " + exception.getMessage());
-            sendFeedback(source, "failure", "Mijn AI-service gaf geen bruikbaar antwoord. Probeer het nog eens.");
+            sendAssistantFeedback(
+                    source,
+                    target,
+                    isTimeoutDetail(detail) ? "timeout" : "failure",
+                    isTimeoutDetail(detail)
+                            ? "Ik kreeg niet op tijd antwoord van mijn AI-service. Probeer het nog eens."
+                            : "Mijn AI-service gaf geen bruikbaar antwoord. Probeer het nog eens."
+            );
         }
     }
 
@@ -322,7 +332,7 @@ public final class AssistantChatController implements AutoCloseable {
         try {
             OpenAiResponsesClient client = plugin.getOpenAiResponsesClient();
             if (client == null) {
-                failUpstream(requestId, source, "client-unavailable");
+                failUpstream(requestId, source, target, "client-unavailable");
                 return;
             }
 
@@ -336,7 +346,7 @@ public final class AssistantChatController implements AutoCloseable {
                 assistantService.recordDirectResponse(prepared, response);
             }
             if (response.isBlank()) {
-                failUpstream(requestId, source, "blank-response");
+                failUpstream(requestId, source, target, "blank-response");
                 return;
             }
 
@@ -348,8 +358,7 @@ public final class AssistantChatController implements AutoCloseable {
             );
             proactiveChatService.recordBotResponse();
 
-            Component result = FormatterUtils.serializer.deserialize(target.displayName() + ": ")
-                    .append(Component.text(response, NamedTextColor.WHITE));
+            Component result = assistantComponent(target, response);
             AssistantReply completedReply = reply;
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (completedReply != null && target.npc() != null && !completedReply.actionProposals().isEmpty()) {
@@ -363,8 +372,9 @@ public final class AssistantChatController implements AutoCloseable {
                 deliverTrackedResponse(requestId, source, result);
             });
         } catch (Exception exception) {
+            String detail = providerFailureDetail(exception);
             LoggerUtils.logError("Could not complete assistant chat request: " + exception.getMessage());
-            failUpstream(requestId, source, providerFailureDetail(exception));
+            failUpstream(requestId, source, target, detail);
         }
     }
 
@@ -458,8 +468,7 @@ public final class AssistantChatController implements AutoCloseable {
                 return;
             }
             proactiveChatService.recordBotResponse();
-            Component result = FormatterUtils.serializer.deserialize(target.displayName() + ": ")
-                    .append(Component.text(response, NamedTextColor.WHITE));
+            Component result = assistantComponent(target, response);
             Bukkit.getScheduler().runTask(plugin, () -> {
                 deliverResponse(
                         contextPlayer, result, trigger.privateOnly() ? "requester" : proactiveChatService.responseVisibility()
@@ -564,16 +573,16 @@ public final class AssistantChatController implements AutoCloseable {
         }
     }
 
-    private void failUpstream(UUID requestId, Player source, String detail) {
+    private void failUpstream(UUID requestId, Player source, AssistantChatTarget target, String detail) {
         refundRateLimit(requestId);
         requestTracer.transition(requestId, AssistantRequestTracer.State.UPSTREAM_FAILED, detail);
+        String feedbackKey = isTimeoutDetail(detail) ? "timeout" : "failure";
+        String fallback = isTimeoutDetail(detail)
+                ? "Ik kreeg niet op tijd antwoord van mijn AI-service. Probeer het nog eens."
+                : "Mijn AI-service gaf geen bruikbaar antwoord. Probeer het nog eens.";
         Bukkit.getScheduler().runTask(
                 plugin,
-                () -> sendFeedback(
-                        source,
-                        "failure",
-                        "Mijn AI-service gaf geen bruikbaar antwoord. Probeer het nog eens."
-                )
+                () -> sendAssistantFeedback(source, target, feedbackKey, fallback)
         );
     }
 
@@ -584,9 +593,49 @@ public final class AssistantChatController implements AutoCloseable {
                 String detail = "openai-" + unavailable.failureKind().name().toLowerCase(Locale.ROOT);
                 return unavailable.httpStatus() > 0 ? detail + '-' + unavailable.httpStatus() : detail;
             }
+            String message = current.getMessage();
+            if (message != null) {
+                String normalized = message.toLowerCase(Locale.ROOT);
+                if (normalized.contains("timed out") || normalized.contains("timeout")) {
+                    return "openai-timeout";
+                }
+                if (normalized.contains("transport")) {
+                    return "openai-transport";
+                }
+                if (normalized.contains("rate limit") || normalized.contains("429")) {
+                    return "openai-rate_limited";
+                }
+                if (normalized.contains("401") || normalized.contains("403") || normalized.contains("auth")) {
+                    return "openai-authentication";
+                }
+            }
             current = current.getCause();
         }
         return "exception";
+    }
+
+    private boolean isTimeoutDetail(String detail) {
+        return detail != null && detail.toLowerCase(Locale.ROOT).contains("timeout");
+    }
+
+    private Component assistantComponent(AssistantChatTarget target, String response) {
+        return FormatterUtils.serializer.deserialize(target.displayName() + ": ")
+                .append(Component.text(flattenForChat(response), NamedTextColor.WHITE));
+    }
+
+    private void sendAssistantFeedback(
+            Player source,
+            AssistantChatTarget target,
+            String key,
+            String fallback
+    ) {
+        if (source == null || target == null || !source.isOnline()) {
+            return;
+        }
+        String message = flattenForChat(configuration.feedback(key, fallback));
+        if (!message.isBlank()) {
+            source.sendMessage(assistantComponent(target, message));
+        }
     }
 
     private void refundRateLimit(UUID requestId) {
