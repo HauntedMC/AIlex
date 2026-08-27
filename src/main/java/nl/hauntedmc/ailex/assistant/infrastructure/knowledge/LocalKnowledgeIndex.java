@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
@@ -51,6 +50,7 @@ public final class LocalKnowledgeIndex {
     private final JavaPlugin plugin;
     private final KnowledgeDocumentParser documentParser = new KnowledgeDocumentParser();
     private final boolean managedEmbeddingProvider;
+    private final CanonicalIdentifierRegistry canonicalIdentifiers;
     private volatile SemanticEmbeddingProvider embeddingProvider;
     private final AtomicBoolean semanticWarmupRunning = new AtomicBoolean();
     private volatile List<KnowledgeChunk> chunks = List.of();
@@ -73,12 +73,15 @@ public final class LocalKnowledgeIndex {
     ) {
         this.plugin = plugin;
         this.managedEmbeddingProvider = managedEmbeddingProvider;
+        this.canonicalIdentifiers = new CanonicalIdentifierRegistry(plugin);
         this.embeddingProvider = managedEmbeddingProvider ? new OpenAiEmbeddingProvider(plugin) : embeddingProvider;
         reload();
     }
 
-    /** Rebuilds the immutable in-memory index after configuration or knowledge changes. */
+    /** Rebuilds generated canonical knowledge and the immutable in-memory index after configuration/knowledge changes. */
     public void reload() {
+        canonicalIdentifiers.reload();
+        canonicalIdentifiers.writeKnowledgeSnapshot();
         List<KnowledgeChunk> loaded = new ArrayList<>();
         FileConfiguration config = plugin.getConfig();
         if (config != null && config.getBoolean("openai.knowledge.enabled", true)) {
@@ -110,15 +113,20 @@ public final class LocalKnowledgeIndex {
     /** Query-focused retrieval for concrete server/gameplay questions. */
     public List<KnowledgeChunk> search(String query, AssistantSettings settings) {
         String normalizedQuery = query == null ? "" : query.replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
-        String cacheKey = "search-v2|" + normalizedQuery + '|' + settings.maxChunks() + '|'
+        String cacheKey = "search-v3|" + normalizedQuery + '|' + settings.maxChunks() + '|'
                 + settings.maxEvidenceCharacters() + '|' + settings.excludeExpired() + '|' + settings.hybridRetrieval();
         CachedSearch cached = searchCache.get(cacheKey);
         if (cached != null && cached.isFresh(settings.queryCacheSeconds())) {
             return cached.chunks();
         }
+        List<KnowledgeChunk> canonicalEvidence = canonicalIdentifiers.evidenceFor(normalizedQuery);
         List<KnowledgeChunk> localChunks = chunks;
         if (localChunks.isEmpty()) {
-            return List.of();
+            List<KnowledgeChunk> direct = limitEvidence(
+                    canonicalEvidence, settings.maxChunks(), settings.maxEvidenceCharacters()
+            );
+            searchCache.put(cacheKey, new CachedSearch(direct, System.currentTimeMillis()));
+            return direct;
         }
 
         QueryFeatures features = queryFeatures(normalizedQuery);
@@ -160,8 +168,11 @@ public final class LocalKnowledgeIndex {
         List<KnowledgeChunk> selected = selectDiverse(
                 fused, selection.maxChunks(), selection.maxCharacters()
         );
-        searchCache.put(cacheKey, new CachedSearch(List.copyOf(selected), System.currentTimeMillis()));
-        return selected;
+        List<KnowledgeChunk> merged = mergeCanonicalEvidence(
+                canonicalEvidence, selected, selection.maxChunks(), selection.maxCharacters()
+        );
+        searchCache.put(cacheKey, new CachedSearch(merged, System.currentTimeMillis()));
+        return merged;
     }
 
     /** Source-compatible discovery entry point used by the assistant orchestration. */
@@ -224,8 +235,17 @@ public final class LocalKnowledgeIndex {
         if (provider == null || query.isBlank() || !provider.available()) {
             return Map.of();
         }
-        ensureSemanticVectors(candidates, provider);
-        warmSemanticIndexAsync();
+        if (managedEmbeddingProvider) {
+            // Production corpus vectors warm in the background. Never make the first player synchronously embed the
+            // entire corpus inside the assistant deadline; lexical retrieval remains available while warmup is cold.
+            warmSemanticIndexAsync();
+            if (semanticVectors.isEmpty()) {
+                return Map.of();
+            }
+        } else {
+            // Deterministic/injected providers used by tests can populate synchronously without external latency.
+            ensureSemanticVectors(candidates, provider);
+        }
         List<double[]> queryVector = provider.embed(List.of(query));
         if (queryVector.size() != 1 || queryVector.getFirst().length == 0) {
             return Map.of();
@@ -245,7 +265,6 @@ public final class LocalKnowledgeIndex {
         return Map.copyOf(scores);
     }
 
-    /** Ensures a cold query has document vectors instead of silently degrading a semantic-only request. */
     private void ensureSemanticVectors(List<KnowledgeChunk> candidates, SemanticEmbeddingProvider provider) {
         List<KnowledgeChunk> missing = candidates.stream()
                 .filter(chunk -> !semanticVectors.containsKey(chunk.id()))
@@ -272,7 +291,7 @@ public final class LocalKnowledgeIndex {
             return;
         }
         List<KnowledgeChunk> snapshot = chunks;
-        CompletableFuture.runAsync(() -> {
+        Thread.ofVirtual().name("AIlex-Knowledge-Embedding-Warmup").start(() -> {
             try {
                 for (int offset = 0; offset < snapshot.size(); offset += 48) {
                     List<KnowledgeChunk> batch = snapshot.subList(offset, Math.min(snapshot.size(), offset + 48));
@@ -287,7 +306,10 @@ public final class LocalKnowledgeIndex {
                         return;
                     }
                     for (int index = 0; index < missing.size(); index++) {
-                        semanticVectors.put(missing.get(index).id(), vectors.get(index));
+                        double[] vector = vectors.get(index);
+                        if (vector != null && vector.length > 0) {
+                            semanticVectors.put(missing.get(index).id(), vector);
+                        }
                     }
                 }
             } catch (RuntimeException exception) {
@@ -349,6 +371,50 @@ public final class LocalKnowledgeIndex {
             }
         }
         return List.copyOf(selected);
+    }
+
+    private List<KnowledgeChunk> mergeCanonicalEvidence(
+            List<KnowledgeChunk> canonical,
+            List<KnowledgeChunk> retrieved,
+            int maxChunks,
+            int maxCharacters
+    ) {
+        List<KnowledgeChunk> combined = new ArrayList<>();
+        Set<String> ids = new HashSet<>();
+        if (canonical != null) {
+            for (KnowledgeChunk chunk : canonical) {
+                if (chunk != null && ids.add(chunk.id())) {
+                    combined.add(chunk);
+                }
+            }
+        }
+        if (retrieved != null) {
+            for (KnowledgeChunk chunk : retrieved) {
+                if (chunk != null && ids.add(chunk.id())) {
+                    combined.add(chunk);
+                }
+            }
+        }
+        return limitEvidence(combined, maxChunks, maxCharacters);
+    }
+
+    private List<KnowledgeChunk> limitEvidence(List<KnowledgeChunk> candidates, int maxChunks, int maxCharacters) {
+        List<KnowledgeChunk> result = new ArrayList<>();
+        int characters = 0;
+        for (KnowledgeChunk chunk : candidates) {
+            if (chunk == null) {
+                continue;
+            }
+            if (!result.isEmpty() && characters + chunk.text().length() > maxCharacters) {
+                continue;
+            }
+            result.add(chunk);
+            characters += chunk.text().length();
+            if (result.size() >= maxChunks) {
+                break;
+            }
+        }
+        return List.copyOf(result);
     }
 
     private double score(KnowledgeChunk chunk, QueryFeatures query) {
@@ -521,6 +587,7 @@ public final class LocalKnowledgeIndex {
         try (Stream<Path> stream = Files.list(directory.toPath())) {
             files = stream.filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".md"))
+                    .filter(path -> !path.getFileName().toString().equalsIgnoreCase("README.md"))
                     .sorted()
                     .limit(maxFiles)
                     .toList();
