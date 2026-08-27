@@ -45,7 +45,12 @@ public final class CanonicalIdentifierRegistry {
 
     /** Reloads the reviewed registry from the managed knowledge directory. */
     public void reload() {
-        File file = new File(plugin.getDataFolder(), "knowledge/entities.tsv");
+        File dataFolder = dataFolder();
+        if (dataFolder == null) {
+            clear();
+            return;
+        }
+        File file = new File(dataFolder, "knowledge/entities.tsv");
         if (!file.isFile()) {
             clear();
             return;
@@ -104,7 +109,11 @@ public final class CanonicalIdentifierRegistry {
      * truth; operators should never edit the generated file directly.
      */
     public void writeKnowledgeSnapshot() {
-        File directory = new File(plugin.getDataFolder(), "knowledge");
+        File dataFolder = dataFolder();
+        if (dataFolder == null) {
+            return;
+        }
+        File directory = new File(dataFolder, "knowledge");
         File generated = new File(directory, GENERATED_FILE);
         if (orderedEntries.isEmpty()) {
             if (generated.isFile()) {
@@ -125,8 +134,9 @@ public final class CanonicalIdentifierRegistry {
     }
 
     /**
-     * Returns authoritative synthetic evidence for exact identifiers and unambiguous natural-language aliases.
-     * Explicit #channel and /command tokens never get translated through aliases.
+     * Returns authoritative synthetic evidence for exact identifiers and natural-language aliases. An explicitly typed
+     * unknown identifier is never made valid by an alias; when its unprefixed text clearly names a canonical identifier,
+     * both the authoritative absence and the separately valid canonical suggestion are returned.
      */
     public List<LocalKnowledgeIndex.KnowledgeChunk> evidenceFor(String message) {
         String text = message == null ? "" : message.replaceAll("\\s+", " ").trim();
@@ -137,6 +147,17 @@ public final class CanonicalIdentifierRegistry {
         LinkedHashSet<Entry> matches = new LinkedHashSet<>();
         List<String> negatives = new ArrayList<>();
 
+        // Resolve full known identifiers first. This is required for multi-word commands such as `/lottery buy`.
+        for (Entry entry : orderedEntries) {
+            if (matches.size() >= MAX_MATCHES) {
+                break;
+            }
+            if ((entry.canonical().startsWith("#") || entry.canonical().startsWith("/"))
+                    && containsPhrase(lower, entry.canonical())) {
+                matches.add(entry);
+            }
+        }
+
         Matcher matcher = EXPLICIT_IDENTIFIER.matcher(lower);
         boolean explicit = false;
         while (matcher.find() && matches.size() + negatives.size() < MAX_MATCHES) {
@@ -146,23 +167,31 @@ public final class CanonicalIdentifierRegistry {
             Entry entry = exact.get(exactKey(kind, token));
             if (entry != null) {
                 matches.add(entry);
-            } else if (completeKinds.contains(kind)) {
+                continue;
+            }
+            if (completeKinds.contains(kind)) {
                 negatives.add(kind + "\t" + token);
             }
+            addAliasCorrection(matches, kind, token.substring(1));
         }
 
         if (!explicit) {
             String hintedKind = hintedKind(lower);
-            aliases.forEach((alias, entries) -> {
-                if (matches.size() >= MAX_MATCHES || alias.length() < 3 || !containsPhrase(lower, alias)) {
-                    return;
+            for (Entry entry : orderedEntries) {
+                if (matches.size() >= MAX_MATCHES || !hintedKind.isBlank() && !hintedKind.equals(entry.kind())) {
+                    continue;
                 }
-                for (Entry entry : entries) {
-                    if ((hintedKind.isBlank() || hintedKind.equals(entry.kind())) && matches.size() < MAX_MATCHES) {
+                if (containsPhrase(lower, entry.canonical())) {
+                    matches.add(entry);
+                    continue;
+                }
+                for (String alias : entry.aliases()) {
+                    if (alias.length() >= 3 && containsPhrase(lower, alias)) {
                         matches.add(entry);
+                        break;
                     }
                 }
-            });
+            }
         }
 
         List<LocalKnowledgeIndex.KnowledgeChunk> evidence = new ArrayList<>();
@@ -189,12 +218,21 @@ public final class CanonicalIdentifierRegistry {
         return exact.size();
     }
 
+    private void addAliasCorrection(LinkedHashSet<Entry> matches, String kind, String rawAlias) {
+        List<Entry> candidates = aliases.getOrDefault(normalize(rawAlias), List.of());
+        for (Entry candidate : candidates) {
+            if (candidate.kind().equals(kind) && matches.size() < MAX_MATCHES) {
+                matches.add(candidate);
+            }
+        }
+    }
+
     private String renderKnowledge() {
         StringBuilder output = new StringBuilder("""
                 ---
                 id: hauntedmc.canonical-identifiers
                 title: Canonical HauntedMC identifiers
-                aliases: [canonical identifiers, exact commands, exact channels, exact ranks, exact gamemodes]
+                aliases: [canonical identifiers, exact commands, exact channels, exact ranks, exact gamemodes, discord channel, discord kanaal, channel exists, kanaal bestaat]
                 category: canonical-identifier
                 authority: operator-confirmed
                 updated: 2026-08-27
@@ -224,6 +262,10 @@ public final class CanonicalIdentifierRegistry {
             output.append('\n');
         }
         return output.toString().trim() + '\n';
+    }
+
+    private File dataFolder() {
+        return plugin == null ? null : plugin.getDataFolder();
     }
 
     private void clear() {
@@ -291,7 +333,12 @@ public final class CanonicalIdentifierRegistry {
     }
 
     private String safeId(String value) {
-        String normalized = normalize(value).replaceAll("[^a-z0-9._-]+", "-").replaceAll("-+", "-");
+        String normalized = normalize(value).replaceAll("[^a-z0-9._-]+", "-")
+                .replaceAll("-+", "-")
+                .replaceAll("^-+|-+$", "");
+        if (normalized.isBlank()) {
+            return "unknown";
+        }
         return normalized.length() <= 80 ? normalized : normalized.substring(0, 80);
     }
 
