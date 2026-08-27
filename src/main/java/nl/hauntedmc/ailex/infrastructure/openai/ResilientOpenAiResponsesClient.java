@@ -1,5 +1,6 @@
 package nl.hauntedmc.ailex.infrastructure.openai;
 
+import com.google.gson.JsonObject;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.net.http.HttpClient;
@@ -68,24 +69,24 @@ public final class ResilientOpenAiResponsesClient extends OpenAiResponsesClient 
     }
 
     @Override
-    public String getChatResponse(String systemPrompt, String userPrompt, RequestOptions options) {
+    public ResponseResult getChatResult(String systemPrompt, String userPrompt, RequestOptions options) {
         return executeReliably(
                 "chat",
-                () -> getChatResult(systemPrompt, userPrompt, options)
-        ).text();
+                () -> sanitizeChatResult(super.getChatResult(systemPrompt, userPrompt, options))
+        );
     }
 
     @Override
-    public String getStructuredChatResponse(
+    public ResponseResult getStructuredChatResult(
             String systemPrompt,
             String userPrompt,
-            com.google.gson.JsonObject responseFormat,
+            JsonObject responseFormat,
             RequestOptions options
     ) {
         return executeReliably(
                 "structured-chat",
-                () -> getStructuredChatResult(systemPrompt, userPrompt, responseFormat, options)
-        ).text();
+                () -> super.getStructuredChatResult(systemPrompt, userPrompt, responseFormat, options)
+        );
     }
 
     @Override
@@ -98,6 +99,13 @@ public final class ResilientOpenAiResponsesClient extends OpenAiResponsesClient 
                 + ", provider_circuit=" + (providerCircuitEnabled ? providerCircuitBreaker.state() : "disabled")
                 + ", last_failure=" + failure.kind().name().toLowerCase(Locale.ROOT)
                 + (failure.httpStatus() > 0 ? "(" + failure.httpStatus() + ")" : "");
+    }
+
+    private ResponseResult sanitizeChatResult(ResponseResult result) {
+        if (result != null && result.success() && FALLBACK_RESPONSE.equals(result.text())) {
+            return ResponseResult.failure(FALLBACK_RESPONSE, result.httpStatus(), result.usage());
+        }
+        return result;
     }
 
     private ResponseResult executeReliably(String operation, Supplier<ResponseResult> request) {
