@@ -3,6 +3,8 @@ package nl.hauntedmc.ailex.assistant.chat;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import nl.hauntedmc.ailex.AIlexPlugin;
+import nl.hauntedmc.ailex.assistant.application.routing.AssistantIntentClassifier;
+import nl.hauntedmc.ailex.assistant.domain.AssistantIntent;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantEventMemoryService;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.ExplicitPlayerMemoryService;
 import nl.hauntedmc.ailex.npc.NPC;
@@ -37,6 +39,8 @@ public final class AssistantChatObservationService {
             return;
         }
 
+        AssistantIntent intent = AssistantIntentClassifier.analyze(message).intent();
+        boolean recallQuestion = intent == AssistantIntent.EVENT_RECALL || intent == AssistantIntent.MEMORY_RECALL;
         NpcManager npcManager = plugin.getNpcManager();
         if (npcManager == null) {
             return;
@@ -49,6 +53,12 @@ public final class AssistantChatObservationService {
             // immediately retrieve the accepted value and the generated acknowledgement cannot drift from stored state.
             explicitMemory.observe(source.getUniqueId(), source.getName(), message);
 
+            // A recall question is transport context, not the historical event being requested. Recording it before retrieval
+            // would make it the newest/highest-recency event and could cause "who asked that just now?" to answer with the
+            // requester instead of the earlier speaker.
+            if (recallQuestion) {
+                continue;
+            }
             AssistantEventMemoryService events = plugin.getAssistantEventMemoryService();
             if (events != null) {
                 events.recordObservedPublicChat(
