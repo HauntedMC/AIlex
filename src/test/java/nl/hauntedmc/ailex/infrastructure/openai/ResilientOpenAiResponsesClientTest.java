@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -191,6 +192,29 @@ class ResilientOpenAiResponsesClientTest {
             );
 
             assertEquals(FailureKind.TRANSPORT, exception.failureKind());
+            verify(httpClient, times(1)).send(any(HttpRequest.class), anyStringBodyHandler());
+        }
+    }
+
+    @Test
+    void httpClientTimeoutIsReportedAsTimeoutInsteadOfGenericTransport() throws Exception {
+        HttpClient httpClient = mock(HttpClient.class);
+        when(httpClient.send(any(HttpRequest.class), anyStringBodyHandler()))
+                .thenThrow(new HttpTimeoutException("request timed out"));
+
+        try (MockedStatic<LoggerUtils> ignored = mockStatic(LoggerUtils.class)) {
+            ResilientOpenAiResponsesClient client = new ResilientOpenAiResponsesClient(
+                    "key", "gpt-5.6-terra", httpClient, false
+            );
+
+            OpenAiUnavailableException exception = assertThrows(
+                    OpenAiUnavailableException.class,
+                    () -> client.getChatResponse("system", "hello")
+            );
+
+            assertEquals(FailureKind.TIMEOUT, exception.failureKind());
+            assertEquals(408, exception.httpStatus());
+            assertTrue(client.usageStatus().contains("last_failure=timeout(408)"));
             verify(httpClient, times(1)).send(any(HttpRequest.class), anyStringBodyHandler());
         }
     }
