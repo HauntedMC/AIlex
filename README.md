@@ -22,7 +22,7 @@ For example, a player can ask where they are, what they are holding, how a Haunt
 
 AIlex can remember durable information such as a player's stated preferences, interests, goals and useful factual details. A later correction replaces the current belief without erasing the old historical version, so questions such as “what did I tell you before?” and “what is true now?” are different operations.
 
-Physical NPC actions remain an optional bounded subsystem but are **disabled by default in 1.9.0** and are not part of normal chat inference. Chat availability is independent from whether the Citizens entity is physically spawned.
+Physical NPC actions are an optional bounded subsystem, disabled by default, and are not part of normal chat inference. Chat availability is independent from whether the Citizens entity is physically spawned.
 
 AIlex may also participate without being named, but silence is a valid and often preferable choice. The proactive system tries to distinguish a public question or community moment from a conversation between players and applies cooldowns, privacy costs and repetition penalties before speaking.
 
@@ -79,7 +79,7 @@ Some identifier kinds can be marked complete. For a complete kind, absence is me
 
 HauntedMC-specific knowledge is searched with more than one signal. Exact commands and names benefit from lexical/BM25-style matching, while learned embeddings recover paraphrases. Rankings are fused, authority and freshness can affect ordering, and near-duplicate evidence is removed before it reaches the model.
 
-1.9.0 adds an adaptive selection stage after first-stage retrieval. Clear, strongly ranked questions use fewer chunks; broad or ambiguous questions retain a wider evidence set. This is deliberately deterministic rather than another mandatory LLM call. It reduces context noise while avoiding an always-on reranker that could throw away useful recall.
+An adaptive selection stage runs after first-stage retrieval. Clear, strongly ranked questions use fewer chunks; broad or ambiguous questions retain a wider evidence set. This is deliberately deterministic rather than another mandatory LLM call. It reduces context noise while avoiding an always-on reranker that could throw away useful recall.
 
 If embeddings are unavailable, AIlex keeps working with lexical retrieval. Corpus embeddings warm asynchronously so a cold start does not require the first player to wait for the entire knowledge base to be embedded.
 
@@ -110,11 +110,11 @@ AIlex is an engineering system, not a reproduction of any one paper. The work be
 | [Lost in the Middle: How Language Models Use Long Contexts — Liu et al., TACL 2024](https://aclanthology.org/2024.tacl-1.9/) | Bigger context windows do not guarantee robust use of evidence, and relevant information can be harmed by poor placement. | Bounded 4k/12k/24k ceilings, query/trust-aware context allocation, lower-priority history earlier and current trusted evidence later. |
 | [In Prospect and Retrospect: Reflective Memory Management for Long-term Personalized Dialogue Agents — Tan et al., ACL 2025](https://aclanthology.org/2025.acl-long.413/) | Dialogue information benefits from multiple granularities rather than a single rigid memory unit. AIlex adapts the granularity idea, not RMM's online-RL retrieval mechanism. | Verbatim recent dialogue plus bounded mid-term digest/topic state plus separate durable memory. |
 | [Memory OS of AI Agent — Kang et al., EMNLP 2025](https://aclanthology.org/2025.emnlp-main.1318/) | Separate short-, mid- and long-term memory layers with different update/retention behavior. | Recent-turn working memory, mid-term dialogue state and selective typed durable memory. |
-| [LongMemEval: Benchmarking Chat Assistants on Long-Term Interactive Memory — Wu et al., ICLR 2025](https://proceedings.iclr.cc/paper_files/paper/2025/hash/d813d324dbf0598bbdc9c8e79740ed01-Abstract-Conference.html) | Long-term assistants should be evaluated separately on extraction, multi-session reasoning, temporal reasoning, updates and abstention. | Memory regression categories and the 1.9 `CHAT_EVALUATION` specification. |
+| [LongMemEval: Benchmarking Chat Assistants on Long-Term Interactive Memory — Wu et al., ICLR 2025](https://proceedings.iclr.cc/paper_files/paper/2025/hash/d813d324dbf0598bbdc9c8e79740ed01-Abstract-Conference.html) | Long-term assistants should be evaluated separately on extraction, multi-session reasoning, temporal reasoning, updates and abstention. | Memory regression categories and `docs/CHAT_EVALUATION.md`. |
 | [MemoryAgentBench: Evaluating Memory in LLM Agents via Incremental Multi-Turn Interactions — Hu, Wang & McAuley, 2025/2026](https://arxiv.org/abs/2507.05257) | Treat accurate retrieval, test-time learning, long-range understanding and selective forgetting as separate memory competencies. | Benchmark categories plus selective retention/forgetting and correction tests. |
 | [RAGChecker: A Fine-grained Framework for Diagnosing Retrieval-Augmented Generation — Ru et al., NeurIPS 2024](https://proceedings.neurips.cc/paper_files/paper/2024/hash/27245589131d17368cccdfa990cbf16e-Abstract-Datasets_and_Benchmarks_Track.html) | Diagnose retrieval and generation separately instead of trusting one end-to-end score. | `docs/CHAT_EVALUATION.md`: retrieval recall/precision, claim faithfulness, exact identifiers, naturalness, latency and cost are tracked separately. |
 | [Don't Ask the LLM to Track Freshness: A Deterministic Recipe for Memory Conflict Resolution — Reddy & Challaram, 2026](https://arxiv.org/abs/2606.01435) | Resolve changing values deterministically after retrieval instead of asking the language model to choose the freshest conflicting claim. | `MemoryTruthResolver`, validity intervals, supersession and historical/current-value separation. |
-| [Mem2ActBench: A Benchmark for Evaluating Long-Term Memory Utilization in Task-Oriented Autonomous Agents — Shen et al., ACL 2026](https://aclanthology.org/2026.acl-long.370/) | Memory quality should include whether remembered information can safely influence tool/action behavior, not only whether it can be repeated in an answer. | Memory→tool/action regression scenarios and verified action-outcome experience; physical actions remain optional/off by default in 1.9. |
+| [Mem2ActBench: A Benchmark for Evaluating Long-Term Memory Utilization in Task-Oriented Autonomous Agents — Shen et al., ACL 2026](https://aclanthology.org/2026.acl-long.370/) | Memory quality should include whether remembered information can safely influence tool/action behavior, not only whether it can be repeated in an answer. | Memory→tool/action regression scenarios and verified action-outcome experience; physical actions remain optional and disabled by default. |
 
 These are inspirations and evaluation targets, not claims of paper-equivalent implementations or benchmark scores. AIlex deliberately adapts the ideas to a deterministic Paper-server safety boundary.
 
@@ -171,7 +171,7 @@ For the same quality gates used by CI:
 ./gradlew --no-daemon test jacocoTestReport jacocoTestCoverageVerification
 ```
 
-Deterministic CI does not require live model-provider calls. Semantic retrieval tests use deterministic fake embeddings so routing, fusion, memory, evidence, privacy and agent-control regressions remain reproducible. `docs/CHAT_EVALUATION.md` defines the separate live-model/offline quality suite that should be used to compare player-facing releases.
+Deterministic CI does not require live model-provider calls. Semantic retrieval tests use deterministic fake embeddings so routing, fusion, memory, evidence, privacy and agent-control regressions remain reproducible. `docs/CHAT_EVALUATION.md` defines the separate live-model/offline quality suite for player-facing behavior.
 
 ## Documentation
 
