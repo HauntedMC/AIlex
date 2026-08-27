@@ -15,8 +15,9 @@ class AssistantPromptComposerTest {
         assertTrue(prompt.contains("MEMORY CONTRACT"));
         assertTrue(prompt.contains("CAPABILITY CONTRACT"));
         assertTrue(prompt.contains("INTERACTION CONTRACT"));
-        assertTrue(prompt.contains("procedural experience"));
-        assertTrue(prompt.contains("Physical actions are proposals only"));
+        String normalizedPrompt = prompt.replaceAll("\\s+", " ");
+        assertTrue(normalizedPrompt.contains("procedural experience"));
+        assertTrue(normalizedPrompt.contains("Physical actions are proposals only"));
     }
 
     @Test

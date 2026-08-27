@@ -213,6 +213,7 @@ public final class LocalKnowledgeIndex {
         if (provider == null || query.isBlank() || !provider.available()) {
             return Map.of();
         }
+        ensureSemanticVectors(candidates, provider);
         warmSemanticIndexAsync();
         List<double[]> queryVector = provider.embed(List.of(query));
         if (queryVector.size() != 1 || queryVector.getFirst().length == 0) {
@@ -231,6 +232,26 @@ public final class LocalKnowledgeIndex {
             }
         }
         return Map.copyOf(scores);
+    }
+
+    /** Ensures a cold query has document vectors instead of silently degrading a semantic-only request. */
+    private void ensureSemanticVectors(List<KnowledgeChunk> candidates, SemanticEmbeddingProvider provider) {
+        List<KnowledgeChunk> missing = candidates.stream()
+                .filter(chunk -> !semanticVectors.containsKey(chunk.id()))
+                .toList();
+        for (int offset = 0; offset < missing.size(); offset += 48) {
+            List<KnowledgeChunk> batch = missing.subList(offset, Math.min(missing.size(), offset + 48));
+            List<double[]> vectors = provider.embed(batch.stream().map(this::embeddingText).toList());
+            if (vectors.size() != batch.size()) {
+                return;
+            }
+            for (int index = 0; index < batch.size(); index++) {
+                double[] vector = vectors.get(index);
+                if (vector != null && vector.length > 0) {
+                    semanticVectors.putIfAbsent(batch.get(index).id(), vector);
+                }
+            }
+        }
     }
 
     private void warmSemanticIndexAsync() {

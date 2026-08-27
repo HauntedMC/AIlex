@@ -128,6 +128,16 @@ public final class AssistantMemoryConsolidator {
     }
 
     private String primaryTopic(MemoryRecord record) {
+        Set<String> valueTerms = topicTerms(record.value());
+        String anchoredTopic = topicTerms(record.key()).stream()
+                .filter(valueTerms::contains)
+                .filter(tag -> !Set.of("event", "session", "join", "quit", "world", "project").contains(tag))
+                .sorted()
+                .findFirst()
+                .orElse("");
+        if (!anchoredTopic.isBlank()) {
+            return anchoredTopic;
+        }
         String specificTag = record.tags().stream()
                 .filter(tag -> !Set.of("event", "session", "join", "quit", "world", "project").contains(tag))
                 .filter(tag -> !tag.startsWith("world:"))
@@ -142,6 +152,16 @@ public final class AssistantMemoryConsolidator {
         String key = record.key();
         int separator = key.indexOf('.');
         return safeTopic(separator > 0 ? key.substring(0, separator) : key);
+    }
+
+    private Set<String> topicTerms(String value) {
+        if (value == null || value.isBlank()) {
+            return Set.of();
+        }
+        return java.util.Arrays.stream(value.toLowerCase(Locale.ROOT).split("[^a-z0-9]+"))
+                .filter(term -> term.length() >= 3)
+                .map(this::safeTopic)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     private String safeTopic(String value) {
