@@ -26,6 +26,7 @@ import nl.hauntedmc.ailex.assistant.domain.AssistantSettings;
 import nl.hauntedmc.ailex.assistant.infrastructure.knowledge.LocalKnowledgeIndex;
 import nl.hauntedmc.ailex.assistant.infrastructure.live.PaperLiveContextEnricher;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantExperienceMemoryService;
+import nl.hauntedmc.ailex.assistant.infrastructure.memory.ExplicitPlayerMemoryService;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantMemoryService;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantRelationshipMemoryService;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryCandidate;
@@ -65,6 +66,7 @@ public final class AssistantService {
     private final AssistantMemoryService memoryService;
     private final AssistantExperienceMemoryService experienceMemory;
     private final AssistantRelationshipMemoryService relationshipMemory;
+    private final ExplicitPlayerMemoryService explicitPlayerMemory;
     private final AssistantReadAgent readAgent;
     private volatile SemanticNeedPlanner semanticNeedPlanner;
     private final ContextCompiler contextCompiler = new ContextCompiler();
@@ -88,6 +90,7 @@ public final class AssistantService {
         this.memoryService = plugin.getAssistantMemoryService();
         this.experienceMemory = new AssistantExperienceMemoryService(memoryService);
         this.relationshipMemory = new AssistantRelationshipMemoryService(memoryService);
+        this.explicitPlayerMemory = new ExplicitPlayerMemoryService(memoryService);
         this.readAgent = new AssistantReadAgent(plugin, knowledgeIndex, memoryService, experienceMemory);
         this.semanticNeedPlanner = new SemanticNeedPlanner(knowledgeIndex.semanticEmbeddingProvider());
         Thread.ofVirtual().name("AIlex-SemanticRouter-Warmup").start(semanticNeedPlanner::warm);
@@ -130,6 +133,15 @@ public final class AssistantService {
 
         UUID playerId = player.getUniqueId();
         if (memoryService != null && settings.toolAllowed("session")) {
+            ExplicitPlayerMemoryService.Result explicitResult = explicitPlayerMemory.observe(
+                    playerId, player.getName(), message
+            );
+            if (settings.diagnosticLogging() && explicitResult.proposed() > 0) {
+                LoggerUtils.logInfo("[AIlex memory] explicit requester=" + sanitizeLogField(player.getName())
+                        + " operation=" + (explicitResult.forget() ? "forget" : "upsert")
+                        + " proposed=" + explicitResult.proposed()
+                        + " accepted=" + explicitResult.accepted());
+            }
             memoryService.observe(playerId, message);
             memoryService.rememberExplicitLanguagePreference(playerId, message);
             String preferredLanguage = memoryService.preferredLanguage(playerId);
