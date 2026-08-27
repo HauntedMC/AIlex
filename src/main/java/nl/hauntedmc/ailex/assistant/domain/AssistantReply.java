@@ -25,6 +25,9 @@ public record AssistantReply(
         Map<Integer, Set<String>> claimEvidence,
         boolean valid
 ) {
+    private static final int MAX_PLAIN_LINES = 6;
+    private static final int MAX_PLAIN_LINE_CHARACTERS = 360;
+
     public AssistantReply {
         lines = lines == null ? List.of() : List.copyOf(lines);
         evidenceIds = evidenceIds == null ? Set.of() : Set.copyOf(evidenceIds);
@@ -75,14 +78,21 @@ public record AssistantReply(
 
     /**
      * Creates a plain player-facing reply while defensively stripping accidental model protocol envelopes.
-     * Plain-text generation is never allowed to leak JSON metadata such as response/evidence fields into Minecraft chat.
+     * Newlines are retained as bounded Minecraft-chat lines instead of being flattened back into one sentence.
      */
     public static AssistantReply fromPlainText(String text) {
-        String safe = unwrapAccidentalEnvelope(text);
-        safe = safe.replaceAll("\\s+", " ").trim();
+        String safe = unwrapAccidentalEnvelope(text).replace("\r\n", "\n").replace('\r', '\n').trim();
+        if (safe.isBlank()) {
+            return invalid();
+        }
+        List<String> playerLines = safe.lines()
+                .map(line -> line.replaceAll("\\h+", " ").trim())
+                .filter(line -> !line.isBlank())
+                .map(line -> clip(line, MAX_PLAIN_LINE_CHARACTERS))
+                .limit(MAX_PLAIN_LINES)
+                .toList();
         return new AssistantReply(
-                safe.isBlank() ? List.of() : List.of(safe), Set.of(), "", "", List.of(), List.of(), Map.of(),
-                !safe.isBlank()
+                playerLines, Set.of(), "", "", List.of(), List.of(), Map.of(), !playerLines.isEmpty()
         );
     }
 
@@ -138,13 +148,20 @@ public record AssistantReply(
                         playerLines.add(line.getAsString().trim());
                     }
                 }
-                return String.join(" ", playerLines);
+                return String.join("\n", playerLines);
             }
             // A JSON object on the plain-text path is protocol output, not player-facing prose. Fail closed.
             return "";
         } catch (RuntimeException ignored) {
             return candidate;
         }
+    }
+
+    private static String clip(String value, int maxCharacters) {
+        if (value.length() <= maxCharacters) {
+            return value;
+        }
+        return value.substring(0, Math.max(0, maxCharacters - 1)).trim() + "…";
     }
 
     public AssistantReply withHandoff(String value) {
