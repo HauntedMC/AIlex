@@ -15,6 +15,19 @@ import java.util.Map;
  */
 public final class KnowledgeDocumentParser {
 
+    /**
+     * Parses one reviewed Markdown source into independently retrievable sections.
+     *
+     * <p>Only {@code id}, {@code title}, {@code aliases}, {@code category}, {@code authority}, {@code updated},
+     * {@code expires}, and {@code source} are recognized as metadata. Unknown keys are ignored rather than deserialized.
+     * Section-level {@code @key: value} metadata may override document metadata using the same allow-list. The parser
+     * performs no code execution and creates no trust by itself; retrieval policy decides how the parsed provenance is
+     * used.</p>
+     *
+     * @param source fallback source name/id, normally the knowledge filename
+     * @param content reviewed Markdown content
+     * @return immutable parsed sections; empty when no usable body exists
+     */
     public List<ParsedSection> parse(String source, String content) {
         String normalized = content == null ? "" : content.replace("\r\n", "\n").trim();
         if (normalized.isBlank()) {
@@ -161,6 +174,7 @@ public final class KnowledgeDocumentParser {
     private record FrontMatter(Map<String, String> metadata, String body) {
     }
 
+    /** Parsed reviewed evidence unit with provenance/freshness metadata retained for ranking and audit. */
     public record ParsedSection(
             String id,
             String title,
