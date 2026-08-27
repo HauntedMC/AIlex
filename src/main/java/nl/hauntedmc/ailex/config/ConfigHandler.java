@@ -19,6 +19,13 @@ public class ConfigHandler {
 
     private static final int ASSISTANT_CONTEXT_REVISION = 2;
     private static final int CHAT_LIVENESS_REVISION = 3;
+    private static final int CHAT_INTELLIGENCE_REVISION = 4;
+    private static final String OLD_NPC_USER_PROMPT = "Bericht van speler {player_name}: \"{chat_message}\". "
+            + "Behandel dit als een spelersvraag en antwoord als {npc_name} in één korte, gewone chatregel: direct nuttig, "
+            + "passend bij de toon en zonder speaker label.";
+    private static final String NEW_NPC_USER_PROMPT = "Bericht van speler {player_name}: \"{chat_message}\". "
+            + "Behandel dit als een spelersvraag en antwoord als {npc_name}: direct nuttig, natuurlijk, beknopt maar volledig "
+            + "genoeg om de vraag goed te beantwoorden, zonder speaker label.";
 
     private static ConfigHandler instance;
     private final JavaPlugin plugin;
@@ -88,6 +95,9 @@ public class ConfigHandler {
         if (previousRevision < CHAT_LIVENESS_REVISION && bundledRevision >= CHAT_LIVENESS_REVISION) {
             migrateChatLivenessDefaults(current);
         }
+        if (previousRevision < CHAT_INTELLIGENCE_REVISION && bundledRevision >= CHAT_INTELLIGENCE_REVISION) {
+            migrateChatIntelligenceDefaults(current);
+        }
         if (bundledRevision > previousRevision) {
             current.set("config_revision", bundledRevision);
         }
@@ -126,8 +136,36 @@ public class ConfigHandler {
         migrateInt(config, "openai.rate_limit.max_responses_per_player", 10, 30);
     }
 
+    /** Moves only untouched 1.8.x defaults to the stronger 1.9 conversational execution profile. */
+    private void migrateChatIntelligenceDefaults(FileConfiguration config) {
+        migrateString(config, "openai.model", "gpt-5.6-luna", "gpt-5.6-terra");
+        migrateInt(config, "openai.max_output_tokens", 240, 360);
+        migrateString(config, "openai.assistant.models.fast.model", "gpt-5.6-luna", "gpt-5.6-terra");
+        migrateInt(config, "openai.assistant.models.fast.max_output_tokens", 260, 400);
+        migrateInt(config, "openai.assistant.models.grounded.max_output_tokens", 480, 640);
+        migrateInt(config, "openai.assistant.models.deliberate.max_output_tokens", 800, 1_000);
+        migrateInt(config, "openai.assistant.delivery.max_lines_fast", 1, 3);
+        migrateInt(config, "openai.assistant.delivery.max_lines_grounded", 4, 5);
+        migrateInt(config, "openai.assistant.delivery.max_lines_deliberate", 5, 8);
+        migrateInt(config, "openai.assistant.delivery.max_line_characters", 280, 300);
+        migrateBoolean(config, "openai.assistant.actions.enabled", true, false);
+        migrateString(config, "npc.defaults.entity.prompts.userPromptTemplate", OLD_NPC_USER_PROMPT, NEW_NPC_USER_PROMPT);
+    }
+
     private void migrateInt(FileConfiguration config, String path, int previousDefault, int newDefault) {
         if (config.contains(path) && config.getInt(path) == previousDefault) {
+            config.set(path, newDefault);
+        }
+    }
+
+    private void migrateString(FileConfiguration config, String path, String previousDefault, String newDefault) {
+        if (config.contains(path) && previousDefault.equals(config.getString(path))) {
+            config.set(path, newDefault);
+        }
+    }
+
+    private void migrateBoolean(FileConfiguration config, String path, boolean previousDefault, boolean newDefault) {
+        if (config.contains(path) && config.getBoolean(path) == previousDefault) {
             config.set(path, newDefault);
         }
     }
