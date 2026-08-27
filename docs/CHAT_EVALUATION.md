@@ -1,6 +1,6 @@
 # AIlex chat evaluation
 
-AIlex 1.9 treats player-facing quality as an evaluated product property, not something inferred from architectural complexity.
+Player-facing quality is an evaluated product property, not something inferred from architectural complexity.
 The deterministic test suite remains the CI safety net, while this document defines the live-model evaluation that should be
 run when changing prompts, models, retrieval strategy, context construction or memory behavior.
 
@@ -21,7 +21,7 @@ These references shape the evaluation protocol; AIlex does not claim benchmark-e
 
 ## Reference suite
 
-Maintain a versioned suite of roughly 300–500 conversational cases. A useful minimum distribution is:
+Maintain a stable suite of roughly 300–500 conversational cases. A useful minimum distribution is:
 
 | Category | Approx. cases | What it tests |
 | --- | ---: | --- |
@@ -54,19 +54,19 @@ Do not collapse everything into one score. Track at least:
 11. **Latency** — p50, p95 and timeout/fallback rate.
 12. **Liveness** — every explicit valid AIlex mention reaches a traceable terminal outcome; silent drops are a zero-tolerance failure.
 
-## Release gates
+## Quality gates
 
-For a production candidate, compare against the currently deployed release using the same case set and fixed knowledge snapshot.
+For a production candidate, run the same case set against a fixed knowledge snapshot and an agreed baseline.
 Recommended hard gates are:
 
 - zero silent explicit-mention failures;
 - zero unsupported exact HauntedMC identifiers in the reviewed identifier subset;
-- no regression in privacy/scope deterministic tests;
+- all privacy/scope deterministic tests pass;
 - no statistically meaningful drop in factual correctness or claim faithfulness;
 - retrieval recall must not be traded away merely to reduce prompt size;
 - p95 latency and average model calls must remain within the configured operational envelope.
 
-Naturalness should use blind pairwise comparison against the previous release plus human review of a stratified sample. An LLM judge
+Naturalness should use blind pairwise comparison against a fixed baseline plus human review of a stratified sample. An LLM judge
 can accelerate review, but it is not ground truth: judge order should be randomized and at least a subset should be manually checked.
 
 ## Diagnostics for a failed case
