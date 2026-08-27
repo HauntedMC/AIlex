@@ -98,10 +98,19 @@ public record AssistantReply(
         }
 
         boolean looksLikeEnvelope = candidate.startsWith("{") && candidate.endsWith("}");
-        if (!looksLikeEnvelope && (candidate.startsWith("\"response\"")
-                || candidate.startsWith("\"answer\"") || candidate.startsWith("\"lines\""))
-                && candidate.endsWith("}")) {
-            candidate = '{' + candidate;
+        boolean startsLikeProtocol = candidate.startsWith("\"response\"")
+                || candidate.startsWith("\"answer\"")
+                || candidate.startsWith("\"lines\"")
+                || candidate.startsWith("\"text\"")
+                || candidate.startsWith("\"message\"")
+                || candidate.startsWith("\"output\"");
+        if (!looksLikeEnvelope && startsLikeProtocol) {
+            if (!candidate.startsWith("{")) {
+                candidate = '{' + candidate;
+            }
+            if (!candidate.endsWith("}")) {
+                candidate = candidate + '}';
+            }
             looksLikeEnvelope = true;
         }
         if (!looksLikeEnvelope) {
