@@ -88,4 +88,18 @@ class AssistantMemoryRoutingRegressionTest {
         assertEquals(AssistantIntent.EVENT_RECALL, analysis.intent());
         assertEquals(AssistantMode.GROUNDED, analysis.mode());
     }
+
+    @Test
+    void recentWhoAskedRecallDoesNotRequireAnExistingDialogueSession() {
+        AssistantIntentClassifier.Analysis dutch = AssistantIntentClassifier.analyze(
+                "Haunty wie vroeg net of ik jou in de time out hoek mag zetten"
+        );
+        AssistantIntentClassifier.Analysis english = AssistantIntentClassifier.analyze(
+                "Haunty, who just asked whether Remy could put you in timeout?"
+        );
+
+        assertEquals(AssistantIntent.EVENT_RECALL, dutch.intent());
+        assertEquals(AssistantMode.GROUNDED, dutch.mode());
+        assertEquals(AssistantIntent.EVENT_RECALL, english.intent());
+    }
 }
