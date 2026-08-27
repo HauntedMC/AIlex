@@ -63,8 +63,9 @@ class AssistantServiceTest {
         assertTrue(reply.handoff().isBlank());
         ArgumentCaptor<String> systemPrompt = ArgumentCaptor.forClass(String.class);
         verify(client).getStructuredChatResponse(systemPrompt.capture(), anyString(), any(JsonObject.class), any());
-        assertTrue(systemPrompt.getValue().contains("Use general Minecraft knowledge when appropriate"));
-        assertTrue(systemPrompt.getValue().contains("Never invent custom or time-sensitive HauntedMC facts"));
+        String policyPrompt = systemPrompt.getValue().toLowerCase(java.util.Locale.ROOT);
+        assertTrue(policyPrompt.contains("stable vanilla minecraft knowledge"));
+        assertTrue(policyPrompt.contains("custom hauntedmc"));
     }
 
     @Test

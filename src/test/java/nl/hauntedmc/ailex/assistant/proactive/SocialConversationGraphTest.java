@@ -68,6 +68,29 @@ class SocialConversationGraphTest {
         ));
     }
 
+    @Test
+    void threadViewExposesParticipantsTopicsDirectedRepliesQuestionAndInterventionHistory() {
+        SocialConversationGraph graph = new SocialConversationGraph();
+        Player alex = player("Alex");
+        Player sam = player("Sam");
+        List<Player> online = List.of(alex, sam);
+        long now = 10_000L;
+
+        graph.observe(alex, "Sam, zullen we de castle roof bouwen?", online, 2_000L, 180_000L);
+        graph.observe(sam, "Ja, welke blocks gebruiken we?", online, 4_000L, 180_000L);
+        graph.recordAilexIntervention(alex.getUniqueId(), CommunityGoal.SUPPORT_CONVERSATION, 5_000L, 180_000L);
+
+        SocialConversationGraph.ThreadView view = graph.threadView(alex.getUniqueId(), now, 180_000L);
+
+        assertEquals(2, view.participants().size());
+        assertTrue(view.participantNames().containsAll(List.of("Alex", "Sam")));
+        assertTrue(view.topicTerms().contains("castle") || view.topicTerms().contains("roof"));
+        assertFalse(view.directedReplyEdges().isEmpty());
+        assertTrue(view.unresolvedQuestion());
+        assertTrue(view.ailexAlreadyParticipated());
+        assertEquals(List.of(CommunityGoal.SUPPORT_CONVERSATION), view.interventionHistory());
+    }
+
     private static Player player(String name) {
         Player player = mock(Player.class);
         when(player.getName()).thenReturn(name);

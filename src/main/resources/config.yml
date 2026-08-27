@@ -12,16 +12,22 @@ openai:
     enabled: true
     # Adaptive keeps ordinary chat cheap while factual/current-state work gets stronger grounding and reasoning.
     mode: "adaptive"
-    total_deadline_seconds: 15
-    max_model_calls: 3
-    # One bounded information-seeking round leaves budget for the answer and a grounded escalation when necessary.
-    max_tool_rounds: 1
+    total_deadline_seconds: 18
+    # Two read/planning calls + answer + one evidence-driven escalation remain inside this hard request budget.
+    max_model_calls: 4
+    # Complex grounded/deliberate questions may perform two bounded information-seeking rounds.
+    max_tool_rounds: 2
     structured_output: true
     routing:
       default_language: "nl"
       allowed_languages: ["nl", "en", "de"]
       language_detection: true
       clarify_only_when_required: true
+      # Learned need prediction refines ambiguous requests after deterministic policy routing.
+      semantic:
+        enabled: true
+        minimum_similarity: 0.42
+        minimum_margin: 0.025
     context:
       # Hard ceilings, not targets. ContextCompiler selects only useful sources and can use more space when needed.
       max_input_tokens_fast: 3000
@@ -44,6 +50,10 @@ openai:
       enabled: true
       planner_model: "gpt-5.6-luna"
       max_tool_calls_per_round: 2
+    actions:
+      # The model can only propose these low-risk NPC actions; deterministic validation remains authoritative.
+      enabled: true
+      allowed: ["FOLLOW_REQUESTER", "COME_HERE", "STOP_MOVING"]
     models:
       fast:
         model: "gpt-5.6-luna"
@@ -78,6 +88,18 @@ openai:
       max_context_characters: 8000
       # Only trusted staff may turn player statements into network-wide learned facts.
       shared_write_permission: "ailex.admin"
+      retrieval:
+        # Associative graph activation is fused with lexical/salience/recency memory ranking.
+        graph_enabled: true
+        graph_weight: 0.35
+      consolidation:
+        # Evidence-grounded deterministic event→episode consolidation; no per-message LLM reflection pass.
+        enabled: true
+        interval_minutes: 15
+      retention:
+        # Low-value transient traces may decay under interference; durable semantic facts never vanish merely by age.
+        enabled: true
+        interval_minutes: 30
       storage:
         # sqlite is self-contained. mysql provides one shared identity across multiple AIlex runtimes.
         backend: "sqlite"
@@ -117,7 +139,7 @@ openai:
       enabled: false
       mention: "AIlex"
       display_name: "<#7C3AED>[<#C4B5FD>AIlex<#7C3AED>]</#7C3AED>"
-      system_prompt: "Je bent AIlex, een slimme en vriendelijke Minecraft-assistent voor HauntedMC. Antwoord concreet, eerlijk en contextbewust. Gebruik live serverinformatie en betrouwbare HauntedMC-kennis wanneer relevant, onthoud expliciete niet-gevoelige spelersinformatie en corrigeer eerder geleerde informatie wanneer de speler die expliciet verbetert."
+      system_prompt: "Je bent AIlex: een slimme, vriendelijke en nuchtere HauntedMC-communitygenoot. Help direct, natuurlijk en zonder helpdesktoon; gebruik droge humor alleen als de speler zelf informeel is."
   # Carefully limited behaviour for bots that can contribute without being named. Direct requests always have priority.
   proactive_chat:
     enabled: true
@@ -136,6 +158,18 @@ openai:
       minimum_speaker_alternations: 2
       social_graph_window_seconds: 180
       strong_pair_score: 2.5
+      utility:
+        threshold: 0.25
+        helpful_weight: 1.25
+        privacy_cost: 1.20
+        error_cost: 0.75
+        repetition_cost: 0.85
+    goals:
+      enabled: true
+      enabled_goals: ["HELP_NEW_PLAYER", "WELCOME", "CELEBRATE", "SUPPORT_CONVERSATION", "CONNECT", "DEFUSE", "FOLLOW_UP", "INFORM"]
+      probability: 0.30
+      # Follow-ups are requester-only and derive only from explicit non-sensitive player goals.
+      follow_up_probability: 0.12
     collective:
       enabled: true
       terms: ["gg", "wp", "well played", "welkom", "welcome", "congrats", "gefeliciteerd", "nice"]
@@ -172,15 +206,9 @@ openai:
       max_files: 64
       max_characters: 120000
     prompt: |-
-      BETROUWBARE HAUNTEDMC-KENNIS — gebruik de thematische bestanden in knowledge/ voor commands, gamemodes,
-      ranks, regels, systemen en actuele serverdetails. Bij een verschil heeft live serverstate of expliciet
-      bijgewerkte officiële kennis voorrang. Gebruik open-ended knowledge discovery voor vragen als "vertel een feitje".
-      - HauntedMC is een Nederlandse Minecraft-community voor Nederlandse en Engelse spelers. Deel alleen de
-        officiële adressen: play.hauntedmc.nl, https://hauntedmc.nl en https://store.hauntedmc.nl.
-      - De actieve gamemode-categorieën zijn Survival, Creative en Minigames. Er zijn ook events en regelmatige updates.
-      - Verzin nooit commands, warps, prijzen, ranks, resetdatums, rewards of live status. Gebruik beschikbare evidence.
-      - Behandel geen reports, appeals, straffen, aankopen, refunds of accountherstel. Vraag nooit om wachtwoorden,
-        betaalgegevens, e-mailadressen of verificatiecodes.
+      Gebruik de gereviewde bestanden in knowledge/ als bron voor HauntedMC-specifieke feiten.
+      Geef live Paper-state voor actuele toestand voorrang en verzin nooit ontbrekende commands, prijzen,
+      rewards, warps, ranks, resetdatums of beschikbaarheid. Bij onvoldoende bewijs: verifieer of onthoud je.
   chat_context:
     enabled: true
     # Ambient/raw chat is short-lived context only. Durable knowledge belongs in typed semantic/episodic memory.
@@ -217,7 +245,7 @@ npc:
       listedInTab: false
       alwaysUseNameHologram: false
       prompts:
-        systemPrompt: "Je bent een slimme Minecraft Bot op een survivalserver: een kalme, oplettende servergenoot met droge, vriendelijke humor. Help concreet met gameplay, builds, farms, Redstone, mobs, biomes, resources en serveretiquette. Geef eerst het nuttigste antwoord of de beste volgende stap, geen algemeen verhaal. Spiegel toon en lengte: serieus is serieus en helder; alleen bij een speelse, informele toon mag je af en toe natuurlijke Gen Z/Gen Alpha-slang zoals 'gg', 'W' of 'low-key' gebruiken — nooit geforceerd of bij serieuze zaken. Schrijf Nederlands, maar behoud Engelse Minecraft-termen zoals Spider Spawner, Crafting Table, Enchantment Table, Nether Portal en Redstone. Wees eerlijk bij onzekerheid, verzin geen mechanics of recipes en stel hoogstens één gerichte vraag wanneer informatie echt ontbreekt. Volg altijd de veiligheidsregels."
+        systemPrompt: "Je bent een oplettende HauntedMC Minecraft Bot: kalm, concreet en vriendelijk. Help als ervaren servergenoot met gameplay en servergebruik; behoud gangbare Engelse Minecraft-termen en forceer geen slang."
         userPromptTemplate: "Bericht van speler {player_name}: \"{chat_message}\". Behandel dit als een spelersvraag en antwoord als {npc_name} in één korte, gewone chatregel: direct nuttig, passend bij de toon en zonder speaker label."
   general:
     maxVelocity: 4.317

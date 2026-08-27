@@ -1,203 +1,214 @@
 # Testing and Quality
 
-Run the complete build before merging:
+AIlex has two kinds of quality checks:
+
+1. **Deterministic CI** proves that routing, memory, retrieval, evidence handling, privacy, tools, social policy and action validation behave predictably without a live model.
+2. **Model/provider evaluation** measures answer quality and production behavior separately. A stochastic OpenAI response must never be required for a pull request to pass.
+
+## Commands used by CI
+
+Run the complete local build with:
 
 ```bash
 ./gradlew clean build
 ```
 
-The build compiles production/test code, runs JUnit, Checkstyle and JaCoCo. CI additionally runs `jacocoTestCoverageVerification`; the current regression floor is 55% line coverage and 40% branch coverage. Cognitive behavior is split into deterministic control-plane tests and provider/model integration behavior so stochastic upstream output cannot hide regressions in routing, memory, evidence handling or intervention policy.
+The two CI gates can also be reproduced directly:
+
+```bash
+./gradlew --no-daemon checkstyleMain checkstyleTest
+./gradlew --no-daemon test jacocoTestReport jacocoTestCoverageVerification
+```
+
+JaCoCo currently enforces the repository regression floor of 55% line coverage and 40% branch coverage.
+
+## What must be deterministic
+
+The following behavior belongs in normal JUnit/AIlexBench coverage and must not call an external model:
+
+- intent, language and model-mode routing;
+- semantic-need refinement with deterministic fake embeddings;
+- prompt composition and stable epistemic/policy invariants;
+- lexical + semantic retrieval fusion and lexical fallback;
+- knowledge front-matter parsing, authority, source, update date and expiry;
+- context clipping and token ceilings;
+- temporal memory queries and truth resolution;
+- correction, supersession and explicit forgetting;
+- consolidation, lifecycle maturation, interference-aware retention and reconsolidation rules;
+- graph/associative memory retrieval and topic views;
+- shared-memory synchronization and tombstones;
+- typed read-tool availability and execution;
+- evidence provenance, line-level grounding and abstention;
+- privacy boundaries and cross-player scope isolation;
+- proactive conversation suppression and community-goal utility decisions;
+- physical action validation and verified action outcomes;
+- model-call/tool-call/deadline budgets and request prioritization.
+
+When production exposes a deterministic failure mode, add the failing scenario before or together with the fix.
 
 ## AIlexBench
 
-`src/test/java/nl/hauntedmc/ailex/assistant/bench/AIlexBenchTest.java` is the deterministic intelligence regression harness. It does not call OpenAI. Every benchmark case must pass in CI.
+`src/test/java/nl/hauntedmc/ailex/assistant/bench/AIlexBenchTest.java` is the cross-component cognition regression layer.
 
-The current benchmark and focused regression suites cover:
+Focused unit tests answer questions such as “does this parser reject malformed metadata?” AIlexBench should answer questions closer to “given this conversation, memory state and server evidence, what is AIlex allowed to remember, retrieve, say or do?”
 
-- intent and mode routing for server facts, live state, memory/event recall and conversation;
-- selective durable-memory extraction signals;
-- real semantic-vs-lexical retrieval fusion behavior through a deterministic embedding fake;
-- temporal correction resolution and historical validity;
-- explicit claim/event/episode/relationship-edge memory semantics;
-- full line-level evidence coverage and evidence-source classes;
-- typed read-tool capability availability, execution and negative evidence;
-- privacy rejection for identifiers/coordinates and cross-player scope isolation;
-- proactive abstention inside player dialogue and broadcast override;
-- shared-memory pagination/convergence and hot-cache-only player reads;
-- planner call, token and final-answer deadline budgets.
+The benchmark categories are informed by long-term-agent research but are adapted to Minecraft/server behavior. Important scenario families include:
 
-When a production incident exposes a new deterministic cognitive failure mode, add a benchmark case or a focused regression test before changing the implementation. Provider/model quality should be measured separately with replayed production-safe scenarios; deterministic CI must never depend on a live OpenAI endpoint.
+- accurate memory recall;
+- multi-session/long-range continuity;
+- temporal reasoning;
+- knowledge updates and corrections;
+- selective forgetting;
+- multi-hop/associative recall;
+- abstention when evidence is insufficient;
+- tool selection when information is missing;
+- using remembered state in a later tool/action decision;
+- staying silent in likely player-to-player conversation;
+- privacy and capability-boundary violations.
 
-## Routing, context and call economy
+Do not invent retrospective “1.6 scores.” Release comparisons are only meaningful once a scenario and scoring rule existed at the time of measurement or can be replayed reproducibly against the older code.
 
-Tests should verify:
+## Prompt tests
 
-- direct/follow-up intent classification;
-- live-state questions select the minimum direct source family needed;
-- the frozen live capability ceiling contains every permitted source an async read tool may inspect;
-- the current request is never dropped when context is clipped;
-- multi-turn working context survives compilation;
-- excessive history/evidence remains under route ceilings;
-- ordinary FAST chat stays on the plain-text path;
-- explicit first-person durable information activates the structured envelope without a second extraction call;
-- grounded/deliberate escalation only occurs when model-call and deadline budget remains.
+`AssistantPromptComposerTest` protects the prompt architecture from quietly turning back into a large repeated instruction blob.
 
-Manual prompts include `waar ben ik?`, `welk bioom is dit?`, `wat houd ik vast?`, `wat is mijn rank?`, a custom server fact, and a short contextual follow-up.
+Tests should verify that:
 
-## Neural hybrid retrieval
+- stable safety/epistemic rules live in the stable system prefix;
+- turn-specific language/length/action instructions stay dynamic;
+- Structured Outputs carries the schema rather than the prompt redundantly spelling out every JSON field;
+- procedural experience is described as strategy context, not factual authority;
+- persona prompts cannot override deterministic policy;
+- planner instructions remain compact and tell the model to stop retrieving when evidence is sufficient.
 
-Retrieval tests cover two distinct layers.
+Prompt tests assert important invariants and absence of dangerous duplication; they should not snapshot every word of a prompt.
+
+## Knowledge and retrieval
 
 ### Lexical precision
 
-Verify exact commands, aliases, Dutch/English concept expansion, phrase boosts, expiry handling, redundancy suppression and broad discovery. Exact `/command` queries should not lose precision because the semantic layer exists.
+Exact commands, feature names and server terminology need strong lexical behavior. Tests cover command/title/alias matches, phrase boosts, Dutch/English concept expansion, expiry and duplicate suppression.
+
+Adding embeddings must never make an exact `/command` lookup worse.
 
 ### Learned semantic recall
 
-`NeuralHybridRetrievalTest` uses a deterministic fake `SemanticEmbeddingProvider` so CI proves fusion without a network dependency. At least one case must have no useful lexical overlap and succeed only because the learned vector is semantically aligned. A second case verifies that an unavailable embedding provider falls back to lexical retrieval without invoking embeddings.
+`NeuralHybridRetrievalTest` uses a deterministic fake `SemanticEmbeddingProvider`. At least one test should have no useful lexical overlap and succeed because the fake semantic vectors align. Another verifies that an unavailable provider falls back to lexical retrieval without blocking.
 
-The production `OpenAiEmbeddingProvider` uses learned embeddings. Corpus vectors warm asynchronously; a cold or unavailable embedding path leaves BM25/exact retrieval usable instead of blocking a player request while the complete corpus is embedded.
+Production smoke tests can separately confirm that the configured embedding endpoint is available and that `/ailex ai status` reports semantic retrieval as active.
 
-Production smoke testing should additionally confirm the configured embeddings endpoint is available and `/ailex ai status` reports learned semantic retrieval as active. Per-request assistant diagnostics record retrieved chunk counts and evidence IDs; status exposes semantic availability and read-agent call/token totals.
+### Knowledge provenance
 
-## Memory fabric and temporal truth
+`KnowledgeDocumentParserTest` verifies the Markdown front-matter contract. Tests cover stable IDs, aliases, authority, source, update date, expiry and fail-closed handling of malformed/unsupported metadata.
 
-`MemoryRecord` remains the durable repository envelope for backward-compatible SQLite/MySQL storage. The cognitive layer separates:
+A provenance field that exists only in documentation but is ignored by retrieval is a bug.
 
-- `MemoryClaim`: evidence-backed belief with authority, temporal validity and status;
-- `MemoryEvent`: typed observation of something that happened;
-- `MemoryEpisode`: ordered aggregate of related events;
-- `MemoryEdge`: evidence-backed relational graph edge;
-- verified procedural experience: NPC-scoped lessons derived from externally grounded outcomes.
+## Memory
 
-Memory tests must cover:
+Memory tests distinguish the **active view** from **historical rows**.
 
-- SQLite/WAL persistence;
-- repository hot-index reload;
-- sensitive/invented candidate rejection;
-- player vs trusted shared scope;
-- shared learned memory accepting facts only;
-- stable-key correction/supersession;
-- historical timeline visibility;
-- current-vs-historical truth resolution;
-- disputed near-tied claims;
-- cross-kind semantic replacement;
-- explicit forgetting;
-- preferences, facts, opinions, interests and temporary goals;
-- relationship/event scoping;
-- repeated-confirmation reinforcement;
-- associative one-hop recall and duplicate suppression;
-- normal-query relevance gating so unrelated high-salience memory is not replayed;
-- broad profile recall remaining available when the player explicitly asks what AIlex remembers.
+A corrected value must become current from the correction time onward without retroactively rewriting what AIlex believed before that time.
 
-Assertions should distinguish the active view from historical rows. A corrected value receives a new validity start; it must not retroactively become true before the correction occurred.
+Coverage includes:
 
-## Shared memory repository
+- SQLite/WAL persistence and repository reload;
+- optional shared MySQL synchronization;
+- player/shared/NPC/event scope rules;
+- safe candidate acceptance and sensitive/invented candidate rejection;
+- stable-key update and supersession;
+- explicit forget/tombstone behavior;
+- current-vs-historical `MemoryTruthResolver` results;
+- disputed close conflicts;
+- event and episode storage;
+- relationship continuity;
+- graph-assisted associative recall;
+- lifecycle stage derivation;
+- consolidation eligibility;
+- interference-based retention/decay;
+- verified-use reconsolidation;
+- topic-structured context with evidence identity retained.
 
-SQLite remains the self-contained development/single-runtime backend. MySQL is the shared authoritative backend for one AIlex identity across simultaneously running servers. Player-facing reads use the in-memory audience index only; shared database synchronization runs off-thread.
-
-Shared synchronization uses a database-owned monotonic change sequence rather than server wall-clock timestamps. Tests cover pagination beyond one 2,048-row batch so bursts cannot silently lose updates.
-
-Operational checks for shared memory:
-
-1. runtime A writes a safe player/shared fact;
-2. runtime B sees it after `shared_sync_seconds`;
-3. a correction replaces the active value on both runtimes;
-4. forgetting/tombstoning removes the active value on both runtimes;
-5. database unavailability never performs synchronous network I/O on the Paper tick thread;
-6. when MySQL is explicitly selected but unavailable at startup, AIlex uses a non-persistent memory fail-safe rather than silently creating divergent per-server SQLite identities.
+Retrieving a memory must not increase its factual confidence. Reconsolidation may affect accessibility/salience only after a verified use/outcome path.
 
 ## Verified procedural experience
 
-`AssistantExperienceMemoryServiceTest` verifies that procedural lessons are NPC-scoped `EPISODE` records tagged `experience`, `procedural` and `verified`, and that recall filters out ordinary NPC episodes or player memory.
+`AssistantExperienceMemoryService` stores lessons about how AIlex behaved, not facts about a player.
 
-Experience must only be written from deterministic acceptance/rejection/tool outcomes or other trusted signals. Free-form model self-criticism is never durable experience by itself. Experience observations are strategy-only context and are not exposed as factual evidence IDs for player-facing claims.
+Tests must ensure experience is written only from a deterministic/trusted outcome such as a verified correction, grounding failure, successful read-tool path or validated physical-action result. Free-form model self-criticism is never sufficient.
 
-## Evidence packets and claim-level grounding
+Experience may influence later strategy but cannot be offered as factual evidence for a player-facing server claim.
 
-`EvidencePacket` is the normalized deterministic envelope for reviewed knowledge, memory and live evidence. `AssistantReply.claimEvidence` maps each emitted factual line to exact evidence IDs.
+## Evidence and grounding
 
-Grounding tests must verify:
+Grounded routes use `EvidencePacket`, `AssistantEpistemicPolicy` and line-level `claim_evidence`.
 
-- unknown source ID rejection;
-- correct source-family requirement for server/live/memory routes;
-- deterministic negative evidence (`knowledge.none`, `memory.none`, `live.*.none`) can support an abstention but not an invented fact;
-- `claim_evidence` indexes within the emitted line range;
-- every evidence-bearing output line has at least one mapping;
-- the union of cited IDs is covered by the line mappings;
-- partial multi-line grounding becomes invalid;
-- plain casual chat remains valid without artificial citations;
-- invalid grounded output can escalate only within the configured call/deadline budget;
-- final fallback abstains instead of fabricating a HauntedMC fact.
+Tests cover:
 
-`AssistantReplyTest`, `AssistantGroundingPolicyTest` and `EvidencePacketTest` form the fail-closed evidence contract.
+- unknown evidence ID rejection;
+- correct provenance family for server/live/memory routes;
+- positive vs negative observations;
+- `knowledge.none`, `memory.none` and `live.*.none` causing search/abstention rather than validating an invented positive fact;
+- every factual output line being covered by valid evidence IDs;
+- partial multi-line grounding rejection;
+- ordinary casual chat remaining possible without fake citations;
+- bounded retry/escalation when an answer is ungrounded.
 
-## Bounded typed read-agent
+## Typed read-agent
 
-`AssistantTool` and `AssistantToolRegistry` are the model-facing capability boundary. The planner never receives arbitrary Java/plugin access: each tool owns a strict schema, deterministic permission predicate and bounded executor. The current registry exposes memory search/timeline, verified experience recall, reviewed knowledge search and frozen live-state inspection only when their configured capabilities are allowed.
+The read-agent is tested as a bounded information-acquisition controller.
 
-The read-agent should be tested as an evidence-acquisition controller, not as an open-ended autonomous agent. Important cases:
+Important cases:
 
-- a complete live snapshot skips planning;
-- strong reviewed server evidence skips planning;
-- normal vanilla gameplay help remains cheap when deterministic evidence is sufficient;
-- a temporal memory question may request `search_memory_timeline`;
-- a server-specific evidence miss may perform a focused knowledge search;
-- only registered and permitted read tools can execute;
-- malformed/unknown tool calls fail closed;
-- per-round call count and total model-call/deadline budgets are enforced;
-- planner input/output token usage is observable;
-- tool output contains only already-authorized memory/knowledge/frozen-live facts.
+- sufficient initial evidence skips planning;
+- temporal history can request a memory timeline;
+- missing HauntedMC evidence can trigger a focused knowledge search;
+- only explicitly registered and permitted tools execute;
+- malformed and unknown tool calls fail closed;
+- equivalent duplicate tool calls are suppressed;
+- tool output contains only already-authorized memory/knowledge/frozen-live information;
+- planner/tool/model/deadline budgets are respected.
 
-No test should grant command execution, arbitrary SQL, filesystem access or plugin reflection to prove agent behavior.
+No test should grant arbitrary commands, SQL, filesystem or plugin reflection merely to demonstrate “agent” behavior.
 
-## Proactive community intelligence
+## Social behavior
 
-False positives matter more than response rate. `SocialConversationGraph` is now the single transient social/thread model. It combines decaying pair edges with a bounded volatile speaker/message window used for direct-address history and alternation detection. The window is never persisted and is not a friendship, affinity or psychological profile.
+False-positive intervention is more harmful than AIlex missing an opportunity to speak.
 
-Test at least:
+`SocialConversationGraph`, `ProactiveInterventionPolicy` and `ProactiveGoalService` should be tested for:
 
-1. a self-contained public question with no active conversation;
-2. a question directly naming/tagging another player;
-3. two players alternating messages followed by a contextual `?` reply;
-4. recent direct-address history followed by a question without the name;
-5. a strong transient social-pair connection suppressing contextual intervention;
-6. pair strength and thread history decaying/pruning after their windows;
-7. an explicit broadcast question (`weet iemand...?` / `anyone know...?`) overriding suppression;
-8. shared cooldown behavior;
-9. direct-request capacity remaining available while proactive work exists.
+- a self-contained public question;
+- direct address to another player;
+- alternating player-to-player dialogue;
+- contextual replies inside a recent thread;
+- explicit broadcast cues overriding ordinary suppression;
+- welcome/help/celebrate/connect/defuse/inform goals;
+- `SILENCE` as a successful policy result;
+- privacy, error and repetition costs;
+- private follow-ups derived only from an explicit stored goal;
+- cooldown/age bounds on follow-ups;
+- no persistent friendship/psychological inference.
 
-## Live integration and privacy
+## Controlled actions
 
-Provider tests should ensure:
+The model only proposes an action. Tests for `AssistantActionService` and action-outcome recording must prove that deterministic code rejects proposals unless the player's message explicitly requests the matching allowed action and current NPC/world state is compatible.
 
-- invalid/sensitive keys are rejected;
-- IP addresses, e-mail/UUID/credential-shaped values are rejected;
-- oversized facts are bounded;
-- provider failure does not fail the whole assistant request;
-- provider-qualified keys prevent silent collisions;
-- other-player private state is never exposed through requester context.
+Validated outcomes can become events/procedural lessons. The model cannot label its own physical action as successful.
 
-Never test privacy by intentionally sending a secret to the model and hoping the prompt removes it later. The data boundary must reject unsafe context before model invocation.
+## Shared memory
 
-## Reliability and concurrency
+For a multi-runtime deployment, operational testing should verify:
 
-Cover:
+1. runtime A writes a safe memory;
+2. runtime B sees it after the configured synchronization interval;
+3. a correction replaces the active value on both runtimes;
+4. a tombstone removes the active value on both runtimes;
+5. synchronization remains off the Paper tick thread;
+6. a burst larger than one change page is fully consumed;
+7. an unavailable explicitly configured MySQL backend does not silently create independent authoritative SQLite histories.
 
-- invalid structured-output retry limits;
-- circuit-breaker behavior;
-- direct/follow-up queue priority;
-- same-player queued-turn replacement;
-- bounded load under many requests;
-- context-fingerprinted static caching;
-- embedding failure fallback;
-- shared-memory backend fallback;
-- deadline exhaustion and safe response fallback;
-- request traces accurately reporting route/model/tool outcome.
+## Manual smoke test
 
-## Manual production smoke test
-
-After deploying to a test server, inspect:
+After deploying a candidate build, inspect:
 
 ```text
 /ailex ai status
@@ -206,6 +217,18 @@ After deploying to a test server, inspect:
 /ailex trace recent
 ```
 
-Then exercise: a normal conversation, multi-turn follow-up, live biome/item/custom-feature queries, exact-command server knowledge, a semantic paraphrase, open-ended discovery, explicit first-person fact/preference/goal, correction, explicit forget, temporal recall, a two-player conversation AIlex must not interrupt, and an explicit broadcast question it may answer.
+Then exercise at least:
 
-For a multi-runtime deployment, repeat a memory correction/forget across two servers and confirm active state converges through the shared repository.
+- normal conversation and a contextual follow-up;
+- current biome/item/live feature state;
+- an exact HauntedMC command question;
+- a semantic paraphrase of a knowledge item;
+- an explicit preference/fact/goal;
+- a correction and historical recall of the old value;
+- an explicit forget request;
+- a question with insufficient evidence that should abstain;
+- a two-player conversation AIlex should not interrupt;
+- an explicit public question AIlex may answer;
+- an allowed physical NPC request and a similar request that should be rejected.
+
+For a shared-memory deployment, repeat correction/forget tests across two Paper runtimes and confirm convergence.

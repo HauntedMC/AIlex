@@ -32,24 +32,53 @@ public final class AssistantExperienceMemoryService {
             String outcome,
             Set<String> evidenceIds
     ) {
+        return recordVerifiedOutcome(
+                npcId,
+                intent,
+                inferType(outcome),
+                lessonKey,
+                lesson,
+                outcome,
+                evidenceIds
+        );
+    }
+
+    public MemoryRecord recordVerifiedOutcome(
+            String npcId,
+            AssistantIntent intent,
+            ExperienceType type,
+            String lessonKey,
+            String lesson,
+            String outcome,
+            Set<String> evidenceIds
+    ) {
         if (memoryService == null || blank(npcId) || blank(lessonKey) || blank(lesson)) {
             return null;
         }
+        ExperienceType effectiveType = type == null ? ExperienceType.USER_FEEDBACK : type;
         String normalizedOutcome = clean(outcome).toLowerCase(Locale.ROOT);
-        boolean failure = normalizedOutcome.contains("fail") || normalizedOutcome.contains("reject")
-                || normalizedOutcome.contains("unverified") || normalizedOutcome.contains("correction");
+        boolean failure = switch (effectiveType) {
+            case FAILED_ANSWER, CORRECTION, RETRIEVAL_FAILURE, AMBIGUOUS_INTENT, UNHELPFUL_INTERRUPTION -> true;
+            case SUCCESSFUL_TOOL_PATH, USER_FEEDBACK, HANDOFF_SUCCESS -> normalizedOutcome.contains("fail")
+                    || normalizedOutcome.contains("reject") || normalizedOutcome.contains("unverified");
+        };
         Set<String> tags = new java.util.HashSet<>();
         tags.add("experience");
         tags.add("procedural");
         tags.add("verified");
         tags.add(failure ? "failure" : "success");
+        tags.add("experience-" + effectiveType.name().toLowerCase(Locale.ROOT).replace('_', '-'));
         if (intent != null) {
             tags.add("intent-" + intent.name().toLowerCase(Locale.ROOT));
         }
         if (evidenceIds != null) {
             evidenceIds.stream().map(this::safeTag).filter(value -> !value.isBlank()).limit(8).forEach(tags::add);
         }
-        String value = compact("lesson=" + clean(lesson) + " | outcome=" + normalizedOutcome);
+        String value = compact(
+                "type=" + effectiveType.name().toLowerCase(Locale.ROOT)
+                        + " | lesson=" + clean(lesson)
+                        + " | outcome=" + normalizedOutcome
+        );
         return memoryService.rememberTrusted(
                 MemoryScope.NPC,
                 clean(npcId),
@@ -57,8 +86,8 @@ public final class AssistantExperienceMemoryService {
                 MemoryKind.EPISODE,
                 "experience." + safeKey(lessonKey),
                 value,
-                failure ? 0.98D : 0.92D,
-                failure ? 0.92D : 0.78D,
+                failure ? 0.98D : 0.94D,
+                failure ? 0.92D : 0.82D,
                 "runtime-verified-experience",
                 normalizedOutcome,
                 System.currentTimeMillis(),
@@ -82,6 +111,42 @@ public final class AssistantExperienceMemoryService {
                 .filter(record -> record.tags().contains("experience"))
                 .limit(Math.clamp(maximumResults, 1, 16))
                 .toList();
+    }
+
+    /** Success/failure history for one reusable strategy key, used as a conservative test-time learned prior. */
+    public StrategyStatistics statistics(UUID playerId, String npcId, String lessonKey) {
+        if (memoryService == null || playerId == null || blank(npcId) || blank(lessonKey)) {
+            return new StrategyStatistics(0, 0);
+        }
+        String key = "experience." + safeKey(lessonKey);
+        List<MemoryRecord> matches = memoryService.timeline(playerId, npcId, key, 32).stream()
+                .filter(record -> record.scope() == MemoryScope.NPC)
+                .filter(record -> record.tags().contains("experience"))
+                .filter(record -> record.key().equals(key))
+                .toList();
+        int successes = (int) matches.stream().filter(record -> record.tags().contains("success")).count();
+        int failures = (int) matches.stream().filter(record -> record.tags().contains("failure")).count();
+        return new StrategyStatistics(successes, failures);
+    }
+
+    private ExperienceType inferType(String outcome) {
+        String normalized = clean(outcome).toLowerCase(Locale.ROOT);
+        if (normalized.contains("correction")) {
+            return ExperienceType.CORRECTION;
+        }
+        if (normalized.contains("retrieval") && (normalized.contains("fail") || normalized.contains("miss"))) {
+            return ExperienceType.RETRIEVAL_FAILURE;
+        }
+        if (normalized.contains("tool") && normalized.contains("success")) {
+            return ExperienceType.SUCCESSFUL_TOOL_PATH;
+        }
+        if (normalized.contains("handoff") && normalized.contains("success")) {
+            return ExperienceType.HANDOFF_SUCCESS;
+        }
+        if (normalized.contains("unverified") || normalized.contains("reject") || normalized.contains("fail")) {
+            return ExperienceType.FAILED_ANSWER;
+        }
+        return ExperienceType.USER_FEEDBACK;
     }
 
     private String safeKey(String value) {
@@ -110,5 +175,17 @@ public final class AssistantExperienceMemoryService {
 
     private String clean(String value) {
         return value == null ? "" : value.replaceAll("\\s+", " ").trim();
+    }
+
+    public record StrategyStatistics(int successes, int failures) {
+        public StrategyStatistics {
+            successes = Math.max(0, successes);
+            failures = Math.max(0, failures);
+        }
+
+        public double successRate() {
+            int total = successes + failures;
+            return total == 0 ? 0.5D : (double) successes / total;
+        }
     }
 }

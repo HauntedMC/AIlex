@@ -57,6 +57,9 @@ public final class AssistantMemoryService implements AutoCloseable {
     private final JavaPlugin plugin;
     private final MemoryRepository repository;
     private final MemoryTruthResolver truthResolver = new MemoryTruthResolver();
+    private final MemoryRetentionPolicy retentionPolicy = new MemoryRetentionPolicy();
+    private final MemoryGraphRetriever graphRetriever = new MemoryGraphRetriever();
+    private final AssistantMemoryConsolidator consolidator;
     private final Map<String, MemoryRecord> activeRecords = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> audienceIndex = new ConcurrentHashMap<>();
     private final Map<UUID, Map<String, Integer>> recentTopicTerms = new ConcurrentHashMap<>();
@@ -84,6 +87,7 @@ public final class AssistantMemoryService implements AutoCloseable {
             thread.setDaemon(true);
             return thread;
         });
+        this.consolidator = new AssistantMemoryConsolidator(this);
         long initialSharedSequence = repository.shared() ? repository.latestChangeSequence() : 0L;
         loadFromRepository();
         sharedChangeSequence = initialSharedSequence;
@@ -91,6 +95,16 @@ public final class AssistantMemoryService implements AutoCloseable {
         writer.execute(() -> repository.deleteExpiredBefore(Instant.now().minus(Duration.ofDays(30)).toEpochMilli()));
         if (repository.shared()) {
             writer.scheduleWithFixedDelay(this::refreshSharedRepositorySafely, 0L, 1L, TimeUnit.SECONDS);
+        }
+        if (consolidationEnabled()) {
+            writer.scheduleWithFixedDelay(
+                    this::consolidateSafely, 60L, consolidationIntervalMinutes(), TimeUnit.MINUTES
+            );
+        }
+        if (retentionEnabled()) {
+            writer.scheduleWithFixedDelay(
+                    this::maintainRetentionSafely, 5L, retentionIntervalMinutes(), TimeUnit.MINUTES
+            );
         }
     }
 
@@ -383,9 +397,11 @@ public final class AssistantMemoryService implements AutoCloseable {
         long now = System.currentTimeMillis();
         Set<String> queryTerms = Set.copyOf(significantWords(query));
         String normalizedQuery = clean(query).toLowerCase(Locale.ROOT);
+        MemoryTemporalQuery temporalQuery = MemoryTemporalQuery.parse(query, now);
 
         List<ScoredMemory> primary = visibleCandidates(player, npc, now).stream()
                 .filter(record -> effectiveKinds.contains(record.kind()))
+                .filter(temporalQuery::matches)
                 .map(record -> new ScoredMemory(
                         record,
                         memoryScore(record, queryTerms, normalizedQuery, player, npc, now)
@@ -396,11 +412,17 @@ public final class AssistantMemoryService implements AutoCloseable {
             return List.of();
         }
 
+        Map<String, Double> seedScores = new java.util.LinkedHashMap<>();
+        primary.stream().limit(24).forEach(scored -> seedScores.put(scored.record().id(), Math.max(0.0D, scored.score())));
+        Map<String, Double> graphScores = graphRetrievalEnabled()
+                ? graphRetriever.graphScores(primary.stream().map(ScoredMemory::record).toList(), seedScores)
+                : Map.of();
         Set<String> bridgeTerms = associationBridgeTerms(primary, queryTerms);
         List<ScoredMemory> associated = primary.stream()
                 .map(scored -> new ScoredMemory(
                         scored.record(),
                         scored.score() + associationBonus(scored.record(), bridgeTerms, queryTerms)
+                                + graphRetrievalWeight() * graphScores.getOrDefault(scored.record().id(), 0.0D)
                 ))
                 .sorted(Comparator.comparingDouble(ScoredMemory::score).reversed()
                         .thenComparing(Comparator.comparingLong(
@@ -618,6 +640,97 @@ public final class AssistantMemoryService implements AutoCloseable {
                 "openai.assistant.memory.storage.shared_sync_seconds", 5
         ), 1, 60);
         return TimeUnit.SECONDS.toMillis(seconds);
+    }
+
+    /** Deterministic test/admin hook; production consolidation runs on the memory writer executor. */
+    public AssistantMemoryConsolidator.ConsolidationReport consolidateNow() {
+        return consolidator.consolidate();
+    }
+
+    private void consolidateSafely() {
+        if (closed || !consolidationEnabled()) {
+            return;
+        }
+        try {
+            consolidator.consolidate();
+        } catch (RuntimeException exception) {
+            warn("Could not consolidate assistant memory: " + exception.getMessage());
+        }
+    }
+
+    /** Reactivates only evidence that was actually used in a validated answer; factual confidence is unchanged. */
+    public synchronized void reconsolidateVerifiedEvidence(Set<String> evidenceIds) {
+        if (closed || evidenceIds == null || evidenceIds.isEmpty()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        Set<String> ids = evidenceIds.stream()
+                .filter(id -> id != null && id.startsWith("memory."))
+                .map(id -> id.substring("memory.".length()))
+                .collect(java.util.stream.Collectors.toSet());
+        if (ids.isEmpty()) {
+            return;
+        }
+        activeRecords.values().stream()
+                .filter(record -> ids.contains(record.id()))
+                .map(record -> retentionPolicy.reconsolidateVerifiedUse(record, now))
+                .filter(java.util.Objects::nonNull)
+                .forEach(this::store);
+    }
+
+    private void maintainRetentionSafely() {
+        if (closed || !retentionEnabled()) {
+            return;
+        }
+        try {
+            long now = System.currentTimeMillis();
+            List<MemoryRecord> snapshot = activeSnapshot();
+            for (MemoryRecord record : snapshot) {
+                if (retentionPolicy.shouldExpire(record, now, snapshot)
+                        && activeRecords.remove(record.identityKey(), record)) {
+                    unindexRecord(record);
+                    repository.upsert(record.expireAt(now));
+                }
+            }
+        } catch (RuntimeException exception) {
+            warn("Could not maintain assistant memory retention: " + exception.getMessage());
+        }
+    }
+
+    private boolean retentionEnabled() {
+        FileConfiguration config = plugin.getConfig();
+        return config == null || config.getBoolean("openai.assistant.memory.retention.enabled", true);
+    }
+
+    private long retentionIntervalMinutes() {
+        FileConfiguration config = plugin.getConfig();
+        return config == null ? 30L : Math.clamp(config.getLong(
+                "openai.assistant.memory.retention.interval_minutes", 30L
+        ), 5L, 24L * 60L);
+    }
+
+    private boolean consolidationEnabled() {
+        FileConfiguration config = plugin.getConfig();
+        return config == null || config.getBoolean("openai.assistant.memory.consolidation.enabled", true);
+    }
+
+    private long consolidationIntervalMinutes() {
+        FileConfiguration config = plugin.getConfig();
+        return config == null ? 15L : Math.clamp(config.getLong(
+                "openai.assistant.memory.consolidation.interval_minutes", 15L
+        ), 5L, 24L * 60L);
+    }
+
+    private boolean graphRetrievalEnabled() {
+        FileConfiguration config = plugin.getConfig();
+        return config == null || config.getBoolean("openai.assistant.memory.retrieval.graph_enabled", true);
+    }
+
+    private double graphRetrievalWeight() {
+        FileConfiguration config = plugin.getConfig();
+        return config == null ? 0.35D : Math.clamp(config.getDouble(
+                "openai.assistant.memory.retrieval.graph_weight", 0.35D
+        ), 0.0D, 2.0D);
     }
 
     private List<MemoryRecord> visibleCandidates(String playerId, String npcId, long now) {

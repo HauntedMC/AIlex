@@ -1,170 +1,216 @@
 # AIlex Architecture
 
-AIlex is a bounded cognitive assistant runtime around Paper and Citizens. Deterministic server code owns permissions, privacy, capability ceilings, memory acceptance and answer validation. The language model performs interpretation, source selection and generation inside that boundary; it never receives arbitrary server mutation or plugin access.
+This document describes the current cognitive assistant architecture. It is intentionally more technical than the main README; start there if you first want to understand what AIlex does from a player or server-owner perspective.
 
-## Design principles
+## The central design rule
 
-AIlex optimizes for five properties simultaneously:
+AIlex separates **reasoning** from **authority**.
 
-1. **Grounded correctness** — server-specific and live claims require attributable positive evidence.
-2. **Selective lifelong memory** — durable identity is represented as typed claims/events/relationships, not transcript replay.
-3. **Temporal consistency** — corrections and historical states remain distinguishable instead of being flattened into one value.
-4. **Bounded agency** — information seeking is allowed only through registered read tools and strict call/deadline budgets.
-5. **Low intervention cost** — deterministic routing/retrieval runs before model planning, and proactive behavior stays out of likely player conversations.
+The language model is allowed to interpret natural language, decide which already-permitted information would be useful, combine evidence and propose a response. Deterministic Java code owns permissions, privacy, the model-facing capability boundary, memory acceptance, source precedence, answer verification and every server mutation.
 
-## Request flow
+That split is the reason AIlex can become more capable without giving an LLM arbitrary access to a Paper server.
 
-A direct addressed message or accepted follow-up enters `AssistantChatController`. The controller records compact dialogue state, freezes permitted Paper state on the server thread and submits the request to `AssistantRequestCoordinator`. Direct and follow-up requests have priority over proactive work, and queue capacity is bounded.
+## Request lifecycle
 
-`AssistantService` then performs:
+A direct request enters `AssistantChatController`, which records compact dialogue state and asks `AssistantService` to prepare the turn while Bukkit access is safe on the server thread.
 
-1. deterministic intent/language analysis and capability planning;
-2. safe immutable live-state capture;
-3. query-ranked typed-memory retrieval;
-4. reviewed knowledge retrieval or discovery;
-5. an information-gain decision on whether a bounded planner/read-tool call can add missing evidence;
-6. route-budgeted context compilation;
-7. adaptive model generation;
-8. line-level evidence validation;
-9. validated semantic-memory and verified-experience updates;
-10. diagnostics, caching and delivery.
+The normal request path is:
 
-The read-agent is not the default cost path. Complete live state or strong reviewed/memory evidence skips planning.
+1. `AssistantIntentClassifier` performs deterministic routing and language detection.
+2. `RequiredContextPlanner` defines the initial information needs and capability-safe source plan.
+3. `SemanticNeedPlanner` may refine ambiguous information needs without expanding permissions.
+4. Safe live Minecraft state is copied into an immutable `LiveSnapshot`.
+5. Relevant typed memory and reviewed knowledge are retrieved.
+6. `AssistantReadAgent` may request additional read-only evidence if the initial evidence is insufficient.
+7. `ContextCompiler` assembles a bounded prompt.
+8. The configured model profile generates a structured reply.
+9. `AssistantGroundingPolicy` and `AssistantEpistemicPolicy` validate evidence use and provenance.
+10. Accepted memory candidates, verified procedural experience and approved physical action proposals pass through separate deterministic validators.
+11. The response is delivered and observability counters/traces are updated.
 
-## Dialogue and working memory
+The expensive path is not the default path. Complete deterministic evidence can skip model-driven information seeking entirely.
 
-`AssistantConversationManager` retains a compact active player↔assistant multi-turn window for natural follow-ups. Ambient chat is a separate short-lived source included only when `WorkingContextPolicy` judges it useful.
+## Prompt architecture
 
-Working context and durable memory intentionally solve different problems:
+`AssistantPromptComposer` keeps prompt responsibilities separate:
 
-- working context preserves immediate conversational state;
-- claim memory preserves selected current/historical beliefs;
-- event/episode memory preserves meaningful occurrences;
-- relationship edges preserve factual entity relationships;
-- procedural experience stores verified lessons about assistant strategies;
-- reviewed knowledge stores operator-controlled HauntedMC facts.
+- a stable cognitive/epistemic contract that changes rarely and is suitable for provider-side prompt caching;
+- small turn-specific instructions such as response language and chat-line budget;
+- NPC/persona prompts that describe personality rather than duplicating safety, memory and evidence rules;
+- tool-specific guidance inside the tool definitions themselves.
 
-Raw conversation replay is not AIlex's long-term identity.
+Structured Outputs is responsible for the reply shape. The system prompt therefore does not waste tokens repeatedly describing the entire JSON schema.
 
-## Context planning and token economics
+Prompt instructions are advisory; deterministic validation remains authoritative if the model ignores them.
 
-`RequiredContextPlanner` is a fast deterministic prior and permission-safe source planner. `ContextCompiler` allocates each route's input ceiling across the current request, active dialogue, live state, durable memory, reviewed evidence and optional short-lived chat. The bounded model planner can refine missing information needs only within already-permitted capabilities.
+## Context and token economy
 
-Configured token limits are ceilings, not targets. Results are ranked, deduplicated and clipped before prompt assembly. The read loop is information-gain gated and defaults to one round, leaving room for final generation and bounded corrective escalation. Planner input/output tokens are counted separately.
+AIlex does not expose every available source on every request. `ContextCompiler` allocates route-specific budgets to:
 
-## Live Minecraft state
+- the current player request;
+- active dialogue;
+- relevant durable memory;
+- reviewed knowledge;
+- selected live Minecraft state;
+- read-tool observations when the bounded agent requested them.
 
-Live data is captured synchronously on the Paper thread and copied into an immutable snapshot before asynchronous model work. For grounded live requests with the read-agent enabled, `AssistantLiveCapturePolicy` freezes the authorized safe superset required by any permitted later `inspect_live` call; the direct prompt still includes only planner-selected sources.
+Configured token counts are ceilings, not targets. Sources are ranked, clipped and deduplicated before prompt assembly. Planner input/output tokens are counted separately from final answer generation.
 
-Safe sources include requester state, bounded inventory/equipment, world/target context, nearby entity summaries, player-safe server health, NPC state and trusted custom feature facts from `AssistantContextProvider`s. Integration data passes deterministic safety checks. Credentials, network identifiers, staff-only information, reports/sanctions, configuration, filesystem paths and infrastructure secrets are excluded before model invocation.
+## Live Minecraft information
 
-## Reviewed knowledge and neural hybrid retrieval
+Paper state must be captured on the server thread. `AssistantLiveCapturePolicy` determines which safe source families may be frozen before asynchronous reasoning starts.
 
-`LocalKnowledgeIndex` combines complementary retrieval signals:
+The safe live surface can include requester state, a bounded inventory/equipment summary, position/world/biome information, target state, nearby entity summaries, server health and NPC state. Trusted HauntedMC plugins can expose additional player-safe facts through `AssistantContextProvider`.
 
-- BM25-style lexical relevance;
-- exact command/title/alias matching and phrase boosts;
-- multilingual concept expansion;
-- learned OpenAI semantic embeddings;
-- reciprocal-rank fusion between lexical and semantic rankings;
-- authority/expiry filtering;
-- redundancy and diversity suppression.
+The provider API is an explicit integration boundary. It does not give the model reflection-based or arbitrary access to other plugins.
 
-Exact commands and HauntedMC terminology remain lexical-first. Learned embeddings recover paraphrases and meaning-level matches. Corpus vectors warm asynchronously; if the embedding endpoint is cold/unavailable, player requests continue with lexical retrieval instead of synchronously embedding the entire corpus. Query/document vectors and search results are bounded/cached.
+Sensitive infrastructure data, secrets, credentials, reports, sanctions and hidden staff information are rejected before model invocation.
 
-## Typed bounded read-agent
+## Reviewed knowledge
 
-`AssistantTool` and `AssistantToolRegistry` form the model-facing capability boundary. The current registry contains only explicit read capabilities:
+`LocalKnowledgeIndex` retrieves operator-maintained HauntedMC knowledge using several complementary signals:
 
-- `search_memory`;
-- `search_memory_timeline`;
-- `search_experience`;
-- `search_knowledge`;
-- `inspect_live` over the frozen safe snapshot.
+- lexical/BM25-style relevance;
+- exact command, title and alias matches;
+- phrase and multilingual concept signals;
+- learned semantic embeddings;
+- reciprocal-rank fusion;
+- source authority and freshness;
+- expiry filtering;
+- redundancy/diversity suppression.
 
-Each tool owns its strict schema, availability predicate and deterministic executor. The planner cannot discover arbitrary Java/plugin methods, execute commands, access SQL/filesystem internals or create capabilities. Unknown/malformed/disallowed tool requests fail closed.
+Exact Minecraft commands remain strongly lexical because embeddings should not make `/claim` less precise. Semantic vectors help with paraphrases and meaning-level matches.
 
-The planner may iterate only up to configured model/tool/deadline budgets. Temporal recall can request a timeline; a server-specific evidence miss can reformulate a focused knowledge query. Ordinary vanilla gameplay stays out of the planner loop and can use general Minecraft knowledge directly.
+`KnowledgeDocumentParser` reads the Markdown front matter used by reviewed documents. Supported metadata includes stable evidence ID, aliases, category, authority, source, update date and expiry. Unknown or malformed metadata fails conservatively instead of silently becoming trusted provenance.
 
-## Memory fabric
+Corpus embeddings warm asynchronously. If the embedding endpoint is unavailable, lexical retrieval remains usable.
 
-`AssistantMemoryService` maintains an audience-indexed hot store backed by `MemoryRepository`. `MemoryRecord` remains the compact backward-compatible durable storage envelope, while the cognitive layer exposes separate semantic views:
+## Bounded read-agent
 
-- `MemoryClaim` — what AIlex believes, with subject/predicate/object, source authority, confidence, salience, validity, status and evidence;
-- `MemoryEvent` — what happened at a point in time;
-- `MemoryEpisode` — an ordered aggregate of related events;
-- `MemoryEdge` — an evidence-backed relationship between entities;
-- procedural experience — verified lessons about how AIlex should retrieve/respond.
+`AssistantTool` and `AssistantToolRegistry` define the complete model-facing read surface. The current tools cover:
 
-This separation prevents “what happened”, “what is believed”, “how entities relate” and “what strategy worked” from collapsing into one semantic record type.
+- scoped durable memory search;
+- memory timeline search;
+- verified procedural-experience search;
+- reviewed knowledge search;
+- inspection of permitted families from the already-frozen live snapshot.
 
-### Formation, correction and forgetting
+Each tool owns a strict schema, permission predicate and deterministic implementation. The planner cannot discover arbitrary Java methods, commands, filesystem paths, SQL access or plugin APIs.
 
-Model-proposed memory operations are accepted only when deterministically supported by the source message, non-sensitive and correctly scoped. Shared learned memory is fact-only and permission-gated.
+`AssistantReadAgent` runs only when deterministic evidence appears insufficient. The loop has explicit model-call, tool-call and deadline budgets and suppresses equivalent duplicate calls. It is an information-acquisition controller, not an unrestricted autonomous agent.
 
-Stable semantic keys make updates deterministic. A changed value receives a new validity start; the previous version retains its historical interval and becomes superseded. Cross-kind conflicts for one player key are removed from the active view. Explicit forgetting tombstones the selected meaning. Repeated confirmation reinforces an existing value rather than generating duplicate history.
+## Epistemic policy and grounding
 
-## Temporal truth and epistemology
+`AssistantEpistemicPolicy` distinguishes source families such as live runtime observations, reviewed knowledge, player/shared memory, event memory and negative lookup observations.
 
-`MemoryTruthResolver` resolves `MemoryClaim`s at an arbitrary point in time. It filters by validity and scores source authority, confidence, recency, salience and scope. Explicit supersession is deterministic. Near-tied conflicting values are exposed as `DISPUTED` rather than silently chosen.
+Source class and model confidence are deliberately different concepts. A confident model statement does not make weak evidence authoritative.
 
-Player authority is proposition-dependent: explicit player-owned preferences are strong evidence about that player; an ordinary player does not become authoritative for global server facts merely by stating them. Trusted/reviewed/runtime sources carry higher global authority. The LLM never decides which repository row is freshest.
+Important precedence rules include:
 
-## Shared/network identity
+- current live runtime state is preferred for questions about current state;
+- reviewed/operator-controlled knowledge outranks ordinary learned shared claims for HauntedMC facts;
+- a player's current explicit statement about themself can supersede older player memory;
+- historical questions use temporal/event memory rather than pretending the current value was always true;
+- procedural experience can guide strategy but cannot ground a factual claim about the server or player.
 
-SQLite/WAL is the self-contained development/single-runtime backend. MySQL is the authoritative multi-runtime backend for one network-wide AIlex memory identity.
+`EvidencePacket` normalizes the evidence set available for validation. Grounded structured replies contain line-level evidence mappings. Unknown evidence IDs, wrong provenance families and negative-only evidence fail closed.
 
-Player-facing reads use the in-memory audience index only. Shared synchronization runs off-thread and consumes a database-owned monotonic change sequence in bounded pages, including tombstones. This avoids Paper tick-thread network I/O, wall-clock skew and dropped bursts larger than one page.
+A retrieval miss is useful information for deciding to search again or abstain; it is not evidence that an invented answer is true.
 
-If MySQL is explicitly configured but unavailable at startup, AIlex uses a non-persistent fail-safe instead of silently creating divergent per-server SQLite histories. A multi-runtime deployment should treat `shared_memory=false` as an operational fault to fix, not as a second authoritative identity.
+## Long-term memory
 
-## Verified procedural experience
+`AssistantMemoryService` maintains a fast audience-indexed active view backed by a `MemoryRepository`. `MemoryRecord` remains the compact storage envelope, while higher-level code distinguishes different meanings:
 
-`AssistantExperienceMemoryService` stores compact lessons only from deterministic acceptance/rejection/tool outcomes or externally grounded corrections. Experience is NPC-scoped and strategy-only when injected into reasoning; it cannot masquerade as factual evidence about a player or server. Free-form model self-criticism is never promoted directly to durable experience.
+- **claim memory** — a proposition AIlex currently or historically believes;
+- **event memory** — something that happened at a particular time;
+- **episode memory** — related events consolidated into a useful unit;
+- **relationship memory** — factual player↔AIlex continuity and entity relations;
+- **procedural experience** — verified lessons about retrieval, answering or action behavior.
 
-Full episodic consolidation and learned long-horizon strategy statistics remain later-roadmap work; 1.7 establishes the safe representation and verified write path they require.
+Raw chat logs are not AIlex's long-term identity.
 
-## Evidence packets and claim-level grounding
+### Formation and correction
 
-`EvidencePacket` normalizes all model-citable provenance IDs. Grounded replies additionally contain `claim_evidence`, mapping each zero-based output line to exact supporting IDs.
+The model can propose a memory candidate, but Java validates scope, source support and privacy before storage. Shared learned memory is separately permission-gated.
 
-Unknown IDs are rejected. Positive server/live/memory answers require positive evidence from the appropriate provenance family. Negative lookup observations such as `knowledge.none`, `memory.none` and `live.*.none` are useful planner context but **cannot validate a factual player-facing answer**; negative-only retrieval therefore falls through to AIlex's safe abstention/fallback path. Evidence-bearing multi-line output is invalid if any line lacks an evidence mapping.
+Stable semantic keys let a correction create a new current value while retaining historical validity. Explicit forgetting removes the active meaning without rewriting history.
 
-This is fail-closed by design: a retrieval miss never converts into permission to hallucinate.
+`MemoryTruthResolver` resolves the value appropriate to a point in time using deterministic validity/supersession and source metadata. Near-tied unresolved conflicts can remain disputed.
 
-## Social conversation model
+### Consolidation, maturation and retention
 
-`SocialConversationGraph` is the single transient model used to decide whether AIlex should intervene in public chat. It combines:
+`AssistantMemoryConsolidator` converts eligible related event material into compact episodes without asking an LLM to rewrite every conversation.
 
-- a bounded volatile recent speaker/message window for direct-address history, alternation and contextual follow-ups;
-- decaying pair edges for short-lived interaction strength.
+`MemoryLifecycleStage` and `MemoryRetentionPolicy` model lifecycle/retention separately from factual authority. Important repeated memory can mature; weak competing memory can decay through interference-aware retention. Retrieval alone does not increase factual confidence.
 
-Neither layer is persisted. The graph is not a friendship score, affection model, psychological profile or durable transcript. `ProactiveInterventionPolicy` combines this graph with public-question detection; likely player-to-player continuations are suppressed while explicit broadcast questions remain eligible. Silence is a valid successful action.
+Verified successful use may trigger reconsolidation, which can increase accessibility/salience while leaving factual authority unchanged.
 
-Full persistent social-world modelling and utility-learned intervention policy remain later-roadmap work.
+### Associative recall
 
-## Evaluation and observability
+`MemoryGraphRetriever` adds graph activation to normal relevance scoring. It uses evidence-backed memory relations to surface related material and fuses that signal with lexical relevance, salience, confidence and recency rather than replacing them.
 
-`AIlexBench` is the deterministic cognition regression harness. Focused suites extend it for semantic-only retrieval, memory temporal validity, shared synchronization, typed tool execution, evidence provenance, privacy and social intervention. CI does not depend on a live OpenAI call, so stochastic provider output cannot hide control-plane regressions.
+`MemoryTopicView` provides compact topic-structured context so a reasoning turn can receive coherent related memory without replaying the full durable store.
 
-JaCoCo coverage is enforced in CI at a regression floor (55% line / 40% branch). Provider usage accounting tracks input/output/cache tokens; the read-agent tracks planner calls/tool calls and planner input/output tokens. Completion diagnostics include route/model/outcome, retrieved chunk count, evidence IDs, claim-evidence count and latency.
+## Shared network identity
 
-Historical 1.6 model-quality scores are not retroactively invented. The stable benchmark/evidence instrumentation established here is the baseline framework for longitudinal release comparisons and replayed production-safe scenarios.
+SQLite/WAL is the self-contained single-runtime backend. MySQL is the shared backend for deployments where one AIlex identity must persist across several Paper runtimes.
 
-## Safety boundary
+Player-facing reads are served from the hot in-memory view. Shared synchronization runs off-thread and uses a database-owned monotonic change sequence, including tombstones, rather than server wall clocks.
 
-The model can generate player-facing text, request registered bounded read tools and propose memory candidates. It cannot:
+If MySQL is explicitly configured but unavailable at startup, AIlex uses a non-persistent fail-safe rather than silently creating independent authoritative SQLite histories on each server.
 
-- execute commands or mutate the Minecraft world;
-- change economy/moderation state;
-- write arbitrary files/database rows;
-- inspect arbitrary plugins/configuration;
+## Verified experience learning
+
+`AssistantExperienceMemoryService` stores strategy lessons only when an external/deterministic outcome supports them. Examples include accepted or rejected grounding, a verified correction, a successful tool path, a failed retrieval route or a deterministically validated physical action outcome.
+
+The model cannot write “I think I did badly” and have that become a durable lesson. Self-criticism without evidence is not learning.
+
+Experience remains NPC/strategy scoped and is not player-facing factual evidence.
+
+## Dialogue, relationships and social participation
+
+Immediate dialogue is kept separately from long-term memory so natural follow-ups do not require full transcript replay.
+
+`AssistantRelationshipMemoryService` builds a conservative longitudinal relationship profile from explicit or observed information such as interaction count, language preference, stated interests, goals and shared episodes. It intentionally avoids inferred affection, personality, mental state or other psychological profiling.
+
+`SocialConversationGraph` is a volatile public-chat model. It tracks recent speakers, directed reply cues, short-lived pair edges, topic/thread context and recent AIlex interventions. It is not persisted as a friendship graph.
+
+`ProactiveInterventionPolicy` and `ProactiveGoalService` decide whether AIlex should participate under bounded goals such as welcoming, helping a new player, celebrating, supporting a public conversation, connecting players who explicitly ask for company, defusing non-moderation conflict, following up on an explicit goal or informing the community.
+
+`SILENCE` is a first-class successful outcome. The policy subtracts privacy/intrusion, error and repetition costs rather than optimizing only for response frequency.
+
+Follow-ups are private to the relevant player and derive only from explicit non-sensitive goals.
+
+## Controlled physical actions
+
+The language model may propose only the small configured action set represented by `AssistantActionProposal`. `AssistantActionService` then re-validates the player's explicit wording, allowed action type, requester identity and live NPC/world state before queuing anything.
+
+The current physical actions are deliberately narrow: follow the requester, come to the requester and stop moving.
+
+`AssistantActionOutcomeRecorder` records the deterministic execution result as an event and may derive verified procedural experience from that outcome. This creates a bounded action→outcome→learning loop without allowing the model to declare its own action successful.
+
+## Evaluation
+
+AIlex uses deterministic CI for the control plane. It must not depend on live stochastic model output.
+
+The test suite covers routing, prompt invariants, hybrid retrieval, front-matter provenance, temporal memory, correction/forgetting, graph recall, consolidation, maturation/retention, typed tools, epistemic evidence, claim-level grounding, privacy, shared synchronization, social intervention and controlled actions.
+
+`AIlexBench` is the scenario-oriented cognition regression layer. It is intended to test behavior across components—especially memory updates, temporal reasoning, abstention and memory→tool/action use—rather than just isolated utility functions.
+
+See [Testing and Quality](TESTING.md) for exact commands and expected coverage.
+
+## Safety boundary summary
+
+The model may generate text, request explicitly registered read tools, propose memory candidates and propose a small configured physical action. It cannot directly:
+
+- execute arbitrary commands;
+- mutate the world/economy/moderation state;
+- write arbitrary database rows or files;
+- inspect arbitrary plugins or configuration;
 - access credentials/infrastructure internals;
-- control NPC movement/actions directly;
-- bypass memory validation, capability permissions or data redaction.
+- read private other-player state;
+- bypass memory validation;
+- bypass evidence validation;
+- bypass deterministic physical-action approval.
 
-Write-capable/embodied actions belong behind separately permissioned plan→validate→execute capabilities in a later release, not in the 1.7 read-cognition path.
-
-## Roadmap boundary
-
-1.7 deliberately establishes the memory/evaluation foundation plus the typed read-agent and transient social capabilities already present in this PR. The deeper roadmap remains staged: semantic routing refinements, consolidation/entity-graph learning and richer lifelong policy learning come later; write-capable embodied actions remain a 2.0-class concern. This preserves the evaluation requirement to improve the architecture without collapsing every research direction into one untestable release.
+Adding a new capability therefore means adding a new explicit typed boundary and tests, not merely telling the model that it has another tool.
