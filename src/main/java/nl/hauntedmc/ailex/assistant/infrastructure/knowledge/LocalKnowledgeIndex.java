@@ -31,7 +31,7 @@ import java.util.stream.Stream;
 /**
  * Local hybrid knowledge index. Exact commands and server terminology remain lexical-first, while learned embeddings
  * supply real semantic/paraphrase recall. Ranking fuses BM25, exact/title/alias signals, multilingual concept expansion,
- * neural cosine similarity and reciprocal-rank evidence before redundancy suppression.
+ * neural cosine similarity and reciprocal-rank evidence before adaptive second-stage diversity selection.
  */
 public final class LocalKnowledgeIndex {
 
@@ -110,7 +110,7 @@ public final class LocalKnowledgeIndex {
     /** Query-focused retrieval for concrete server/gameplay questions. */
     public List<KnowledgeChunk> search(String query, AssistantSettings settings) {
         String normalizedQuery = query == null ? "" : query.replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
-        String cacheKey = "search|" + normalizedQuery + '|' + settings.maxChunks() + '|'
+        String cacheKey = "search-v2|" + normalizedQuery + '|' + settings.maxChunks() + '|'
                 + settings.maxEvidenceCharacters() + '|' + settings.excludeExpired() + '|' + settings.hybridRetrieval();
         CachedSearch cached = searchCache.get(cacheKey);
         if (cached != null && cached.isFresh(settings.queryCacheSeconds())) {
@@ -148,7 +148,18 @@ public final class LocalKnowledgeIndex {
             }
         }
         fused.sort(Comparator.comparingDouble(ScoredChunk::score).reversed());
-        List<KnowledgeChunk> selected = selectDiverse(fused, settings.maxChunks(), settings.maxEvidenceCharacters());
+        double topScore = fused.isEmpty() ? 0.0D : fused.getFirst().score();
+        double secondScore = fused.size() < 2 ? 0.0D : fused.get(1).score();
+        AdaptiveEvidencePolicy.Budget selection = AdaptiveEvidencePolicy.select(
+                normalizedQuery,
+                settings.maxChunks(),
+                settings.maxEvidenceCharacters(),
+                topScore,
+                secondScore
+        );
+        List<KnowledgeChunk> selected = selectDiverse(
+                fused, selection.maxChunks(), selection.maxCharacters()
+        );
         searchCache.put(cacheKey, new CachedSearch(List.copyOf(selected), System.currentTimeMillis()));
         return selected;
     }
@@ -322,7 +333,8 @@ public final class LocalKnowledgeIndex {
         for (ScoredChunk scored : ranked) {
             KnowledgeChunk chunk = scored.chunk();
             String fingerprint = normalizeForDedup(chunk.title() + ' ' + chunk.text());
-            boolean duplicate = normalizedFingerprints.stream().anyMatch(existing -> similarity(existing, fingerprint) > 0.82D);
+            boolean duplicate = normalizedFingerprints.stream()
+                    .anyMatch(existing -> similarity(existing, fingerprint) > 0.82D);
             if (duplicate) {
                 continue;
             }
@@ -502,7 +514,9 @@ public final class LocalKnowledgeIndex {
             return List.of();
         }
         int maxFiles = Math.clamp(config.getInt("openai.knowledge.external.max_files", 64), 1, 256);
-        int maxCharacters = Math.clamp(config.getInt("openai.knowledge.external.max_characters", 120_000), 1_000, 1_000_000);
+        int maxCharacters = Math.clamp(config.getInt(
+                "openai.knowledge.external.max_characters", 120_000
+        ), 1_000, 1_000_000);
         List<Path> files;
         try (Stream<Path> stream = Files.list(directory.toPath())) {
             files = stream.filter(Files::isRegularFile)
@@ -551,13 +565,19 @@ public final class LocalKnowledgeIndex {
                 continue;
             }
             int separator = trimmed.indexOf(':');
-            result.put(trimmed.substring(1, separator).trim().toLowerCase(Locale.ROOT), trimmed.substring(separator + 1).trim());
+            result.put(
+                    trimmed.substring(1, separator).trim().toLowerCase(Locale.ROOT),
+                    trimmed.substring(separator + 1).trim()
+            );
         }
         return result;
     }
 
     private String stripMetadata(String body) {
-        return body.lines().filter(line -> !line.trim().startsWith("@")).collect(java.util.stream.Collectors.joining("\n")).trim();
+        return body.lines()
+                .filter(line -> !line.trim().startsWith("@"))
+                .collect(java.util.stream.Collectors.joining("\n"))
+                .trim();
     }
 
     private List<String> aliases(String raw) {
@@ -583,7 +603,9 @@ public final class LocalKnowledgeIndex {
     }
 
     private String safeId(String value) {
-        String id = value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9._-]+", "-").replaceAll("-+", "-");
+        String id = value.toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9._-]+", "-")
+                .replaceAll("-+", "-");
         return id.length() <= 96 ? id : id.substring(0, 96);
     }
 
