@@ -1,6 +1,7 @@
 package nl.hauntedmc.ailex.assistant.chat;
 
 import nl.hauntedmc.ailex.assistant.domain.AssistantDialogueContext;
+import nl.hauntedmc.ailex.assistant.domain.AssistantIntent;
 
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.Test;
@@ -27,10 +28,23 @@ class AssistantChatBoundaryTest {
 
     @Test
     void durableMemoryRecallDoesNotDuplicateTheAmbientTranscript() {
-        assertFalse(WorkingContextPolicy.includeRawHistory(
-                "Meer specifiek haunty, wat heb je geleerd en onthouden",
-                AssistantDialogueContext.empty()
-        ));
+        AssistantDialogueContext activeDialogue = new AssistantDialogueContext(
+                true,
+                false,
+                AssistantIntent.KNOWLEDGE_DISCOVERY,
+                "Haunty, welke functies heb je?",
+                "Ik kan serverkennis gebruiken en relevante dingen onthouden.",
+                "user(remymine): Haunty, welke functies heb je?\n"
+                        + "assistant(Haunty): Ik kan serverkennis gebruiken en relevante dingen onthouden."
+        );
+        String productionMessage = "Meer specifiek haunty, wat heb je geleerd en onthouden";
+
+        assertEquals(
+                AssistantIntent.MEMORY_RECALL,
+                nl.hauntedmc.ailex.assistant.application.routing.AssistantIntentClassifier
+                        .analyze(productionMessage, activeDialogue).intent()
+        );
+        assertFalse(WorkingContextPolicy.includeRawHistory(productionMessage, activeDialogue));
         assertFalse(WorkingContextPolicy.includeRawHistory(
                 "wat heb je onthouden",
                 AssistantDialogueContext.empty()
