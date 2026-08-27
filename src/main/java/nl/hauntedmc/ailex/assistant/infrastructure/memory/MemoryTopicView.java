@@ -14,6 +14,10 @@ import java.util.Set;
  */
 public final class MemoryTopicView {
 
+    /**
+     * Groups an already-ranked memory result set into bounded prompt topics.
+     * Grouping changes presentation only: records retain their original evidence identity and provenance.
+     */
     public List<Topic> organize(List<MemoryRecord> records, int maximumTopics, int maximumItemsPerTopic) {
         if (records == null || records.isEmpty()) {
             return List.of();
@@ -33,6 +37,10 @@ public final class MemoryTopicView {
                 .toList();
     }
 
+    /**
+     * Renders topic-organized memory for model context while retaining every underlying {@code memory.<id>} citation.
+     * The character limit is a hard prompt-size ceiling and never causes a synthetic summary to become new evidence.
+     */
     public String render(List<MemoryRecord> records, int maximumCharacters) {
         StringBuilder output = new StringBuilder();
         for (Topic topic : organize(records, 10, 5)) {
@@ -70,6 +78,7 @@ public final class MemoryTopicView {
         return record.kind().name().toLowerCase(Locale.ROOT);
     }
 
+    /** One presentation group; contained records remain the authoritative evidence units. */
     public record Topic(String name, List<MemoryRecord> records) {
         public Topic {
             name = name == null || name.isBlank() ? "general" : name;
