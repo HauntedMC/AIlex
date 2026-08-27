@@ -107,8 +107,9 @@ public class AssistantConversationManager {
     }
 
     /**
-     * Decides whether an unmentioned message belongs to the active AIlex dialogue. A bare question mark is not enough:
-     * the turn must carry a conversational continuation, correction or explicit reference to prior assistant content.
+     * Decides whether an unmentioned message belongs to the active AIlex dialogue. Terse public-chat fragments such as
+     * a bare "nee" are accepted only while an answer is pending or when AIlex actually asked the player a question.
+     * Substantive continuations/corrections and explicit references to the prior turn remain natural implicit follow-ups.
      */
     public boolean isLikelyFollowUp(String message, Snapshot snapshot) {
         if (snapshot == null || !snapshot.active() || message == null || message.isBlank()) {
@@ -118,21 +119,29 @@ public class AssistantConversationManager {
         if (normalized.length() > 320) {
             return false;
         }
-        if (startsLikeFollowUp(normalized) || correctionLikeFollowUp(normalized) || referencesPriorTurn(normalized)) {
+        if (startsLikeSubstantiveFollowUp(normalized)
+                || correctionLikeFollowUp(normalized)
+                || referencesPriorTurn(normalized)) {
             return true;
         }
-        // While the model is still answering, allow terse acknowledgements/continuations but not an arbitrary new
-        // public question. This preserves fast conversational turns without capturing normal server chat.
-        return snapshot.pendingAnswer() && normalized.length() <= 32 && isTerseContinuation(normalized);
+        if (!isTerseContinuation(normalized)) {
+            return false;
+        }
+        return snapshot.pendingAnswer() || previousAssistantAskedQuestion(snapshot);
     }
 
-    private boolean startsLikeFollowUp(String text) {
+    private boolean startsLikeSubstantiveFollowUp(String text) {
         return List.of(
-                "ja", "nee", "maar", "en ", "dus", "waarom", "hoezo", "wat dan", "welke", "waar dan",
-                "wacht", "bedoel", "huh", "uh", "ok", "oke", "oké", "yes", "no", "but", "and ",
-                "so ", "why", "how come", "what then", "which one", "where then", "wait", "i mean", "hmm",
-                "eigenlijk", "actually", "correctie", "correction"
+                "maar", "en ", "dus", "waarom", "hoezo", "wat dan", "welke", "waar dan", "wacht", "bedoel",
+                "eigenlijk", "correctie", "but", "and ", "so ", "why", "how come", "what then", "which one",
+                "where then", "wait", "i mean", "actually", "correction"
         ).stream().anyMatch(text::startsWith);
+    }
+
+    private boolean previousAssistantAskedQuestion(Snapshot snapshot) {
+        String previous = snapshot.previousAssistantMessage() == null
+                ? "" : snapshot.previousAssistantMessage().stripTrailing();
+        return previous.endsWith("?");
     }
 
     private boolean correctionLikeFollowUp(String text) {
