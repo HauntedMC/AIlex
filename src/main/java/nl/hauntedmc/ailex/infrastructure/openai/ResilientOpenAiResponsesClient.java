@@ -174,7 +174,7 @@ public final class ResilientOpenAiResponsesClient extends OpenAiResponsesClient 
                 providerCircuitBreaker.recordProviderFailure();
             }
         } else {
-            // A concrete non-provider response proves the endpoint is reachable; it must not preserve an old outage.
+            // A concrete non-provider outcome must not preserve a previous shared-provider outage state.
             providerCircuitBreaker.recordReachableOutcome();
         }
     }
@@ -193,14 +193,14 @@ public final class ResilientOpenAiResponsesClient extends OpenAiResponsesClient 
         NONE(false, false),
         RATE_LIMITED(false, true),
         UPSTREAM(true, true),
-        INVALID_RESPONSE(true, true),
+        INVALID_RESPONSE(true, false),
         TIMEOUT(false, true),
         TRANSPORT(false, true),
         AUTHENTICATION(false, false),
         REQUEST_REJECTED(false, false),
         INTERRUPTED(false, false),
         CIRCUIT_OPEN(false, false),
-        UNKNOWN(false, true);
+        UNKNOWN(false, false);
 
         private final boolean retryable;
         private final boolean affectsCircuit;
