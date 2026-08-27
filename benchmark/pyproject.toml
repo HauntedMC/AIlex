@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ailex-local-bench"
+version = "0.1.0"
+description = "Local-only benchmark orchestration for AIlex"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+external = [
+  "datasets>=4.0,<5",
+  "inspect-ai>=0.3.200,<0.4",
+]
+ragchecker = [
+  "ragchecker==0.1.9",
+]
+
+[project.scripts]
+ailex-bench = "ailex_bench.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ailex_bench*"]

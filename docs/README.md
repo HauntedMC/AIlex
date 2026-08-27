@@ -7,6 +7,7 @@ This folder contains the current operating, architecture, testing and contributi
 - [Configuration](CONFIGURATION.md) — adaptive models, retrieval, typed bounded read tools, memory backends, proactive intervention and diagnostics.
 - [Architecture](ARCHITECTURE.md) — deterministic-first cognition, working/durable memory, temporal truth, hybrid retrieval, evidence packets and the read-only capability boundary.
 - [Chat intelligence evaluation](CHAT_EVALUATION.md) — player-facing correctness, grounding, retrieval, continuity, exact identifiers, naturalness, latency, cost and liveness metrics.
+- [Local benchmark runner](../benchmark/README.md) — real-provider HauntedMC evaluation plus adapters for published memory/RAG evaluation frameworks.
 
 Useful production checks:
 
@@ -25,7 +26,8 @@ For multi-runtime deployments, also verify shared-memory propagation, correction
 
 - [Development](DEVELOPMENT.md) — architecture rules and day-to-day workflow.
 - [Testing](TESTING.md) — deterministic regressions, neural retrieval, memory/grounding/tool/social tests, JaCoCo floors and production smoke checks.
-- [Chat intelligence evaluation](CHAT_EVALUATION.md) — the separate live-model/offline quality suite that deterministic CI cannot replace.
+- [Chat intelligence evaluation](CHAT_EVALUATION.md) — quality criteria and release gates for live-model evaluation.
+- [Local benchmark runner](../benchmark/README.md) — executable local suites, upstream benchmark adapters, reports and run comparison.
 - [Contributing Guide](../CONTRIBUTING.md) — pull request expectations.
 
 The root [README](../README.md) contains the research/inspiration table. Only work with a concrete implementation or evaluation counterpart in AIlex should be listed there; papers that were merely read are intentionally omitted.
@@ -35,7 +37,7 @@ The root [README](../README.md) contains the research/inspiration table. Only wo
 1. Run the full build and inspect CI status.
 2. Confirm `AIlexBench` and focused cognitive/liveness regressions pass.
 3. Confirm the JaCoCo line/branch regression floors pass in the PR workflow.
-4. Run the live-model chat evaluation for model, prompt, retrieval or context changes.
+4. Run `./bench run smoke` locally for model, prompt, retrieval, context or memory changes; use a larger suite when comparing candidates.
 5. Confirm configuration, architecture, testing and research documentation match the current behavior.
 6. Smoke-test embeddings/read-agent behavior, canonical identifier grounding and, when enabled, shared MySQL memory in a disposable environment.
 7. Verify the produced plugin artifact in a representative Paper runtime.

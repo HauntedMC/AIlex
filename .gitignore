@@ -9,6 +9,15 @@ jars/
 target/
 logs/
 
+benchmark/.venv/
+benchmark/.venv-v2/
+benchmark/.cache/
+benchmark/results/
+benchmark/local/
+benchmark/.env
+benchmark/.env.*
+benchmark/**/*.eval
+
 *.class
 *.jar
 !gradle/wrapper/gradle-wrapper.jar
