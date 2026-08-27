@@ -37,19 +37,41 @@ class OpenAiConversationRoleTest {
             JsonArray input = payload.getAsJsonArray("input");
 
             assertEquals(4, input.size());
-            assertMessage(input, 0, "user", "Hoe werkt de lottery?");
-            assertMessage(input, 1, "assistant", "Je koopt tickets voor de trekking.");
-            assertMessage(input, 2, "user", "En wanneer is die?");
+            assertMessage(input, 0, "user", "input_text", "Hoe werkt de lottery?");
+            assertMessage(input, 1, "assistant", "output_text", "Je koopt tickets voor de trekking.");
+            assertMessage(input, 2, "user", "input_text", "En wanneer is die?");
 
             JsonObject current = input.get(3).getAsJsonObject();
             assertEquals("user", current.get("role").getAsString());
-            String currentText = current.getAsJsonArray("content").get(0).getAsJsonObject().get("text").getAsString();
+            JsonObject currentContent = current.getAsJsonArray("content").get(0).getAsJsonObject();
+            assertEquals("input_text", currentContent.get("type").getAsString());
+            String currentText = currentContent.get("text").getAsString();
             assertTrue(currentText.contains("Current player request"));
             assertTrue(currentText.contains("[Dialogue state]"));
             assertTrue(currentText.contains("session_topics=lottery,rewards"));
             assertTrue(currentText.contains("Trusted knowledge source server.lottery"));
             assertFalse(currentText.contains("user(remymine):"));
             assertFalse(currentText.contains("assistant(Haunty):"));
+        }
+    }
+
+    @Test
+    void assistantHistoryMustNeverBeSerializedAsInputText() {
+        String prompt = "Current player request\n\n"
+                + "[Active player-assistant dialogue]\n"
+                + "user(remymine): Haunty?\n"
+                + "assistant(Haunty): Hoi! Waar kan ik je mee helpen?";
+
+        try (MockedStatic<LoggerUtils> ignored = org.mockito.Mockito.mockStatic(LoggerUtils.class)) {
+            OpenAiResponsesClient client = new OpenAiResponsesClient(
+                    "key", "gpt-5.6-luna", mock(HttpClient.class)
+            );
+            JsonArray input = JsonParser.parseString(client.createRequestBody("persona", prompt))
+                    .getAsJsonObject().getAsJsonArray("input");
+
+            assertMessage(input, 0, "user", "input_text", "Haunty?");
+            assertMessage(input, 1, "assistant", "output_text", "Hoi! Waar kan ik je mee helpen?");
+            assertMessage(input, 2, "user", "input_text", "Current player request");
         }
     }
 
@@ -62,9 +84,11 @@ class OpenAiConversationRoleTest {
         assertEquals(prompt, parsed.currentPrompt());
     }
 
-    private void assertMessage(JsonArray input, int index, String role, String text) {
+    private void assertMessage(JsonArray input, int index, String role, String contentType, String text) {
         JsonObject message = input.get(index).getAsJsonObject();
         assertEquals(role, message.get("role").getAsString());
-        assertEquals(text, message.getAsJsonArray("content").get(0).getAsJsonObject().get("text").getAsString());
+        JsonObject content = message.getAsJsonArray("content").get(0).getAsJsonObject();
+        assertEquals(contentType, content.get("type").getAsString());
+        assertEquals(text, content.get("text").getAsString());
     }
 }

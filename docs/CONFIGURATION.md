@@ -140,7 +140,11 @@ This behavior is deterministic; there is no configuration that allows the model 
 
 ## Chat and working context
 
-`openai.chat.session_timeout_seconds` controls how long a player can naturally continue an active player↔assistant conversation without repeating the assistant name.
+`openai.chat.allow_implicit_followups` is `false` by default. With that default, every player-triggered assistant request must explicitly mention the bot name again; an active session only supplies context and does not claim ordinary player chat. Set it to `true` only when deliberately enabling natural no-mention follow-ups.
+
+`openai.chat.session_timeout_seconds` controls how long an active player↔assistant conversation remains available as dialogue context. When implicit follow-ups are enabled, it also bounds how long no-mention continuation can be considered.
+
+This direct-request boundary is separate from explicitly configured proactive behavior. Join/idle/community triggers may still let AIlex speak autonomously according to `openai.proactive_chat`; they are not treated as the player's direct request.
 
 `openai.chat_context` controls short-lived raw conversation/ambient context. `persist_to_disk` is disabled by default. Durable knowledge belongs in typed memory instead of raw transcript persistence. The shipped character ceilings are 18,000 overall, 4,000 for ambient general chat, 8,000 for the active conversation and 5,000 for bot-memory context; message capture is capped at 900 characters.
 

@@ -7,12 +7,13 @@ openai:
   reasoning_effort: "low"
   # Player chat is not retained by the API provider.
   store_responses: false
-  request_timeout_seconds: 20
+  request_timeout_seconds: 30
   assistant:
     enabled: true
     # Adaptive keeps ordinary chat responsive while factual/current-state work gets stronger grounding and reasoning.
     mode: "adaptive"
-    total_deadline_seconds: 18
+    # 18s was too aggressive for grounded structured responses and caused healthy requests to be killed locally.
+    total_deadline_seconds: 30
     # Two read/planning calls + answer + one evidence-driven escalation remain inside this hard request budget.
     max_model_calls: 4
     # Complex grounded/deliberate questions may perform two bounded information-seeking rounds.
@@ -128,13 +129,16 @@ openai:
     nearby_response_radius: 32
     max_concurrent_requests: 4
     max_queued_requests: 8
-    # Active dialogue may continue naturally without repeating the assistant name. Explicit mentions work regardless.
+    # By default every player-triggered reply requires an explicit bot mention/name.
+    # Opt in only if you intentionally want an active dialogue to consume later unmentioned chat lines.
+    allow_implicit_followups: false
     session_timeout_seconds: 900
     feedback:
       access_denied: "Je kunt AIlex hier niet gebruiken."
       queued: "Ik ben nog even bezig; ik pak je bericht hierna."
       queued_replaced: "Ik ben nog bezig; ik pak je nieuwste bericht hierna."
       busy: "Ik heb het nu te druk om dit betrouwbaar te verwerken. Probeer het zo nog eens."
+      timeout: "Ik kreeg niet op tijd antwoord van mijn AI-service. Probeer het nog eens."
       failure: "Mijn AI-service gaf geen bruikbaar antwoord. Probeer het nog eens."
     standalone:
       enabled: false

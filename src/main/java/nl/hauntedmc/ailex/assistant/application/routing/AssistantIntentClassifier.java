@@ -43,6 +43,15 @@ public final class AssistantIntentClassifier {
             "discord", "channel", "channels", "kanaal", "kanalen", "announcement", "announcements", "aankondiging",
             "aankondigingen", "changelog", "changelogs", "versie", "version", "release", "update", "updates"
     );
+    private static final Set<String> STRONG_SERVER_WORDS = Set.of(
+            "rank", "elite", "legend", "supreme", "claim", "regels", "rules", "vote", "stem",
+            "store", "winkel", "warp", "command", "commando", "server", "hauntedmc",
+            "discord", "channel", "channels", "kanaal", "kanalen", "announcement", "announcements", "aankondiging",
+            "aankondigingen", "changelog", "changelogs"
+    );
+    private static final Set<String> VERSION_WORDS = Set.of(
+            "versie", "version", "release", "update", "updates"
+    );
     private static final Set<String> GAMEPLAY_WORDS = Set.of(
             "minecraft", "kameel", "camel", "wolf", "tem", "temt", "tammen", "tame", "craft", "recept", "recipe",
             "redstone", "enchant", "betover", "potion", "drank", "mob", "farm", "bouwen", "build", "diamond",
@@ -99,7 +108,7 @@ public final class AssistantIntentClassifier {
             return new Analysis(context.active() ? AssistantIntent.CONTEXT_FOLLOWUP : AssistantIntent.SERVER_FACT,
                     AssistantMode.GROUNDED, language);
         }
-        if (containsAny(normalized, SERVER_WORDS) || normalized.contains("/")) {
+        if (isServerFactQuestion(normalized)) {
             return new Analysis(AssistantIntent.SERVER_FACT, AssistantMode.GROUNDED, language);
         }
         if (normalized.contains("hoe ") || normalized.contains("how ") || normalized.startsWith("waar ")
@@ -120,12 +129,42 @@ public final class AssistantIntentClassifier {
         return new Analysis(AssistantIntent.CONVERSATION, AssistantMode.FAST, language);
     }
 
+    private static boolean isServerFactQuestion(String message) {
+        if (message.contains("/")) {
+            return true;
+        }
+        if (containsAny(message, STRONG_SERVER_WORDS)) {
+            return true;
+        }
+        if (!containsAny(message, VERSION_WORDS)) {
+            return false;
+        }
+
+        // Words such as "version" and "update" are ambiguous. A question about a Minecraft version is general
+        // gameplay knowledge even when the player happens to address Haunty by name. Only explicit AIlex/server context
+        // turns those words into HauntedMC-specific facts.
+        if (containsAny(message, GAMEPLAY_WORDS)
+                && !containsAnyPhrase(message, "server versie", "server version", "versie van de server",
+                "version of the server", "minecraft versie van de server", "minecraft version of the server")) {
+            return false;
+        }
+        return containsAnyPhrase(message,
+                "haunty versie", "haunty version", "ailex versie", "ailex version",
+                "server versie", "server version", "versie van de server", "version of the server",
+                "hauntedmc versie", "hauntedmc version", "plugin versie", "plugin version",
+                "nieuwe haunty", "new haunty", "nieuwe ailex", "new ailex"
+        );
+    }
+
     private static boolean isKnowledgeDiscovery(String message) {
         return containsAnyPhrase(message,
                 "fun fact", "random fact", "interesting fact", "tell me a fact", "tell me something about the server",
                 "tell me something about haunted", "what do you know about haunted", "what do you know about the server",
                 "leuk feitje", "willekeurig feitje", "interessant feit", "vertel een feitje", "vertel iets over de server",
-                "vertel iets over haunted", "wat weet je over haunted", "wat weet je over de server", "server weetje"
+                "vertel iets over haunted", "wat weet je over haunted", "wat weet je over de server", "server weetje",
+                "welke functies heb je", "wat zijn je functies", "wat kan je allemaal", "wat kun je allemaal",
+                "wat kan jij allemaal", "wat kun jij allemaal", "waarmee kan je helpen", "waarmee kun je helpen",
+                "what can you do", "what are your capabilities", "what features do you have", "how can you help"
         );
     }
 

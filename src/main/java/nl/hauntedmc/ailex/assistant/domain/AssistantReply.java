@@ -27,6 +27,7 @@ public record AssistantReply(
 ) {
     private static final int MAX_PLAIN_LINES = 6;
     private static final int MAX_PLAIN_LINE_CHARACTERS = 360;
+    private static final String TRANSPORT_FALLBACK = "Ik kan nu even niet reageren.";
 
     public AssistantReply {
         lines = lines == null ? List.of() : List.copyOf(lines);
@@ -73,7 +74,7 @@ public record AssistantReply(
     }
 
     public static AssistantReply unavailable() {
-        return fromPlainText("Ik kan nu even niet reageren.");
+        return invalid();
     }
 
     /**
@@ -82,7 +83,7 @@ public record AssistantReply(
      */
     public static AssistantReply fromPlainText(String text) {
         String safe = unwrapAccidentalEnvelope(text).replace("\r\n", "\n").replace('\r', '\n').trim();
-        if (safe.isBlank()) {
+        if (safe.isBlank() || TRANSPORT_FALLBACK.equals(safe)) {
             return invalid();
         }
         List<String> playerLines = safe.lines()

@@ -60,6 +60,33 @@ class AssistantConversationManagerTest {
     }
 
     @Test
+    void barePublicChatAckIsNotCapturedAfterDeclarativeAssistantReply() {
+        AssistantConversationManager manager = new AssistantConversationManager(() -> 1_000L);
+        UUID player = UUID.randomUUID();
+        manager.recordUser(player, 3, "Stuyvert", "Haunty wat vind je daarvan?");
+        manager.recordAssistant(player, 3, "Haunty", "Dat klinkt logisch.", AssistantIntent.CONVERSATION);
+
+        AssistantConversationManager.Snapshot snapshot = manager.snapshot(player, 3, 60_000L);
+
+        assertFalse(manager.isLikelyFollowUp("nee", snapshot));
+        assertFalse(manager.isLikelyFollowUp("ok", snapshot));
+        assertTrue(manager.isLikelyFollowUp("maar waarom?", snapshot));
+    }
+
+    @Test
+    void terseReplyRemainsNaturalWhenAssistantActuallyAskedAQuestion() {
+        AssistantConversationManager manager = new AssistantConversationManager(() -> 1_000L);
+        UUID player = UUID.randomUUID();
+        manager.recordUser(player, 3, "remymine", "Haunty help me even");
+        manager.recordAssistant(player, 3, "Haunty", "Bedoel je Survival?", AssistantIntent.CONVERSATION);
+
+        AssistantConversationManager.Snapshot snapshot = manager.snapshot(player, 3, 60_000L);
+
+        assertTrue(manager.isLikelyFollowUp("ja", snapshot));
+        assertTrue(manager.isLikelyFollowUp("nee", snapshot));
+    }
+
+    @Test
     void pendingAnswerDoesNotCaptureArbitraryPublicQuestions() {
         AssistantConversationManager manager = new AssistantConversationManager(() -> 1_000L);
         UUID player = UUID.randomUUID();

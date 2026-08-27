@@ -1,29 +1,23 @@
 package nl.hauntedmc.ailex.assistant.application.reliability;
 
-/** Prevents repeated upstream failures from consuming every AI worker. */
+/**
+ * Compatibility boundary for assistant answer-quality outcomes.
+ *
+ * <p>Grounding rejection and local deadline exhaustion are not evidence that the shared model provider is down, and
+ * therefore must never suppress unrelated players. Provider-level circuit breaking is owned by the OpenAI transport
+ * reliability layer, which can distinguish real HTTP/transport failures from answer-quality failures.</p>
+ */
 public final class AssistantCircuitBreaker {
 
-    private static final int FAILURE_THRESHOLD = 3;
-    private static final long COOLDOWN_MILLIS = 30_000L;
-    private int consecutiveFailures;
-    private long openUntilMillis;
-
-    public synchronized boolean allowsRequest(boolean enabled) {
-        return !enabled || System.currentTimeMillis() >= openUntilMillis;
+    public boolean allowsRequest(boolean enabled) {
+        return true;
     }
 
-    public synchronized void recordSuccess() {
-        consecutiveFailures = 0;
-        openUntilMillis = 0L;
+    public void recordSuccess() {
+        // Quality success does not control shared provider availability.
     }
 
-    public synchronized void recordFailure(boolean enabled) {
-        if (!enabled) {
-            return;
-        }
-        consecutiveFailures++;
-        if (consecutiveFailures >= FAILURE_THRESHOLD) {
-            openUntilMillis = System.currentTimeMillis() + COOLDOWN_MILLIS;
-        }
+    public void recordFailure(boolean enabled) {
+        // Intentionally local/no-op: callers currently report grounding and deadline failures through this API.
     }
 }

@@ -79,4 +79,60 @@ class PlayerResponseRateLimiterTest {
         now.set(400L);
         assertEquals(700L, limiter.retryAfterMillis(playerId));
     }
+
+    @Test
+    void failedRequestCanRefundItsResponseSlot() {
+        PlayerResponseRateLimiter limiter = new PlayerResponseRateLimiter(
+                () -> new PlayerResponseRateLimiter.ResponseRateLimit(true, 1, 10_000L), () -> 100L
+        );
+        UUID playerId = UUID.randomUUID();
+        PlayerResponseRateLimiter.Permit permit = limiter.acquire(playerId, false);
+
+        assertTrue(permit.acquired());
+        assertTrue(permit.counted());
+        assertFalse(limiter.tryAcquire(playerId));
+
+        limiter.refund(permit);
+        assertTrue(limiter.tryAcquire(playerId));
+    }
+
+    @Test
+    void refundRemovesOnlyTheMatchingConcurrentReservation() {
+        PlayerResponseRateLimiter limiter = new PlayerResponseRateLimiter(
+                () -> new PlayerResponseRateLimiter.ResponseRateLimit(true, 2, 10_000L), () -> 100L
+        );
+        UUID playerId = UUID.randomUUID();
+        PlayerResponseRateLimiter.Permit first = limiter.acquire(playerId, false);
+        PlayerResponseRateLimiter.Permit second = limiter.acquire(playerId, false);
+
+        assertFalse(limiter.tryAcquire(playerId));
+        limiter.refund(first);
+        assertTrue(limiter.tryAcquire(playerId));
+        assertFalse(limiter.tryAcquire(playerId));
+
+        // Refunding the same permit again must not free the second or replacement reservation.
+        limiter.refund(first);
+        assertFalse(limiter.tryAcquire(playerId));
+        assertTrue(second.counted());
+    }
+
+    @Test
+    void bypassAndDisabledPermitsAreAcceptedButNeverCounted() {
+        UUID playerId = UUID.randomUUID();
+        PlayerResponseRateLimiter bypassLimiter = new PlayerResponseRateLimiter(
+                () -> new PlayerResponseRateLimiter.ResponseRateLimit(true, 1, 10_000L), () -> 100L
+        );
+        PlayerResponseRateLimiter.Permit bypass = bypassLimiter.acquire(playerId, true);
+        assertTrue(bypass.acquired());
+        assertFalse(bypass.counted());
+        bypassLimiter.refund(bypass);
+        assertTrue(bypassLimiter.tryAcquire(playerId));
+
+        PlayerResponseRateLimiter disabledLimiter = new PlayerResponseRateLimiter(
+                () -> new PlayerResponseRateLimiter.ResponseRateLimit(false, 1, 10_000L), () -> 100L
+        );
+        PlayerResponseRateLimiter.Permit disabled = disabledLimiter.acquire(playerId, false);
+        assertTrue(disabled.acquired());
+        assertFalse(disabled.counted());
+    }
 }

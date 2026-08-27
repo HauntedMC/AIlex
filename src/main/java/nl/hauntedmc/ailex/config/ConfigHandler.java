@@ -17,6 +17,10 @@ import java.util.Set;
 /** Utility class for handling the current plugin configuration. */
 public class ConfigHandler {
 
+    private static final String ASSISTANT_DEADLINE_PATH = "openai.assistant.total_deadline_seconds";
+    private static final int LEGACY_ASSISTANT_DEADLINE_SECONDS = 18;
+    private static final int CURRENT_ASSISTANT_DEADLINE_SECONDS = 30;
+
     private static ConfigHandler instance;
     private final JavaPlugin plugin;
 
@@ -79,7 +83,21 @@ public class ConfigHandler {
                 new InputStreamReader(defaultsStream, StandardCharsets.UTF_8)
         );
         syncSection(plugin.getConfig(), defaults, "");
+        migrateKnownDefaults(plugin.getConfig());
         plugin.saveConfig();
+    }
+
+    /**
+     * Migrates shipped defaults that turned out to be operationally unsafe. This intentionally targets exact historical
+     * defaults only: custom operator values remain untouched. The 18-second assistant budget was the 1.9.0/1.9.1 default
+     * and could terminate otherwise healthy grounded/structured requests before the provider returned.
+     */
+    private void migrateKnownDefaults(FileConfiguration currentConfig) {
+        if (currentConfig.getInt(ASSISTANT_DEADLINE_PATH, CURRENT_ASSISTANT_DEADLINE_SECONDS)
+                == LEGACY_ASSISTANT_DEADLINE_SECONDS) {
+            currentConfig.set(ASSISTANT_DEADLINE_PATH, CURRENT_ASSISTANT_DEADLINE_SECONDS);
+            LoggerUtils.logInfo("Migrated AIlex assistant deadline from 18s to 30s.");
+        }
     }
 
     private void syncSection(FileConfiguration currentConfig, ConfigurationSection defaultsSection, String currentPath) {
