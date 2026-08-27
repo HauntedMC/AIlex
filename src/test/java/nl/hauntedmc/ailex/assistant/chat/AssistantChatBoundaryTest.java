@@ -29,4 +29,18 @@ class AssistantChatBoundaryTest {
         AssistantChatConfiguration configuration = new AssistantChatConfiguration(YamlConfiguration::new);
         assertFalse(configuration.contextSettings().persistToDisk());
     }
+
+    @Test
+    void implicitFollowUpsAreDisabledByDefaultSoNormalChatCannotTriggerTheBot() {
+        AssistantChatConfiguration configuration = new AssistantChatConfiguration(YamlConfiguration::new);
+        assertFalse(configuration.allowImplicitFollowUps());
+    }
+
+    @Test
+    void implicitFollowUpsRequireExplicitOperatorOptIn() {
+        YamlConfiguration yaml = new YamlConfiguration();
+        yaml.set("openai.chat.allow_implicit_followups", true);
+        AssistantChatConfiguration configuration = new AssistantChatConfiguration(() -> yaml);
+        assertTrue(configuration.allowImplicitFollowUps());
+    }
 }
