@@ -240,10 +240,10 @@ public final class AssistantIntentClassifier {
         if (containsAny(normalized, GAMEPLAY_WORDS) || containsAny(normalized, SERVER_WORDS)) {
             return false;
         }
-        return normalized.matches(".*\bwat weet je (?:over|van) [a-z0-9_]{3,16}(?: haunty| ailex)?$")
-                || normalized.matches(".*\bwat herinner je (?:over|van) [a-z0-9_]{3,16}(?: haunty| ailex)?$")
-                || normalized.matches(".*\bwhat do you know about [a-z0-9_]{3,16}(?: haunty| ailex)?$")
-                || normalized.matches(".*\bwhat do you remember about [a-z0-9_]{3,16}(?: haunty| ailex)?$");
+        return normalized.matches(".*wat weet je (?:over|van) [a-z0-9_]{3,16}(?: haunty| ailex)?$")
+                || normalized.matches(".*wat herinner je (?:over|van) [a-z0-9_]{3,16}(?: haunty| ailex)?$")
+                || normalized.matches(".*what do you know about [a-z0-9_]{3,16}(?: haunty| ailex)?$")
+                || normalized.matches(".*what do you remember about [a-z0-9_]{3,16}(?: haunty| ailex)?$");
     }
 
     private static boolean isDirectEventRecall(String message) {
