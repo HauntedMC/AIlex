@@ -1,0 +1,32 @@
+name: PR47 Named Memory Regex Fix
+
+on:
+  push:
+    paths:
+      - '.pr47-named-memory-regex-trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: fix/cognitive-memory-social-continuity
+          fetch-depth: 0
+      - name: Apply named-memory regex fix
+        run: python .github/scripts/pr47_fix_named_memory_regex.py
+      - name: Commit named-memory regex fix
+        run: |
+          git config user.name "AIlex architecture bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/main/java
+          if git diff --cached --quiet; then
+            echo "No named-memory regex fix required"
+          else
+            git commit -m "fix: recognize named-player memory recall phrases"
+            git push origin HEAD:fix/cognitive-memory-social-continuity
+          fi
