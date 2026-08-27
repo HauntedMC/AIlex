@@ -17,6 +17,8 @@ import java.util.Set;
 /** Utility class for handling the current plugin configuration. */
 public class ConfigHandler {
 
+    private static final int ASSISTANT_CONTEXT_REVISION = 2;
+
     private static ConfigHandler instance;
     private final JavaPlugin plugin;
 
@@ -66,7 +68,7 @@ public class ConfigHandler {
         );
     }
 
-    /** Keeps the generated configuration exactly aligned with the current bundled defaults. */
+    /** Keeps the generated configuration aligned with current defaults while preserving deliberate operator overrides. */
     private void synchronizeConfigWithDefaults() {
         InputStream defaultsStream = plugin.getResource("config.yml");
         if (defaultsStream == null) {
@@ -76,8 +78,45 @@ public class ConfigHandler {
                 new InputStreamReader(defaultsStream, StandardCharsets.UTF_8)
         );
         FileConfiguration current = plugin.getConfig();
+        int previousRevision = current.getInt("config_revision", 1);
+        int bundledRevision = defaults.getInt("config_revision", previousRevision);
         syncSection(current, defaults, "");
+        if (previousRevision < ASSISTANT_CONTEXT_REVISION && bundledRevision >= ASSISTANT_CONTEXT_REVISION) {
+            migrateLegacyAssistantBudgets(current);
+        }
+        if (bundledRevision > previousRevision) {
+            current.set("config_revision", bundledRevision);
+        }
         plugin.saveConfig();
+    }
+
+    /** Migrates only values that exactly match the previous shipped defaults; custom operator values remain untouched. */
+    private void migrateLegacyAssistantBudgets(FileConfiguration config) {
+        migrateInt(config, "openai.max_output_tokens", 200, 240);
+        migrateInt(config, "openai.assistant.context.max_input_tokens_fast", 3_000, 4_000);
+        migrateInt(config, "openai.assistant.context.max_input_tokens_grounded", 9_000, 12_000);
+        migrateInt(config, "openai.assistant.context.max_input_tokens_deliberate", 18_000, 24_000);
+        migrateInt(config, "openai.assistant.retrieval.max_chunks", 10, 12);
+        migrateInt(config, "openai.assistant.retrieval.max_evidence_characters", 24_000, 32_000);
+        migrateInt(config, "openai.assistant.models.fast.max_output_tokens", 220, 260);
+        migrateInt(config, "openai.assistant.models.grounded.max_output_tokens", 360, 480);
+        migrateInt(config, "openai.assistant.models.deliberate.max_output_tokens", 640, 800);
+        migrateInt(config, "openai.assistant.delivery.max_lines_grounded", 3, 4);
+        migrateInt(config, "openai.assistant.delivery.max_lines_deliberate", 4, 5);
+        migrateInt(config, "openai.assistant.delivery.max_line_characters", 240, 280);
+        migrateInt(config, "openai.assistant.memory.max_context_characters", 8_000, 10_000);
+        migrateInt(config, "openai.knowledge.max_characters", 24_000, 32_000);
+        migrateInt(config, "openai.chat_context.max_message_characters", 720, 900);
+        migrateInt(config, "openai.chat_context.max_context_characters", 14_000, 18_000);
+        migrateInt(config, "openai.chat_context.general_chat.max_context_characters", 3_000, 4_000);
+        migrateInt(config, "openai.chat_context.conversation.max_context_characters", 6_000, 8_000);
+        migrateInt(config, "openai.chat_context.bot_memory.max_context_characters", 4_000, 5_000);
+    }
+
+    private void migrateInt(FileConfiguration config, String path, int previousDefault, int newDefault) {
+        if (config.contains(path) && config.getInt(path) == previousDefault) {
+            config.set(path, newDefault);
+        }
     }
 
     private void syncSection(FileConfiguration currentConfig, ConfigurationSection defaultsSection, String currentPath) {
