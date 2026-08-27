@@ -20,6 +20,7 @@ import nl.hauntedmc.ailex.assistant.runtime.AssistantRequestTracer;
 import nl.hauntedmc.ailex.assistant.runtime.PlayerResponseRateLimiter;
 import nl.hauntedmc.ailex.assistant.runtime.context.ChatContextStore;
 import nl.hauntedmc.ailex.infrastructure.openai.OpenAiResponsesClient;
+import nl.hauntedmc.ailex.infrastructure.openai.ResilientOpenAiResponsesClient.OpenAiUnavailableException;
 import nl.hauntedmc.ailex.npc.NPC;
 import nl.hauntedmc.ailex.npc.lifecycle.NpcManager;
 import nl.hauntedmc.ailex.util.FormatterUtils;
@@ -32,7 +33,9 @@ import org.bukkit.scheduler.BukkitTask;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Application-facing chat coordinator.
@@ -54,6 +57,7 @@ public final class AssistantChatController implements AutoCloseable {
     private final ChatContextStore chatContextStore;
     private final ProactiveChatService proactiveChatService;
     private final AssistantActionOutcomeRecorder actionOutcomeRecorder;
+    private final Map<UUID, PlayerResponseRateLimiter.Permit> rateLimitPermits = new ConcurrentHashMap<>();
     private BukkitTask idleConversationTask;
 
     public AssistantChatController(AIlexPlugin plugin) {
@@ -213,12 +217,16 @@ public final class AssistantChatController implements AutoCloseable {
             sendFeedback(source, "failure", "Mijn AI-service is nu niet beschikbaar. Probeer het zo nog eens.");
             return;
         }
-        if (!responseRateLimiter.tryAcquire(sourceId, configuration.bypassRateLimit(source))) {
+        PlayerResponseRateLimiter.Permit permit = responseRateLimiter.acquire(
+                sourceId, configuration.bypassRateLimit(source)
+        );
+        if (!permit.acquired()) {
             chatContextStore.recordGeneralChat(sourceName, message, contextSettings);
             requestTracer.transition(requestId, AssistantRequestTracer.State.REJECTED, "rate-limited");
             sendRateLimitFeedback(source);
             return;
         }
+        rateLimitPermits.put(requestId, permit);
 
         conversationManager.recordUser(sourceId, target.id(), sourceName, message);
         try {
@@ -248,6 +256,7 @@ public final class AssistantChatController implements AutoCloseable {
             );
             handleSubmission(source, requestId, submission);
         } catch (RuntimeException exception) {
+            refundRateLimit(requestId);
             requestTracer.transition(requestId, AssistantRequestTracer.State.UPSTREAM_FAILED, "prepare-or-dispatch");
             LoggerUtils.logError("Could not prepare or dispatch assistant chat request: " + exception.getMessage());
             sendFeedback(source, "failure", "Mijn AI-service gaf geen bruikbaar antwoord. Probeer het nog eens.");
@@ -347,7 +356,7 @@ public final class AssistantChatController implements AutoCloseable {
             });
         } catch (Exception exception) {
             LoggerUtils.logError("Could not complete assistant chat request: " + exception.getMessage());
-            failUpstream(requestId, source, "exception");
+            failUpstream(requestId, source, providerFailureDetail(exception));
         }
     }
 
@@ -451,7 +460,7 @@ public final class AssistantChatController implements AutoCloseable {
                 requestTracer.transition(requestId, AssistantRequestTracer.State.COMPLETED, "delivered");
             });
         } catch (Exception exception) {
-            requestTracer.transition(requestId, AssistantRequestTracer.State.UPSTREAM_FAILED, "exception");
+            requestTracer.transition(requestId, AssistantRequestTracer.State.UPSTREAM_FAILED, providerFailureDetail(exception));
             LoggerUtils.logError("Could not complete proactive assistant chat: " + exception.getMessage());
         }
     }
@@ -474,6 +483,7 @@ public final class AssistantChatController implements AutoCloseable {
             AssistantRequestCoordinator.Submission submission
     ) {
         if (submission.supersededRequestId() != null) {
+            refundRateLimit(submission.supersededRequestId());
             requestTracer.transition(
                     submission.supersededRequestId(),
                     AssistantRequestTracer.State.SUPERSEDED,
@@ -491,6 +501,7 @@ public final class AssistantChatController implements AutoCloseable {
                 sendFeedback(source, "queued_replaced", "Ik ben nog bezig; ik pak je nieuwste bericht hierna.");
             }
             case REJECTED_BUSY, REJECTED_FULL -> {
+                refundRateLimit(requestId);
                 requestTracer.transition(
                         requestId,
                         AssistantRequestTracer.State.REJECTED,
@@ -507,13 +518,16 @@ public final class AssistantChatController implements AutoCloseable {
 
     private void deliverTrackedResponse(UUID requestId, Player source, Component response) {
         if (!source.isOnline()) {
+            refundRateLimit(requestId);
             requestTracer.transition(requestId, AssistantRequestTracer.State.DELIVERY_FAILED, "requester-offline");
             return;
         }
         try {
             deliverResponse(source, response, configuration.responseVisibility());
+            consumeRateLimit(requestId);
             requestTracer.transition(requestId, AssistantRequestTracer.State.COMPLETED, "delivered");
         } catch (RuntimeException exception) {
+            refundRateLimit(requestId);
             requestTracer.transition(requestId, AssistantRequestTracer.State.DELIVERY_FAILED, "delivery-exception");
             LoggerUtils.logError("Could not deliver assistant response: " + exception.getMessage());
         }
@@ -543,6 +557,7 @@ public final class AssistantChatController implements AutoCloseable {
     }
 
     private void failUpstream(UUID requestId, Player source, String detail) {
+        refundRateLimit(requestId);
         requestTracer.transition(requestId, AssistantRequestTracer.State.UPSTREAM_FAILED, detail);
         Bukkit.getScheduler().runTask(
                 plugin,
@@ -552,6 +567,29 @@ public final class AssistantChatController implements AutoCloseable {
                         "Mijn AI-service gaf geen bruikbaar antwoord. Probeer het nog eens."
                 )
         );
+    }
+
+    private String providerFailureDetail(Throwable failure) {
+        Throwable current = failure;
+        while (current != null) {
+            if (current instanceof OpenAiUnavailableException unavailable) {
+                String detail = "openai-" + unavailable.failureKind().name().toLowerCase(Locale.ROOT);
+                return unavailable.httpStatus() > 0 ? detail + '-' + unavailable.httpStatus() : detail;
+            }
+            current = current.getCause();
+        }
+        return "exception";
+    }
+
+    private void refundRateLimit(UUID requestId) {
+        PlayerResponseRateLimiter.Permit permit = rateLimitPermits.remove(requestId);
+        if (permit != null) {
+            responseRateLimiter.refund(permit);
+        }
+    }
+
+    private void consumeRateLimit(UUID requestId) {
+        rateLimitPermits.remove(requestId);
     }
 
     private void sendRateLimitFeedback(Player source) {
@@ -593,5 +631,7 @@ public final class AssistantChatController implements AutoCloseable {
             idleConversationTask.cancel();
             idleConversationTask = null;
         }
+        rateLimitPermits.values().forEach(responseRateLimiter::refund);
+        rateLimitPermits.clear();
     }
 }
