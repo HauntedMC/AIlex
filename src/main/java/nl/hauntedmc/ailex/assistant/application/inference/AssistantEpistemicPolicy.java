@@ -15,6 +15,16 @@ public final class AssistantEpistemicPolicy {
     private AssistantEpistemicPolicy() {
     }
 
+    /**
+     * Maps one already-admitted evidence identifier to its provenance family.
+     *
+     * <p>This method does not decide whether an arbitrary string is trusted. Callers first construct the allowed evidence
+     * set from reviewed retrieval, scoped memory, or the frozen live snapshot. Unknown non-memory/live IDs are therefore
+     * classified as reviewed knowledge only inside that admitted request boundary.</p>
+     *
+     * @param evidenceId evidence identifier present in the current request
+     * @return provenance class used for deterministic grounding policy
+     */
     public static EvidenceClass classify(String evidenceId) {
         String id = evidenceId == null ? "" : evidenceId.trim().toLowerCase(Locale.ROOT);
         if (id.isBlank()) {
@@ -43,6 +53,10 @@ public final class AssistantEpistemicPolicy {
         return EvidenceClass.REVIEWED_KNOWLEDGE;
     }
 
+    /**
+     * Returns the positive provenance families that are acceptable for the factual route.
+     * Empty means the route may use ordinary model knowledge and does not require supplied evidence.
+     */
     public static Set<EvidenceClass> requiredPositiveClasses(AssistantIntent intent) {
         AssistantIntent effective = intent == null ? AssistantIntent.CONVERSATION : intent;
         return switch (effective) {
@@ -54,6 +68,10 @@ public final class AssistantEpistemicPolicy {
         };
     }
 
+    /**
+     * Checks whether the supplied packet contains at least one positive evidence class valid for the route.
+     * Negative observations are useful for retrieval/abstention decisions but can never satisfy this check.
+     */
     public static boolean canGround(AssistantIntent intent, EvidencePacket packet) {
         Set<EvidenceClass> required = requiredPositiveClasses(intent);
         if (required.isEmpty()) {
