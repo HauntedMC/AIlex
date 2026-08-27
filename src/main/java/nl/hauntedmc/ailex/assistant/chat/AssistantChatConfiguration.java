@@ -43,10 +43,10 @@ public final class AssistantChatConfiguration {
 
     /**
      * Whether an active dialogue may consume a later player chat line that does not mention the assistant again.
-     * Enabled by default for natural conversation; the conversation manager applies strict continuation heuristics.
+     * Disabled by default so ordinary player conversation can never be silently routed into an AI request.
      */
     public boolean allowImplicitFollowUps() {
-        return bool(CHAT + ".allow_implicit_followups", true);
+        return bool(CHAT + ".allow_implicit_followups", false);
     }
 
     public String responseVisibility() {
