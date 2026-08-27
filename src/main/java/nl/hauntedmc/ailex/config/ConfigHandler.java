@@ -18,6 +18,7 @@ import java.util.Set;
 public class ConfigHandler {
 
     private static final int ASSISTANT_CONTEXT_REVISION = 2;
+    private static final int CHAT_LIVENESS_REVISION = 3;
 
     private static ConfigHandler instance;
     private final JavaPlugin plugin;
@@ -84,6 +85,9 @@ public class ConfigHandler {
         if (previousRevision < ASSISTANT_CONTEXT_REVISION && bundledRevision >= ASSISTANT_CONTEXT_REVISION) {
             migrateLegacyAssistantBudgets(current);
         }
+        if (previousRevision < CHAT_LIVENESS_REVISION && bundledRevision >= CHAT_LIVENESS_REVISION) {
+            migrateChatLivenessDefaults(current);
+        }
         if (bundledRevision > previousRevision) {
             current.set("config_revision", bundledRevision);
         }
@@ -111,6 +115,15 @@ public class ConfigHandler {
         migrateInt(config, "openai.chat_context.general_chat.max_context_characters", 3_000, 4_000);
         migrateInt(config, "openai.chat_context.conversation.max_context_characters", 6_000, 8_000);
         migrateInt(config, "openai.chat_context.bot_memory.max_context_characters", 4_000, 5_000);
+    }
+
+    /**
+     * Makes sustained conversations practical while preserving explicit operator tuning from older installations.
+     * Neither setting controls whether an explicitly named assistant remains addressable.
+     */
+    private void migrateChatLivenessDefaults(FileConfiguration config) {
+        migrateInt(config, "openai.chat.session_timeout_seconds", 300, 900);
+        migrateInt(config, "openai.rate_limit.max_responses_per_player", 10, 30);
     }
 
     private void migrateInt(FileConfiguration config, String path, int previousDefault, int newDefault) {
