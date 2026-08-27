@@ -30,11 +30,12 @@ public final class RequiredContextPlanner {
             case CONVERSATION, GAMEPLAY_HELP -> personalizationSignal(text);
             case LIVE_STATE, KNOWLEDGE_DISCOVERY, SAFETY, SUPPORT -> false;
         };
-        // A memory-recall question asks what Haunty remembers, not only what was promoted into a semantic profile.
-        // Include bounded episodic observations too so public conversations and meaningful events are recallable without
-        // weakening player-memory visibility rules. Ordinary personalized conversation still avoids this extra context.
+        // Event recall always needs the timeline. Memory recall adds public NPC-observed events only when the wording
+        // explicitly targets a third party; broad self/profile recall stays player-scoped and cannot be polluted by unrelated
+        // public conversations that the same NPC happened to witness.
         boolean eventMemory = settings.toolAllowed("session")
-                && (effectiveIntent == AssistantIntent.MEMORY_RECALL || effectiveIntent == AssistantIntent.EVENT_RECALL);
+                && (effectiveIntent == AssistantIntent.EVENT_RECALL
+                || effectiveIntent == AssistantIntent.MEMORY_RECALL && publicObservationRecallSignal(text));
 
         EnumSet<LiveSource> live = EnumSet.noneOf(LiveSource.class);
         if (effectiveIntent == AssistantIntent.LIVE_STATE) {
@@ -80,6 +81,18 @@ public final class RequiredContextPlanner {
                 "my project", "mijn doel", "my goal", "favoriet", "favorite", "favourite", "lievelings", "voorkeur",
                 "prefer", "ik hou van", "ik houd van", "i like", "i love", "ik ben fan", "i am a fan",
                 "ik speel sinds", "ik speel al sinds", "i have played since", "i've played since"
+        );
+    }
+
+    private boolean publicObservationRecallSignal(String text) {
+        if (containsAny(text,
+                "over mij", "van mij", "about me", "about myself", "remember me", "onthoud je van mij"
+        )) {
+            return false;
+        }
+        return containsAny(text,
+                "wat weet je over ", "wat weet je van ", "wat herinner je over ", "wat herinner je van ",
+                "what do you know about ", "what do you remember about "
         );
     }
 

@@ -232,7 +232,18 @@ public final class AssistantIntentClassifier {
                 "wat heb je onthouden", "wat onthoud je van mij", "herinner je mij", "herinner je je mij",
                 "what do you remember about me", "what do you know about me", "what have you remembered about me",
                 "what have you saved about me", "do you remember me"
-        );
+        ) || isNamedPlayerMemoryRecall(message);
+    }
+
+    private static boolean isNamedPlayerMemoryRecall(String message) {
+        String normalized = cleanForRouting(message).replaceAll("[?!.,]+$", "").trim();
+        if (containsAny(normalized, GAMEPLAY_WORDS) || containsAny(normalized, SERVER_WORDS)) {
+            return false;
+        }
+        return normalized.matches(".*\bwat weet je (?:over|van) [a-z0-9_]{3,16}(?: haunty| ailex)?$")
+                || normalized.matches(".*\bwat herinner je (?:over|van) [a-z0-9_]{3,16}(?: haunty| ailex)?$")
+                || normalized.matches(".*\bwhat do you know about [a-z0-9_]{3,16}(?: haunty| ailex)?$")
+                || normalized.matches(".*\bwhat do you remember about [a-z0-9_]{3,16}(?: haunty| ailex)?$");
     }
 
     private static boolean isDirectEventRecall(String message) {

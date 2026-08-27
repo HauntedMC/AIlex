@@ -159,8 +159,7 @@ public final class SemanticNeedPlanner {
         boolean memory = safe.durableMemory()
                 || settings.toolAllowed("session") && (decision.needs().contains(Need.MEMORY)
                 || decision.needs().contains(Need.MEMORY_TIMELINE));
-        boolean events = safe.eventMemory() || decision.intent() == AssistantIntent.EVENT_RECALL
-                || decision.intent() == AssistantIntent.MEMORY_RECALL;
+        boolean events = safe.eventMemory() || decision.intent() == AssistantIntent.EVENT_RECALL;
         return new RequiredContextPlanner.Plan(knowledge, memory, events, Set.copyOf(live));
     }
 
