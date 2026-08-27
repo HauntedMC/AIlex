@@ -90,28 +90,6 @@ public final class MysqlMemoryRepository implements MemoryRepository {
     }
 
     @Override
-    public synchronized List<MemoryRecord> loadChangedSince(long sinceEpochMillis, int limit) {
-        ensureConnection();
-        String sql = "SELECT * FROM " + table + " WHERE last_confirmed > ? OR expires_at > ? "
-                + "ORDER BY GREATEST(last_confirmed, expires_at) ASC LIMIT ?";
-        List<MemoryRecord> records = new ArrayList<>();
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, sinceEpochMillis);
-            statement.setLong(2, sinceEpochMillis);
-            statement.setInt(3, Math.clamp(limit, 1, 2_048));
-            try (ResultSet result = statement.executeQuery()) {
-                while (result.next()) {
-                    records.add(read(result));
-                }
-            }
-            return List.copyOf(records);
-        } catch (SQLException exception) {
-            invalidateConnection();
-            throw new IllegalStateException("Could not load legacy shared assistant memory changes", exception);
-        }
-    }
-
-    @Override
     public synchronized long latestChangeSequence() {
         ensureConnection();
         try (Statement statement = connection.createStatement();
