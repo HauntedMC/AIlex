@@ -14,10 +14,11 @@ public class PlayerResponseRateLimiter {
 
     private static final long CLEANUP_INTERVAL_MILLIS = 60_000L;
 
-    private final Map<UUID, Deque<Long>> responseTimestamps = new ConcurrentHashMap<>();
+    private final Map<UUID, Deque<Reservation>> responseTimestamps = new ConcurrentHashMap<>();
     private final Supplier<ResponseRateLimit> limitSupplier;
     private final LongSupplier currentTimeMillis;
     private final AtomicLong lastCleanupMillis = new AtomicLong(Long.MIN_VALUE);
+    private final AtomicLong reservationSequence = new AtomicLong();
 
     public PlayerResponseRateLimiter(Supplier<ResponseRateLimit> limitSupplier, LongSupplier currentTimeMillis) {
         this.limitSupplier = limitSupplier;
@@ -28,27 +29,57 @@ public class PlayerResponseRateLimiter {
         return tryAcquire(playerId, false);
     }
 
+    /** Legacy boolean API. Callers that may fail after admission should prefer {@link #acquire} so they can refund. */
     public boolean tryAcquire(UUID playerId, boolean bypassRateLimit) {
+        return acquire(playerId, bypassRateLimit).acquired();
+    }
+
+    /**
+     * Reserves one response slot for a request. The returned permit identifies that exact reservation so failed,
+     * superseded or undeliverable requests can release it without disturbing another concurrent request by the player.
+     */
+    public Permit acquire(UUID playerId, boolean bypassRateLimit) {
+        if (playerId == null) {
+            return Permit.rejected();
+        }
         if (bypassRateLimit) {
-            return true;
+            return Permit.uncounted(playerId);
         }
         ResponseRateLimit limit = limitSupplier.get();
         if (!limit.enabled()) {
-            return true;
+            return Permit.uncounted(playerId);
         }
 
         long now = currentTimeMillis.getAsLong();
         long oldestAllowed = now - limit.windowMillis();
         removeExpiredBuckets(now, oldestAllowed);
-        Deque<Long> timestamps = responseTimestamps.computeIfAbsent(playerId, ignored -> new ArrayDeque<>());
+        Deque<Reservation> timestamps = responseTimestamps.computeIfAbsent(playerId, ignored -> new ArrayDeque<>());
 
         synchronized (timestamps) {
             removeExpiredTimestamps(timestamps, oldestAllowed);
             if (timestamps.size() >= limit.maxResponses()) {
-                return false;
+                return Permit.rejected();
             }
-            timestamps.addLast(now);
-            return true;
+            long reservationId = reservationSequence.incrementAndGet();
+            timestamps.addLast(new Reservation(reservationId, now));
+            return Permit.counted(playerId, reservationId);
+        }
+    }
+
+    /** Releases an exact counted reservation. Calling this repeatedly for the same permit is harmless. */
+    public void refund(Permit permit) {
+        if (permit == null || !permit.acquired() || !permit.counted() || permit.playerId() == null) {
+            return;
+        }
+        Deque<Reservation> timestamps = responseTimestamps.get(permit.playerId());
+        if (timestamps == null) {
+            return;
+        }
+        synchronized (timestamps) {
+            timestamps.removeIf(entry -> entry.id() == permit.reservationId());
+            if (timestamps.isEmpty()) {
+                responseTimestamps.remove(permit.playerId(), timestamps);
+            }
         }
     }
 
@@ -61,7 +92,7 @@ public class PlayerResponseRateLimiter {
         long now = currentTimeMillis.getAsLong();
         long oldestAllowed = now - limit.windowMillis();
         removeExpiredBuckets(now, oldestAllowed);
-        Deque<Long> timestamps = responseTimestamps.get(playerId);
+        Deque<Reservation> timestamps = responseTimestamps.get(playerId);
         if (timestamps == null) {
             return 0L;
         }
@@ -71,7 +102,7 @@ public class PlayerResponseRateLimiter {
             if (timestamps.size() < limit.maxResponses() || timestamps.isEmpty()) {
                 return 0L;
             }
-            return Math.max(0L, timestamps.peekFirst() + limit.windowMillis() - now);
+            return Math.max(0L, timestamps.peekFirst().timestampMillis() + limit.windowMillis() - now);
         }
     }
 
@@ -94,10 +125,27 @@ public class PlayerResponseRateLimiter {
         });
     }
 
-    private void removeExpiredTimestamps(Deque<Long> timestamps, long oldestAllowed) {
-        while (!timestamps.isEmpty() && timestamps.peekFirst() <= oldestAllowed) {
+    private void removeExpiredTimestamps(Deque<Reservation> timestamps, long oldestAllowed) {
+        while (!timestamps.isEmpty() && timestamps.peekFirst().timestampMillis() <= oldestAllowed) {
             timestamps.removeFirst();
         }
+    }
+
+    public record Permit(UUID playerId, long reservationId, boolean acquired, boolean counted) {
+        private static Permit rejected() {
+            return new Permit(null, 0L, false, false);
+        }
+
+        private static Permit uncounted(UUID playerId) {
+            return new Permit(playerId, 0L, true, false);
+        }
+
+        private static Permit counted(UUID playerId, long reservationId) {
+            return new Permit(playerId, reservationId, true, true);
+        }
+    }
+
+    private record Reservation(long id, long timestampMillis) {
     }
 
     public record ResponseRateLimit(boolean enabled, int maxResponses, long windowMillis) {
