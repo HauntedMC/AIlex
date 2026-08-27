@@ -193,6 +193,14 @@ public final class AssistantChatController implements AutoCloseable {
         return npc != null && npc.isChatEnabled();
     }
 
+    /**
+     * Structured replies keep logical lines for grounding, but Minecraft chat is rendered as one natural flowing line.
+     * This also protects the direct/proactive fallback paths from leaking provider line breaks into public chat.
+     */
+    static String flattenForChat(String response) {
+        return response == null ? "" : response.replaceAll("\\s+", " ").trim();
+    }
+
     private void submitRequest(
             Player source,
             AssistantChatTarget target,
@@ -322,12 +330,12 @@ public final class AssistantChatController implements AutoCloseable {
             AssistantReply reply = null;
             if (prepared.settings().enabled()) {
                 reply = assistantService.respond(prepared);
-                response = String.join("\n", reply.lines());
+                response = flattenForChat(String.join(" ", reply.lines()));
             } else {
-                response = client.getChatResponse(target.systemPrompt(), prepared.userPrompt());
+                response = flattenForChat(client.getChatResponse(target.systemPrompt(), prepared.userPrompt()));
                 assistantService.recordDirectResponse(prepared, response);
             }
-            if (response == null || response.isBlank()) {
+            if (response.isBlank()) {
                 failUpstream(requestId, source, "blank-response");
                 return;
             }
@@ -440,12 +448,12 @@ public final class AssistantChatController implements AutoCloseable {
                 return;
             }
             String response = prepared.settings().enabled()
-                    ? String.join("\n", assistantService.respond(prepared).lines())
-                    : client.getChatResponse(target.systemPrompt(), prepared.userPrompt());
+                    ? flattenForChat(String.join(" ", assistantService.respond(prepared).lines()))
+                    : flattenForChat(client.getChatResponse(target.systemPrompt(), prepared.userPrompt()));
             if (!prepared.settings().enabled()) {
                 assistantService.recordDirectResponse(prepared, response);
             }
-            if (response == null || response.isBlank() || !trigger.accepts(response)) {
+            if (response.isBlank() || !trigger.accepts(response)) {
                 requestTracer.transition(requestId, AssistantRequestTracer.State.REJECTED, "trigger-rejected-response");
                 return;
             }
