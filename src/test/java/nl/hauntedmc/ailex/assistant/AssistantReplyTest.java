@@ -68,6 +68,18 @@ class AssistantReplyTest {
     }
 
     @Test
+    void malformedLegacyEnvelopeMatchingProductionScreenshotMustBeRecovered() {
+        AssistantReply reply = AssistantReply.fromPlainText(
+                "\"response\":\"Ik kan niet verifiëren of de nieuwe Haunty-versie live is.\",\"evidence\":[]"
+        );
+
+        assertTrue(reply.valid());
+        assertEquals(List.of("Ik kan niet verifiëren of de nieuwe Haunty-versie live is."), reply.lines());
+        assertFalse(reply.lines().getFirst().contains("\"response\""));
+        assertFalse(reply.lines().getFirst().contains("\"evidence\""));
+    }
+
+    @Test
     void accidentalCurrentStructuredEnvelopeOnPlainPathIsUnwrapped() {
         AssistantReply reply = AssistantReply.fromPlainText(
                 "{\"lines\":[\"Hoi!\",\"Waarmee kan ik helpen?\"],\"evidence_ids\":[]}"
