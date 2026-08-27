@@ -29,7 +29,7 @@ public record AssistantSettings(
         }
         String defaultModel = config.getString("openai.model", "gpt-5.6-luna");
         String defaultEffort = config.getString("openai.reasoning_effort", "low");
-        int defaultOutputTokens = config.getInt("openai.max_output_tokens", 200);
+        int defaultOutputTokens = config.getInt("openai.max_output_tokens", 240);
         Set<String> allowedLanguages = allowedLanguages(config.getStringList(PATH + ".routing.allowed_languages"));
         return new AssistantSettings(
                 config.getBoolean(PATH + ".enabled", true), config.getString(PATH + ".mode", "adaptive"),
@@ -44,22 +44,22 @@ public record AssistantSettings(
                 config.getBoolean(PATH + ".retrieval.hybrid_enabled", true),
                 Math.clamp(config.getInt(PATH + ".retrieval.query_cache_seconds", 300), 0, 3600),
                 config.getBoolean(PATH + ".retrieval.exclude_expired", true),
-                Math.clamp(config.getInt(PATH + ".retrieval.max_evidence_characters", 24_000), 500, 60_000),
-                Math.clamp(config.getInt(PATH + ".retrieval.max_chunks", 10), 1, 20),
-                profile(config, "fast", defaultModel, defaultEffort, Math.min(defaultOutputTokens, 220)),
-                profile(config, "grounded", defaultModel, defaultEffort, Math.max(defaultOutputTokens, 360)),
-                profile(config, "deliberate", defaultModel, defaultEffort, Math.max(defaultOutputTokens, 640)),
+                Math.clamp(config.getInt(PATH + ".retrieval.max_evidence_characters", 32_000), 500, 60_000),
+                Math.clamp(config.getInt(PATH + ".retrieval.max_chunks", 12), 1, 20),
+                profile(config, "fast", defaultModel, defaultEffort, Math.min(defaultOutputTokens, 260)),
+                profile(config, "grounded", defaultModel, defaultEffort, Math.max(defaultOutputTokens, 480)),
+                profile(config, "deliberate", defaultModel, defaultEffort, Math.max(defaultOutputTokens, 800)),
                 config.getBoolean(PATH + ".tools.read_only", true),
                 Set.copyOf(config.getStringList(PATH + ".tools.allowed").stream()
                         .map(value -> value.toLowerCase(Locale.ROOT)).toList()),
                 config.getBoolean(PATH + ".tools.redact_other_players", true),
                 Math.clamp(config.getInt(PATH + ".delivery.max_lines_fast", 1), 1, 4),
-                Math.clamp(config.getInt(PATH + ".delivery.max_lines_grounded", 3), 1, 5),
-                Math.clamp(config.getInt(PATH + ".delivery.max_lines_deliberate", 4), 1, 6),
-                Math.clamp(config.getInt(PATH + ".delivery.max_line_characters", 240), 80, 320),
-                Math.clamp(config.getInt(PATH + ".context.max_input_tokens_fast", 3_000), 512, 16_000),
-                Math.clamp(config.getInt(PATH + ".context.max_input_tokens_grounded", 9_000), 1_024, 32_000),
-                Math.clamp(config.getInt(PATH + ".context.max_input_tokens_deliberate", 18_000), 2_048, 64_000),
+                Math.clamp(config.getInt(PATH + ".delivery.max_lines_grounded", 4), 1, 5),
+                Math.clamp(config.getInt(PATH + ".delivery.max_lines_deliberate", 5), 1, 6),
+                Math.clamp(config.getInt(PATH + ".delivery.max_line_characters", 280), 80, 320),
+                Math.clamp(config.getInt(PATH + ".context.max_input_tokens_fast", 4_000), 512, 16_000),
+                Math.clamp(config.getInt(PATH + ".context.max_input_tokens_grounded", 12_000), 1_024, 32_000),
+                Math.clamp(config.getInt(PATH + ".context.max_input_tokens_deliberate", 24_000), 2_048, 64_000),
                 config.getBoolean(PATH + ".structured_output", true),
                 config.getBoolean(PATH + ".verification.enabled", true),
                 config.getString(PATH + ".verification.minimum_confidence", "medium"),
@@ -78,12 +78,12 @@ public record AssistantSettings(
 
     public static AssistantSettings defaults() {
         return new AssistantSettings(true, "adaptive", 18, 4, 2, true, "nl", Set.of("nl", "en"), true, true,
-                300, true, 24_000, 10,
-                new ModelProfile("gpt-5.6-luna", "low", 180),
-                new ModelProfile("gpt-5.6-terra", "medium", 360),
-                new ModelProfile("gpt-5.6-sol", "high", 640),
+                300, true, 32_000, 12,
+                new ModelProfile("gpt-5.6-luna", "low", 240),
+                new ModelProfile("gpt-5.6-terra", "medium", 480),
+                new ModelProfile("gpt-5.6-sol", "high", 800),
                 true, Set.of("knowledge", "requester", "world", "nearby", "server", "npc", "session"), true,
-                1, 3, 4, 240, 3_000, 9_000, 18_000,
+                1, 4, 5, 280, 4_000, 12_000, 24_000,
                 true, true, "medium", true, 64, 120_000, true, true, false,
                 true, true, false, 240);
     }
