@@ -2,6 +2,7 @@ package nl.hauntedmc.ailex;
 
 import nl.hauntedmc.ailex.assistant.adapter.paper.AssistantChatListener;
 import nl.hauntedmc.ailex.assistant.application.AssistantService;
+import nl.hauntedmc.ailex.assistant.infrastructure.knowledge.CanonicalIdentifierRegistry;
 import nl.hauntedmc.ailex.assistant.infrastructure.live.AssistantContextProviderRegistry;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantEventMemoryService;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantMemoryService;
@@ -34,6 +35,7 @@ public class AIlexPlugin extends JavaPlugin {
     private AssistantMemoryService assistantMemoryService;
     private AssistantEventMemoryService assistantEventMemoryService;
     private AssistantContextProviderRegistry assistantContextProviderRegistry;
+    private CanonicalIdentifierRegistry canonicalIdentifierRegistry;
     private AssistantService assistantService;
     private AssistantRequestTracer assistantRequestTracer;
     private AssistantChatListener assistantChatListener;
@@ -45,6 +47,8 @@ public class AIlexPlugin extends JavaPlugin {
 
         ConfigHandler.init(this);
         DataHandler.init(this);
+        canonicalIdentifierRegistry = new CanonicalIdentifierRegistry(this);
+        canonicalIdentifierRegistry.writeKnowledgeSnapshot();
         assistantRequestTracer = new AssistantRequestTracer(
                 () -> getConfig().getBoolean("openai.assistant.observability.enabled", true),
                 () -> getConfig().getBoolean("openai.assistant.observability.include_requester_name", true)
@@ -104,7 +108,8 @@ public class AIlexPlugin extends JavaPlugin {
                 throw new IllegalStateException("The bundled knowledge manifest is missing");
             }
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(resource, StandardCharsets.UTF_8))) {
-                reader.lines().map(String::trim).filter(file -> file.endsWith(".md"))
+                reader.lines().map(String::trim)
+                        .filter(file -> file.endsWith(".md") || file.endsWith(".tsv"))
                         .forEach(file -> saveResource("knowledge/" + file, true));
             }
         } catch (IOException exception) {
@@ -166,6 +171,10 @@ public class AIlexPlugin extends JavaPlugin {
 
     public void reloadOpenAiResponsesClient() {
         openAiResponsesClient = new OpenAiResponsesClient(this);
+        if (canonicalIdentifierRegistry != null) {
+            canonicalIdentifierRegistry.reload();
+            canonicalIdentifierRegistry.writeKnowledgeSnapshot();
+        }
         if (assistantService != null) {
             assistantService.reload();
         }
