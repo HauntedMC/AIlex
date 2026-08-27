@@ -27,8 +27,10 @@ class ResilientOpenAiResponsesClientTest {
     @Test
     void failedFastCallThrowsInsteadOfReturningFallbackAsAssistantText() throws Exception {
         HttpClient httpClient = mock(HttpClient.class);
-        when(httpClient.send(any(HttpRequest.class), anyStringBodyHandler()))
-                .thenReturn(mockStringResponse(429, "{\"error\":{\"message\":\"rate limited\"}}"));
+        HttpResponse<String> rateLimited = mockStringResponse(
+                429, "{\"error\":{\"message\":\"rate limited\"}}"
+        );
+        when(httpClient.send(any(HttpRequest.class), anyStringBodyHandler())).thenReturn(rateLimited);
 
         try (MockedStatic<LoggerUtils> ignored = mockStatic(LoggerUtils.class)) {
             ResilientOpenAiResponsesClient client = new ResilientOpenAiResponsesClient(
@@ -88,8 +90,8 @@ class ResilientOpenAiResponsesClientTest {
     @Test
     void providerCircuitOpensOnlyAfterRepeatedRealProviderFailures() throws Exception {
         HttpClient httpClient = mock(HttpClient.class);
-        when(httpClient.send(any(HttpRequest.class), anyStringBodyHandler()))
-                .thenReturn(mockStringResponse(503, "{\"error\":{\"message\":\"busy\"}}"));
+        HttpResponse<String> unavailable = mockStringResponse(503, "{\"error\":{\"message\":\"busy\"}}");
+        when(httpClient.send(any(HttpRequest.class), anyStringBodyHandler())).thenReturn(unavailable);
 
         try (MockedStatic<LoggerUtils> ignored = mockStatic(LoggerUtils.class)) {
             ResilientOpenAiResponsesClient client = new ResilientOpenAiResponsesClient(
@@ -117,8 +119,10 @@ class ResilientOpenAiResponsesClientTest {
     @Test
     void authenticationFailuresDoNotPoisonProviderCircuit() throws Exception {
         HttpClient httpClient = mock(HttpClient.class);
-        when(httpClient.send(any(HttpRequest.class), anyStringBodyHandler()))
-                .thenReturn(mockStringResponse(401, "{\"error\":{\"message\":\"bad key\"}}"));
+        HttpResponse<String> unauthorized = mockStringResponse(
+                401, "{\"error\":{\"message\":\"bad key\"}}"
+        );
+        when(httpClient.send(any(HttpRequest.class), anyStringBodyHandler())).thenReturn(unauthorized);
 
         try (MockedStatic<LoggerUtils> ignored = mockStatic(LoggerUtils.class)) {
             ResilientOpenAiResponsesClient client = new ResilientOpenAiResponsesClient(
