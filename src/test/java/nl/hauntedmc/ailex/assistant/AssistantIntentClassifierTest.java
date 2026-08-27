@@ -28,6 +28,21 @@ class AssistantIntentClassifierTest {
     }
 
     @Test
+    void shouldRouteDiscordAndAiReleaseQuestionsToGroundedServerEvidence() {
+        AssistantIntentClassifier.Analysis discord = AssistantIntentClassifier.analyze(
+                "In welk Discord kanaal staan de aankondigingen?"
+        );
+        AssistantIntentClassifier.Analysis release = AssistantIntentClassifier.analyze(
+                "Is de nieuwe Haunty versie al live?"
+        );
+
+        assertEquals(AssistantIntent.SERVER_FACT, discord.intent());
+        assertEquals(AssistantMode.GROUNDED, discord.mode());
+        assertEquals(AssistantIntent.SERVER_FACT, release.intent());
+        assertEquals(AssistantMode.GROUNDED, release.mode());
+    }
+
+    @Test
     void shouldRouteLiveQuestionsToGroundedEvidenceWithoutSpendingDeliberateReasoning() {
         AssistantIntentClassifier.Analysis analysis = AssistantIntentClassifier.analyze(
                 "Welk biome is hier dichtbij?"
@@ -202,6 +217,20 @@ class AssistantIntentClassifierTest {
         assertTrue(settings.diagnosticLogging());
         assertTrue(settings.logResponsePreview());
         assertEquals(120, settings.maxResponsePreviewCharacters());
+    }
+
+    @Test
+    void shouldUseRicherBoundedDefaultsWithoutMakingFastChatUnbounded() {
+        AssistantSettings settings = AssistantSettings.defaults();
+
+        assertEquals(4_000, settings.maxInputTokens(AssistantMode.FAST));
+        assertEquals(12_000, settings.maxInputTokens(AssistantMode.GROUNDED));
+        assertEquals(24_000, settings.maxInputTokens(AssistantMode.DELIBERATE));
+        assertEquals(12, settings.maxChunks());
+        assertEquals(32_000, settings.maxEvidenceCharacters());
+        assertEquals(240, settings.profileFor(AssistantMode.FAST).maxOutputTokens());
+        assertEquals(480, settings.profileFor(AssistantMode.GROUNDED).maxOutputTokens());
+        assertEquals(800, settings.profileFor(AssistantMode.DELIBERATE).maxOutputTokens());
     }
 
     @Test
