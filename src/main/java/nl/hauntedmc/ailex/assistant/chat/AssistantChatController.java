@@ -119,16 +119,18 @@ public final class AssistantChatController implements AutoCloseable {
             return;
         }
 
-        boolean ambientPlayerConversation = proactiveChatService.isLikelyPlayerConversation(
-                source,
-                chatMessage,
-                onlinePlayers()
-        );
-        if (!ambientPlayerConversation) {
-            AssistantChatTarget followUpTarget = activeFollowUpTarget(source, chatMessage);
-            if (followUpTarget != null) {
-                submitRequest(source, followUpTarget, chatMessage, contextSettings);
-                return;
+        if (configuration.allowImplicitFollowUps()) {
+            boolean ambientPlayerConversation = proactiveChatService.isLikelyPlayerConversation(
+                    source,
+                    chatMessage,
+                    onlinePlayers()
+            );
+            if (!ambientPlayerConversation) {
+                AssistantChatTarget followUpTarget = activeFollowUpTarget(source, chatMessage);
+                if (followUpTarget != null) {
+                    submitRequest(source, followUpTarget, chatMessage, contextSettings);
+                    return;
+                }
             }
         }
 
