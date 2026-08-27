@@ -36,7 +36,7 @@ public final class AssistantActionService {
         this(plugin, FollowPlayerAction::new, MoveHereAction::new);
     }
 
-    /** Test seam that keeps action-policy tests independent from the legacy global movement configuration. */
+    /** Test seam that keeps action-policy tests independent from global movement configuration. */
     AssistantActionService(
             JavaPlugin plugin,
             Function<ActionContext, Actionable> followActionFactory,
