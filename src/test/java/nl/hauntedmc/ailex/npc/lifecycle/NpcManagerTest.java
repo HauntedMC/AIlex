@@ -3,6 +3,7 @@ package nl.hauntedmc.ailex.npc.lifecycle;
 import nl.hauntedmc.ailex.npc.NPC;
 import nl.hauntedmc.ailex.npc.NPCData;
 import nl.hauntedmc.ailex.npc.NPCProperties;
+import nl.hauntedmc.ailex.npc.impl.AilexNPC;
 
 import net.citizensnpcs.api.CitizensAPI;
 import net.citizensnpcs.api.npc.MetadataStore;
@@ -33,6 +34,15 @@ class NpcManagerTest {
 
         assertThrows(IllegalArgumentException.class, () -> handler.saveNPC(1));
         assertThrows(IllegalArgumentException.class, () -> handler.removeNPC(1));
+    }
+
+    @Test
+    void invalidNpcDataMustNeverPoisonTheRuntimeRegistry() {
+        NpcManager handler = new NpcManager();
+        NPCData invalid = new NPCData(7, "Haunty", null, AilexNPC.class.getName(), NPCProperties.defaultValues());
+
+        assertThrows(IllegalArgumentException.class, () -> handler.createNPC(AilexNPC.class, invalid));
+        assertEquals(0, handler.getNPCRegistry().size());
     }
 
     @Test
