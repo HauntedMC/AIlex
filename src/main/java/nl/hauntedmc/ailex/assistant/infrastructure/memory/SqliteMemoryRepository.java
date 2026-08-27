@@ -149,27 +149,6 @@ public final class SqliteMemoryRepository implements MemoryRepository {
     }
 
     @Override
-    public synchronized List<MemoryRecord> loadChangedSince(long sinceEpochMillis, int limit) {
-        requireConnection();
-        String sql = "SELECT * FROM memory_records WHERE last_confirmed > ? OR expires_at > ? "
-                + "ORDER BY CASE WHEN expires_at > last_confirmed THEN expires_at ELSE last_confirmed END ASC LIMIT ?";
-        List<MemoryRecord> records = new ArrayList<>();
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, sinceEpochMillis);
-            statement.setLong(2, sinceEpochMillis);
-            statement.setInt(3, Math.clamp(limit, 1, 2_048));
-            try (ResultSet result = statement.executeQuery()) {
-                while (result.next()) {
-                    records.add(read(result));
-                }
-            }
-            return List.copyOf(records);
-        } catch (SQLException exception) {
-            throw new IllegalStateException("Could not load assistant memory changes", exception);
-        }
-    }
-
-    @Override
     public synchronized void upsert(MemoryRecord record) {
         requireConnection();
         try (PreparedStatement statement = connection.prepareStatement(UPSERT)) {
