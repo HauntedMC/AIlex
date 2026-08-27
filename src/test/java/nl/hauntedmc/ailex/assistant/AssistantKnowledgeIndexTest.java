@@ -6,7 +6,11 @@ import nl.hauntedmc.ailex.assistant.infrastructure.knowledge.LocalKnowledgeIndex
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -16,6 +20,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class LocalKnowledgeIndexTest {
+
+    @TempDir
+    Path tempDir;
 
     @Test
     void shouldPreferExactCommandKnowledgeOverUnrelatedFacts() {
@@ -96,6 +103,61 @@ class LocalKnowledgeIndexTest {
         );
 
         assertTrueEmpty(results);
+    }
+
+    @Test
+    void canonicalNegativeLookupShouldFlowThroughTheProductionKnowledgeIndex() throws Exception {
+        Path knowledge = tempDir.resolve("knowledge");
+        Files.createDirectories(knowledge);
+        Files.writeString(knowledge.resolve("entities.tsv"), """
+                @complete\tdiscord-channel
+                discord-channel\t#announcements\tannouncements,aankondigingen\tOfficial announcements.
+                """, StandardCharsets.UTF_8);
+
+        JavaPlugin plugin = externalKnowledgePlugin();
+        LocalKnowledgeIndex index = new LocalKnowledgeIndex(plugin);
+        List<LocalKnowledgeIndex.KnowledgeChunk> results = index.search(
+                "Bestaat #aankondigingen?", AssistantSettings.defaults()
+        );
+
+        assertTrue(results.stream().anyMatch(chunk -> chunk.id().startsWith("entity.missing.discord-channel.")));
+        assertTrue(results.stream().anyMatch(chunk -> chunk.id().equals("entity.discord-channel.announcements")));
+        assertTrue(results.stream().anyMatch(chunk -> chunk.text().contains("`#aankondigingen` is not registered")));
+        assertTrue(results.stream().anyMatch(chunk -> chunk.text().contains("`#announcements`")));
+    }
+
+    @Test
+    void operatorReadmeMustNeverBecomePlayerFacingRagEvidence() throws Exception {
+        Path knowledge = tempDir.resolve("knowledge");
+        Files.createDirectories(knowledge);
+        Files.writeString(
+                knowledge.resolve("README.md"),
+                "INTERNAL_EXAMPLE_TOKEN means players receive 999 secret rewards.",
+                StandardCharsets.UTF_8
+        );
+        Files.writeString(
+                knowledge.resolve("server.md"),
+                "---\nid: server.real\ntitle: Real fact\nauthority: official\n---\nUse /help for server help.",
+                StandardCharsets.UTF_8
+        );
+
+        JavaPlugin plugin = externalKnowledgePlugin();
+        LocalKnowledgeIndex index = new LocalKnowledgeIndex(plugin);
+
+        assertTrueEmpty(index.search("INTERNAL_EXAMPLE_TOKEN", AssistantSettings.defaults()));
+        assertFalse(index.search("server help", AssistantSettings.defaults()).isEmpty());
+    }
+
+    private JavaPlugin externalKnowledgePlugin() {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        YamlConfiguration config = new YamlConfiguration();
+        config.set("openai.knowledge.enabled", true);
+        config.set("openai.knowledge.external.enabled", true);
+        config.set("openai.knowledge.external.directory", "knowledge");
+        config.set("openai.assistant.retrieval.semantic_embeddings.enabled", false);
+        when(plugin.getConfig()).thenReturn(config);
+        when(plugin.getDataFolder()).thenReturn(tempDir.toFile());
+        return plugin;
     }
 
     private void assertTrueEmpty(List<?> values) {
