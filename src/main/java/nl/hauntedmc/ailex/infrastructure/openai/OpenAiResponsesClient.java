@@ -653,8 +653,10 @@ public class OpenAiResponsesClient {
         if (normalized.startsWith("\"") && normalized.endsWith("\"") && normalized.length() > 1) {
             normalized = normalized.substring(1, normalized.length() - 1).trim();
         }
-        // Plain transport remains one chat component; richer answers come from more content, not protocol-visible formatting.
-        normalized = normalized.replaceAll("\\s*\n+\\s*", " ").replaceAll("\\s{2,}", " ").trim();
+        normalized = normalized.lines()
+                .map(line -> line.replaceAll("\\h+", " ").trim())
+                .filter(line -> !line.isBlank())
+                .collect(java.util.stream.Collectors.joining("\n"));
         if (normalized.isEmpty()) {
             return FALLBACK_RESPONSE;
         }
