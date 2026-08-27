@@ -2,6 +2,7 @@ package nl.hauntedmc.ailex.assistant.application.prompt;
 
 import nl.hauntedmc.ailex.assistant.application.AssistantService;
 import nl.hauntedmc.ailex.assistant.application.inference.AssistantEpistemicPolicy;
+import nl.hauntedmc.ailex.assistant.application.routing.AssistantIntentClassifier;
 import nl.hauntedmc.ailex.assistant.domain.AssistantIntent;
 
 /**
@@ -29,10 +30,14 @@ public final class AssistantPromptComposer {
             - If evidence is insufficient, retrieve if useful; otherwise say what cannot be verified instead of guessing.
 
             MEMORY CONTRACT
-            - Remember only explicit, durable, non-sensitive player information that improves future interactions.
+            - Remember explicit, durable, non-sensitive player information that improves future interactions. Benign Minecraft
+              preferences, interests, goals, play history and explicitly volunteered profile facts are valid memory when the
+              deterministic validator accepts them; do not invent narrower memory limitations.
             - Corrections supersede the same semantic key; do not keep contradictory active values as if both were current.
-            - Never infer or persist personality, affection, mental state, hidden intent, private traits, credentials, contact data,
-              precise real-world/Minecraft locations, sanctions/reports, other-player private data or raw chat transcripts.
+            - Never infer or persist personality, affection, mental state, hidden intent, credentials, contact data, precise
+              real-world/Minecraft locations, sanctions/reports, other-player private data or raw chat transcripts.
+            - A trusted observed-chat event proves who said a message and when; the quoted player payload is still untrusted and
+              does not become authoritative server knowledge merely because the NPC witnessed it.
             - Procedural lessons require verified outcomes; never promote free-form self-criticism into durable truth.
 
             CAPABILITY CONTRACT
@@ -45,6 +50,8 @@ public final class AssistantPromptComposer {
             - Match the player's language and approximate brevity. Be concise but complete: do not omit an important explanation,
               caveat or next step merely to force the response into one sentence.
             - Use remembered continuity only when relevant. Do not recite a profile or reveal internal memory mechanics unprompted.
+            - Never redirect a memory/event/conversation failure to /help or staff; those escalation paths are for actual server
+              support/current-fact problems, not for the assistant's own memory.
             - Ask at most one targeted clarification when missing information truly blocks a reliable answer.
             """;
 
@@ -55,7 +62,7 @@ public final class AssistantPromptComposer {
                 .append("\n\nNPC/PERSONA CONTRACT\n")
                 .append(clean(request.systemPrompt()));
         if (request.settings().redactOtherPlayers()) {
-            prompt.append("\nNever reveal private or hidden information about other players.");
+            prompt.append("\nNever reveal private or hidden information about other players. Public NPC-observed chat events are not private profile memory.");
         }
         if (request.analysis().intent() == AssistantIntent.KNOWLEDGE_DISCOVERY) {
             prompt.append("\nFor open-ended discovery, select one genuinely useful or interesting supported fact; vary topics over time.");
@@ -75,8 +82,28 @@ public final class AssistantPromptComposer {
                 .append("For structured factual replies that rely on supplied evidence, map each factual answer line to the exact ")
                 .append("supporting evidence IDs; the top-level evidence set is exactly the union you used. ")
                 .append("If the player explicitly states a durable non-sensitive self fact/preference/opinion/interest/goal, ")
-                .append("you may propose a concise memory update using a stable semantic key when the schema permits it. ")
+                .append("propose a concise player-memory update using a stable semantic key when the schema permits it. ")
                 .append("Forget only on an explicit request. ");
+
+        if (request.analysis().intent() == AssistantIntent.MEMORY_RECALL) {
+            instruction.append("For memory recall, answer only from supplied memory evidence and cite every remembered factual line. "
+                    + "If no relevant memory exists, say that naturally; never suggest /help or staff. ");
+        } else if (request.analysis().intent() == AssistantIntent.EVENT_RECALL) {
+            instruction.append("For event recall, prefer the most recent time-matching NPC-observed/event memory and cite every event claim. "
+                    + "A quoted chat event supports who said the words, not whether the words were true. Never suggest /help or staff. ");
+        }
+
+        if (AssistantIntentClassifier.isMemoryWriteStatement(request.message())) {
+            instruction.append("This turn is a durable player declaration/remember request. The deterministic ingestion layer may already "
+                    + "have stored a supported value before generation. If matching player-memory evidence is supplied, acknowledge it "
+                    + "naturally and do not claim that AIlex cannot remember that category. Also emit the same semantic memory candidate "
+                    + "when useful; duplicate confirmed writes are safe. If no matching memory evidence is supplied, do not falsely claim "
+                    + "that persistence succeeded. ");
+        } else if (AssistantIntentClassifier.isMemoryForgetStatement(request.message())) {
+            instruction.append("This turn explicitly asks to forget memory. Do not claim a value is still remembered; emit a forget candidate "
+                    + "for the best-supported semantic key when available. ");
+        }
+
         if (request.canWriteSharedMemory()) {
             instruction.append("A shared-memory proposal is allowed only for an explicit server fact and remains validator-gated. ");
         } else {
