@@ -26,6 +26,26 @@ class AssistantChatBoundaryTest {
     }
 
     @Test
+    void durableMemoryRecallDoesNotDuplicateTheAmbientTranscript() {
+        assertFalse(WorkingContextPolicy.includeRawHistory(
+                "Meer specifiek haunty, wat heb je geleerd en onthouden",
+                AssistantDialogueContext.empty()
+        ));
+        assertFalse(WorkingContextPolicy.includeRawHistory(
+                "wat heb je onthouden",
+                AssistantDialogueContext.empty()
+        ));
+    }
+
+    @Test
+    void eventRecallStillGetsRecentTranscriptContext() {
+        assertTrue(WorkingContextPolicy.includeRawHistory(
+                "wat gebeurde er vorige keer?",
+                AssistantDialogueContext.empty()
+        ));
+    }
+
+    @Test
     void rawTranscriptPersistenceIsPrivacyFirstByDefault() {
         AssistantChatConfiguration configuration = new AssistantChatConfiguration(YamlConfiguration::new);
         assertFalse(configuration.contextSettings().persistToDisk());
