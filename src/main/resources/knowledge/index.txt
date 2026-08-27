@@ -2,6 +2,7 @@ README.md
 server-overview.md
 current-server-state.md
 staff-and-live-status.md
+discord.md
 general-commands.md
 survival.md
 creative.md

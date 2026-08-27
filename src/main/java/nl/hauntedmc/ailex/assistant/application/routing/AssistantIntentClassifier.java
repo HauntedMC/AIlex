@@ -39,7 +39,9 @@ public final class AssistantIntentClassifier {
     private static final Set<String> LOCAL_CUES = Set.of("hier", "here", "dichtbij", "nearby", "near", "nu", "now");
     private static final Set<String> SERVER_WORDS = Set.of(
             "rank", "elite", "legend", "supreme", "claim", "regels", "rules", "vote", "stem",
-            "store", "winkel", "warp", "command", "commando", "server", "hauntedmc"
+            "store", "winkel", "warp", "command", "commando", "server", "hauntedmc",
+            "discord", "channel", "channels", "kanaal", "kanalen", "announcement", "announcements", "aankondiging",
+            "aankondigingen", "changelog", "changelogs", "versie", "version", "release", "update", "updates"
     );
     private static final Set<String> GAMEPLAY_WORDS = Set.of(
             "minecraft", "kameel", "camel", "wolf", "tem", "temt", "tammen", "tame", "craft", "recept", "recipe",

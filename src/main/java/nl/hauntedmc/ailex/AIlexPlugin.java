@@ -94,6 +94,10 @@ public class AIlexPlugin extends JavaPlugin {
         ailexCommand.setTabCompleter(mainCommand);
     }
 
+    /**
+     * Refreshes AIlex-owned reviewed knowledge on every plugin upgrade. Files listed in the bundled manifest are managed
+     * resources; operator-authored knowledge must use separate filenames and is left untouched by this synchronization.
+     */
     private void saveBuiltInKnowledge() {
         try (InputStream resource = getResource("knowledge/index.txt")) {
             if (resource == null) {
@@ -101,7 +105,7 @@ public class AIlexPlugin extends JavaPlugin {
             }
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(resource, StandardCharsets.UTF_8))) {
                 reader.lines().map(String::trim).filter(file -> file.endsWith(".md"))
-                        .forEach(file -> saveResource("knowledge/" + file, false));
+                        .forEach(file -> saveResource("knowledge/" + file, true));
             }
         } catch (IOException exception) {
             throw new IllegalStateException("Could not load the bundled knowledge manifest", exception);

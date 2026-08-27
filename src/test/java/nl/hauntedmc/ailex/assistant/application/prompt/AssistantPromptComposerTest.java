@@ -21,6 +21,16 @@ class AssistantPromptComposerTest {
     }
 
     @Test
+    void stableContractTreatsExactServerIdentifiersAsGroundedProperNames() {
+        String normalizedPrompt = AssistantPromptComposer.stableContractForTest().replaceAll("\\s+", " ");
+
+        assertTrue(normalizedPrompt.contains("Discord channel names"));
+        assertTrue(normalizedPrompt.contains("must occur in trusted evidence before you mention them"));
+        assertTrue(normalizedPrompt.contains("never translate, localize, pluralize or guess them"));
+        assertTrue(normalizedPrompt.contains("Discord channel name must stay English"));
+    }
+
+    @Test
     void stableContractDoesNotWasteTokensDescribingStructuredJsonFields() {
         String prompt = AssistantPromptComposer.stableContractForTest();
 
