@@ -19,6 +19,17 @@ public final class MemoryGraphRetriever {
     private static final int ITERATIONS = 8;
     private static final int MAX_NODES = 256;
 
+    /**
+     * Propagates lexical/relevance seed strength over explicit memory relations.
+     *
+     * <p>Only records already visible to the requesting player/NPC may be supplied. Returned values are normalized
+     * retrieval bonuses in {@code [0,1]}; they are not confidence, authority, or permission signals and must be fused
+     * with the normal retrieval score rather than used to bypass scope filtering.</p>
+     *
+     * @param records capability- and audience-filtered memory candidates
+     * @param seedScores direct relevance scores keyed by memory record id
+     * @return normalized associative activation by memory record id
+     */
     public Map<String, Double> graphScores(List<MemoryRecord> records, Map<String, Double> seedScores) {
         if (records == null || records.isEmpty() || seedScores == null || seedScores.isEmpty()) {
             return Map.of();
