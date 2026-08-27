@@ -84,9 +84,10 @@ public final class ExplicitPlayerMemoryService {
         }
 
         List<MemoryCandidate> candidates = extractWriteCandidates(clean);
+        String validatorMessage = validatorEquivalent(clean);
         int accepted = 0;
         for (MemoryCandidate candidate : candidates.stream().limit(3).toList()) {
-            if (memory.rememberCandidate(playerId, playerName, candidate, clean, false) != null) {
+            if (memory.rememberCandidate(playerId, playerName, candidate, validatorMessage, false) != null) {
                 accepted++;
             }
         }
@@ -112,7 +113,7 @@ public final class ExplicitPlayerMemoryService {
         );
         // rememberCandidate intentionally returns null for a successful forget; the selected record is already verified to
         // exist, and the validator still requires an explicit forget signal plus key support from the player message.
-        memory.rememberCandidate(playerId, playerName, candidate, message, false);
+        memory.rememberCandidate(playerId, playerName, candidate, validatorEquivalent(message), false);
         return new Result(1, 1, true);
     }
 
@@ -175,6 +176,17 @@ public final class ExplicitPlayerMemoryService {
             }
         }
         return List.copyOf(result);
+    }
+
+    /**
+     * The existing validator intentionally recognizes a conservative vocabulary. Normalize equivalent high-confidence
+     * synonyms only for that validator; the original player text/value remains the persisted source. This avoids weakening
+     * source-support checks merely because Dutch "lievelings" or British "favourite" was used.
+     */
+    private String validatorEquivalent(String message) {
+        return compact(message)
+                .replaceAll("(?i)\\bmijn\\s+lievelings\\b", "mijn favoriete")
+                .replaceAll("(?i)\\bmy\\s+favourite\\b", "my favorite");
     }
 
     private void add(List<MemoryCandidate> target, String kind, String key, String value) {
