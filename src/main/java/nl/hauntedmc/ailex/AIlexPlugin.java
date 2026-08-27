@@ -2,7 +2,6 @@ package nl.hauntedmc.ailex;
 
 import nl.hauntedmc.ailex.assistant.adapter.paper.AssistantChatListener;
 import nl.hauntedmc.ailex.assistant.application.AssistantService;
-import nl.hauntedmc.ailex.assistant.infrastructure.knowledge.CanonicalIdentifierRegistry;
 import nl.hauntedmc.ailex.assistant.infrastructure.live.AssistantContextProviderRegistry;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantEventMemoryService;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantMemoryService;
@@ -35,7 +34,6 @@ public class AIlexPlugin extends JavaPlugin {
     private AssistantMemoryService assistantMemoryService;
     private AssistantEventMemoryService assistantEventMemoryService;
     private AssistantContextProviderRegistry assistantContextProviderRegistry;
-    private CanonicalIdentifierRegistry canonicalIdentifierRegistry;
     private AssistantService assistantService;
     private AssistantRequestTracer assistantRequestTracer;
     private AssistantChatListener assistantChatListener;
@@ -47,8 +45,6 @@ public class AIlexPlugin extends JavaPlugin {
 
         ConfigHandler.init(this);
         DataHandler.init(this);
-        canonicalIdentifierRegistry = new CanonicalIdentifierRegistry(this);
-        canonicalIdentifierRegistry.writeKnowledgeSnapshot();
         assistantRequestTracer = new AssistantRequestTracer(
                 () -> getConfig().getBoolean("openai.assistant.observability.enabled", true),
                 () -> getConfig().getBoolean("openai.assistant.observability.include_requester_name", true)
@@ -57,6 +53,8 @@ public class AIlexPlugin extends JavaPlugin {
         assistantMemoryService = new AssistantMemoryService(this);
         assistantEventMemoryService = new AssistantEventMemoryService(this);
         assistantContextProviderRegistry = new AssistantContextProviderRegistry();
+        // AssistantService owns the knowledge index; that index reloads the canonical TSV and renders its generated
+        // evidence snapshot before indexing, so startup and /ailex ai rebuild-index follow one authoritative lifecycle.
         assistantService = new AssistantService(this);
         npcManager = new NpcManager(this::isNpcEnabled);
 
@@ -171,10 +169,6 @@ public class AIlexPlugin extends JavaPlugin {
 
     public void reloadOpenAiResponsesClient() {
         openAiResponsesClient = new OpenAiResponsesClient(this);
-        if (canonicalIdentifierRegistry != null) {
-            canonicalIdentifierRegistry.reload();
-            canonicalIdentifierRegistry.writeKnowledgeSnapshot();
-        }
         if (assistantService != null) {
             assistantService.reload();
         }
