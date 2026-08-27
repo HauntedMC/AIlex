@@ -53,6 +53,9 @@ class AssistantGroundingPolicyTest {
                 AssistantIntent.MEMORY_RECALL, Set.of("memory.player.fact")
         ));
         assertTrue(AssistantGroundingPolicy.hasRequiredEvidence(
+                AssistantIntent.MEMORY_RECALL, Set.of("memory.event.public-chat")
+        ));
+        assertTrue(AssistantGroundingPolicy.hasRequiredEvidence(
                 AssistantIntent.EVENT_RECALL, Set.of("memory.event.1234")
         ));
     }
