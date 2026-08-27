@@ -1,0 +1,32 @@
+name: PR47 Typed Reconsolidation Fix
+
+on:
+  push:
+    paths:
+      - '.pr47-typed-reconsolidation-trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: fix/cognitive-memory-social-continuity
+          fetch-depth: 0
+      - name: Apply typed reconsolidation fix
+        run: python .github/scripts/pr47_typed_reconsolidation_fix.py
+      - name: Commit typed reconsolidation fix
+        run: |
+          git config user.name "AIlex architecture bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/main/java
+          if git diff --cached --quiet; then
+            echo "No typed reconsolidation fix required"
+          else
+            git commit -m "fix: preserve typed memory ids through reconsolidation"
+            git push origin HEAD:fix/cognitive-memory-social-continuity
+          fi
