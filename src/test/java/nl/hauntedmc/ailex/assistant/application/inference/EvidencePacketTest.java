@@ -31,7 +31,7 @@ class EvidencePacketTest {
     }
 
     @Test
-    void negativeRetrievalEvidenceCannotValidateAPlayerFacingFactualAnswer() {
+    void retrievalMissesRemainAbsenceEvidenceAndCannotGroundOtherFactualRoutes() {
         EvidencePacket knowledgeMiss = new EvidencePacket(Set.of("knowledge.none"));
         EvidencePacket liveMiss = new EvidencePacket(Set.of("live.requester.none"));
         EvidencePacket memoryMiss = new EvidencePacket(Set.of("memory.none"));
@@ -41,7 +41,8 @@ class EvidencePacketTest {
         assertTrue(memoryMiss.negativeOnly());
         assertFalse(AssistantGroundingPolicy.hasRequiredEvidence(AssistantIntent.SERVER_FACT, knowledgeMiss));
         assertFalse(AssistantGroundingPolicy.hasRequiredEvidence(AssistantIntent.LIVE_STATE, liveMiss));
-        assertFalse(AssistantGroundingPolicy.hasRequiredEvidence(AssistantIntent.MEMORY_RECALL, memoryMiss));
+        assertTrue(AssistantGroundingPolicy.hasRequiredEvidence(AssistantIntent.MEMORY_RECALL, memoryMiss));
+        assertFalse(AssistantGroundingPolicy.hasRequiredEvidence(AssistantIntent.SERVER_FACT, memoryMiss));
         assertFalse(AssistantGroundingPolicy.hasRequiredEvidence(
                 AssistantIntent.SERVER_FACT, new EvidencePacket(Set.of())
         ));
