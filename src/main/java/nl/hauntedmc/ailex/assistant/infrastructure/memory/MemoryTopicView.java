@@ -38,7 +38,7 @@ public final class MemoryTopicView {
     }
 
     /**
-     * Renders topic-organized memory for model context while retaining every underlying {@code memory.<id>} citation.
+     * Renders topic-organized memory for model context while retaining every underlying typed memory citation.
      * The character limit is a hard prompt-size ceiling and never causes a synthetic summary to become new evidence.
      */
     public String render(List<MemoryRecord> records, int maximumCharacters) {
@@ -49,7 +49,7 @@ public final class MemoryTopicView {
             }
             output.append("topic=").append(topic.name()).append(':');
             for (MemoryRecord record : topic.records()) {
-                output.append(" [evidence_id=memory.").append(record.id())
+                output.append(" [evidence_id=").append(MemoryEvidenceId.forRecord(record))
                         .append(" ").append(record.key()).append('=').append(record.value()).append(']');
                 if (output.length() >= maximumCharacters) {
                     return output.substring(0, Math.max(0, maximumCharacters - 1)) + "…";
