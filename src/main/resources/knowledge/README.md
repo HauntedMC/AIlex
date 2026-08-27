@@ -1,9 +1,9 @@
 # AIlex knowledge base
 
 AIlex ships with reviewed HauntedMC guides for core server topics. Every managed file listed in `index.txt` is refreshed
-from the plugin JAR on startup so a plugin update cannot leave AIlex using an older bundled fact set. Add your own durable
-local documentation as separate Markdown files; files not listed in `index.txt` are never overwritten by the built-in
-knowledge synchronizer.
+from the plugin JAR on startup so the runtime uses the bundled reviewed source of truth. Add your own durable local
+documentation as separate Markdown files; files not listed in `index.txt` are never overwritten by the built-in knowledge
+synchronizer.
 
 Keep each item concise, factual, dated where it can change, and sourced from an approved HauntedMC document or live system.
 
@@ -39,7 +39,7 @@ kind<TAB>canonical<TAB>comma-separated query aliases<TAB>description
 A line such as `@complete<TAB>discord-channel` declares that the listed identifiers for that kind are exhaustive. AIlex may
 therefore use absence from that reviewed set as negative evidence. Do this only when the operator-maintained set really is
 complete. Commands are deliberately not marked complete because HauntedMC has more commands than the small player-help set
-shipped with AIlex.
+included here.
 
 Aliases are retrieval phrases, not alternate identifiers. For example, the Dutch word `aankondigingen` may retrieve the
 canonical Discord entry `#announcements`, but `#aankondigingen` itself is not thereby made into a valid channel name.
