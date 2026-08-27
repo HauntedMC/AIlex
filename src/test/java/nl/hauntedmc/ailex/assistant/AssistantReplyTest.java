@@ -56,6 +56,14 @@ class AssistantReplyTest {
     }
 
     @Test
+    void plainChatPreservesUsefulBoundedLines() {
+        AssistantReply reply = AssistantReply.fromPlainText("Eerste regel\n\nTweede regel\nDerde regel");
+
+        assertTrue(reply.valid());
+        assertEquals(List.of("Eerste regel", "Tweede regel", "Derde regel"), reply.lines());
+    }
+
+    @Test
     void accidentalLegacyJsonEnvelopeMustNeverLeakIntoMinecraftChat() {
         AssistantReply reply = AssistantReply.fromPlainText(
                 "{\"response\":\"Ik kan dat niet verifiëren.\",\"evidence\":[]}"
@@ -86,7 +94,7 @@ class AssistantReplyTest {
         );
 
         assertTrue(reply.valid());
-        assertEquals(List.of("Hoi! Waarmee kan ik helpen?"), reply.lines());
+        assertEquals(List.of("Hoi!", "Waarmee kan ik helpen?"), reply.lines());
     }
 
     @Test
