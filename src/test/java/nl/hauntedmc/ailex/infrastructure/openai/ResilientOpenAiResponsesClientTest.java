@@ -220,6 +220,31 @@ class ResilientOpenAiResponsesClientTest {
     }
 
     @Test
+    void repeatedRequestTimeoutsNeverOpenTheSharedProviderCircuit() throws Exception {
+        HttpClient httpClient = mock(HttpClient.class);
+        when(httpClient.send(any(HttpRequest.class), anyStringBodyHandler()))
+                .thenThrow(new HttpTimeoutException("request timed out"));
+
+        try (MockedStatic<LoggerUtils> ignored = mockStatic(LoggerUtils.class)) {
+            ResilientOpenAiResponsesClient client = new ResilientOpenAiResponsesClient(
+                    "key", "gpt-5.6-terra", httpClient, false
+            );
+
+            for (int attempt = 0; attempt < 7; attempt++) {
+                OpenAiUnavailableException exception = assertThrows(
+                        OpenAiUnavailableException.class,
+                        () -> client.getChatResponse("system", "hello")
+                );
+                assertEquals(FailureKind.TIMEOUT, exception.failureKind());
+            }
+
+            assertTrue(client.usageStatus().contains("provider_circuit=closed"));
+            assertTrue(client.usageStatus().contains("last_failure=timeout(408)"));
+            verify(httpClient, times(7)).send(any(HttpRequest.class), anyStringBodyHandler());
+        }
+    }
+
+    @Test
     void providerCircuitOpensOnlyAfterRepeatedRealProviderFailures() throws Exception {
         HttpClient httpClient = mock(HttpClient.class);
         HttpResponse<String> unavailable = mockStringResponse(503, "{\"error\":{\"message\":\"busy\"}}");
