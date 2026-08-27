@@ -56,6 +56,15 @@ class AssistantReplyTest {
     }
 
     @Test
+    void transportFallbackCanNeverBecomeValidAssistantContent() {
+        AssistantReply reply = AssistantReply.fromPlainText("Ik kan nu even niet reageren.");
+
+        assertFalse(reply.valid());
+        assertTrue(reply.lines().isEmpty());
+        assertFalse(AssistantReply.unavailable().valid());
+    }
+
+    @Test
     void plainChatPreservesUsefulBoundedLines() {
         AssistantReply reply = AssistantReply.fromPlainText("Eerste regel\n\nTweede regel\nDerde regel");
 
