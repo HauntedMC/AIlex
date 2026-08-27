@@ -25,6 +25,7 @@ public final class ResilientOpenAiResponsesClient extends OpenAiResponsesClient 
     private static final long MAX_RETRY_DELAY_MILLIS = 175L;
 
     private final boolean retryTransientFailures;
+    private final boolean providerCircuitEnabled;
     private final ProviderCircuitBreaker providerCircuitBreaker = new ProviderCircuitBreaker();
     private final Map<FailureKind, AtomicLong> failureCounts = new EnumMap<>(FailureKind.class);
     private final AtomicLong retries = new AtomicLong();
@@ -34,11 +35,14 @@ public final class ResilientOpenAiResponsesClient extends OpenAiResponsesClient 
     public ResilientOpenAiResponsesClient(JavaPlugin plugin) {
         super(plugin);
         retryTransientFailures = true;
+        providerCircuitEnabled = plugin.getConfig().getBoolean(
+                "openai.assistant.reliability.circuit_breaker_enabled", true
+        );
         initializeFailureCounters();
     }
 
     ResilientOpenAiResponsesClient(String apiKey, String model, HttpClient httpClient) {
-        this(apiKey, model, httpClient, true);
+        this(apiKey, model, httpClient, true, true);
     }
 
     ResilientOpenAiResponsesClient(
@@ -47,8 +51,19 @@ public final class ResilientOpenAiResponsesClient extends OpenAiResponsesClient 
             HttpClient httpClient,
             boolean retryTransientFailures
     ) {
+        this(apiKey, model, httpClient, retryTransientFailures, true);
+    }
+
+    ResilientOpenAiResponsesClient(
+            String apiKey,
+            String model,
+            HttpClient httpClient,
+            boolean retryTransientFailures,
+            boolean providerCircuitEnabled
+    ) {
         super(apiKey, model, httpClient);
         this.retryTransientFailures = retryTransientFailures;
+        this.providerCircuitEnabled = providerCircuitEnabled;
         initializeFailureCounters();
     }
 
@@ -80,13 +95,13 @@ public final class ResilientOpenAiResponsesClient extends OpenAiResponsesClient 
                 + ", provider_failures=" + totalFailures()
                 + ", provider_retries=" + retries.get()
                 + ", provider_circuit_rejections=" + circuitRejections.get()
-                + ", provider_circuit=" + providerCircuitBreaker.state()
+                + ", provider_circuit=" + (providerCircuitEnabled ? providerCircuitBreaker.state() : "disabled")
                 + ", last_failure=" + failure.kind().name().toLowerCase(Locale.ROOT)
                 + (failure.httpStatus() > 0 ? "(" + failure.httpStatus() + ")" : "");
     }
 
     private ResponseResult executeReliably(String operation, Supplier<ResponseResult> request) {
-        if (!providerCircuitBreaker.allowsRequest()) {
+        if (providerCircuitEnabled && !providerCircuitBreaker.allowsRequest()) {
             circuitRejections.incrementAndGet();
             throw new OpenAiUnavailableException(operation, FailureKind.CIRCUIT_OPEN, 0);
         }
@@ -155,7 +170,9 @@ public final class ResilientOpenAiResponsesClient extends OpenAiResponsesClient 
         failureCounts.get(effective).incrementAndGet();
         lastFailure = new FailureSnapshot(effective, status, System.currentTimeMillis());
         if (effective.affectsCircuit()) {
-            providerCircuitBreaker.recordProviderFailure();
+            if (providerCircuitEnabled) {
+                providerCircuitBreaker.recordProviderFailure();
+            }
         } else {
             // A concrete non-provider response proves the endpoint is reachable; it must not preserve an old outage.
             providerCircuitBreaker.recordReachableOutcome();
