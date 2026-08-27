@@ -30,6 +30,15 @@ public final class AssistantMemoryConsolidator {
         this.memory = memory;
     }
 
+    /**
+     * Consolidates sufficiently repeated active events into deterministic episode records.
+     *
+     * <p>The operation reads only already-trusted event memory and writes through the normal durable-memory safety
+     * boundary. Absolute timestamps stay in typed record metadata instead of being copied into the free-text summary,
+     * which avoids both redundant context and accidental identifier-like data shapes.</p>
+     *
+     * @return counts describing the snapshot, candidate groups, and successfully stored episodes
+     */
     public ConsolidationReport consolidate() {
         if (memory == null) {
             return new ConsolidationReport(0, 0, 0);
@@ -111,9 +120,21 @@ public final class AssistantMemoryConsolidator {
     private String episodeSummary(String topic, List<MemoryRecord> events, long first, long last) {
         List<String> unique = events.stream().map(MemoryRecord::value).distinct().limit(3).toList();
         String details = String.join("; ", unique);
-        String value = "Repeated " + topic + " episode (" + events.size() + " events, "
-                + Instant.ofEpochMilli(first) + " to " + Instant.ofEpochMilli(last) + "): " + details;
+        String value = "Repeated " + topic + " episode (" + events.size() + " events over "
+                + compactDuration(Math.max(0L, last - first)) + "): " + details;
         return value.length() <= 320 ? value : value.substring(0, 319) + "…";
+    }
+
+    private String compactDuration(long durationMillis) {
+        Duration duration = Duration.ofMillis(durationMillis);
+        long hours = duration.toHours();
+        if (hours >= 48L) {
+            return duration.toDays() + " days";
+        }
+        if (hours >= 1L) {
+            return hours + " hours";
+        }
+        return Math.max(1L, duration.toMinutes()) + " minutes";
     }
 
     private String evidenceSource(List<MemoryRecord> events) {
