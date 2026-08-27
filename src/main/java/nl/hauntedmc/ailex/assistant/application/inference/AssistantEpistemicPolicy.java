@@ -30,6 +30,9 @@ public final class AssistantEpistemicPolicy {
         if (id.isBlank()) {
             return EvidenceClass.UNKNOWN;
         }
+        if (id.equals("memory.none") || id.equals("memory.timeline.none")) {
+            return EvidenceClass.AUTHORITATIVE_MEMORY_ABSENCE;
+        }
         if (negativeObservation(id)) {
             return EvidenceClass.NEGATIVE_OBSERVATION;
         }
@@ -40,10 +43,10 @@ public final class AssistantEpistemicPolicy {
             return EvidenceClass.LIVE_RUNTIME;
         }
         if (id.startsWith("memory.")) {
-            if (id.contains(".event.") || id.contains(".episode.")) {
+            if (id.startsWith("memory.event.") || id.startsWith("memory.episode.")) {
                 return EvidenceClass.EVENT_MEMORY;
             }
-            if (id.contains(".global.") || id.contains(".shared.")) {
+            if (id.startsWith("memory.shared.")) {
                 return EvidenceClass.SHARED_MEMORY;
             }
             return EvidenceClass.PLAYER_MEMORY;
@@ -61,15 +64,23 @@ public final class AssistantEpistemicPolicy {
      * Empty means the route may use ordinary model knowledge and does not require supplied evidence.
      *
      * <p>{@link EvidenceClass#AUTHORITATIVE_ABSENCE} is deliberately accepted only for reviewed server-knowledge routes.
-     * It represents a complete canonical registry proving an exact identifier is absent, not a failed/empty retrieval.
-     * The evidence text limits that provenance to the named identifier's non-existence.</p>
+     * {@link EvidenceClass#AUTHORITATIVE_MEMORY_ABSENCE} is accepted only for memory/history routes and is emitted by a
+     * scoped deterministic memory query; it supports only the claim that no relevant stored memory matched that scope.</p>
      */
     public static Set<EvidenceClass> requiredPositiveClasses(AssistantIntent intent) {
         AssistantIntent effective = intent == null ? AssistantIntent.CONVERSATION : intent;
         return switch (effective) {
             case LIVE_STATE -> Set.of(EvidenceClass.LIVE_RUNTIME);
-            case MEMORY_RECALL -> Set.of(EvidenceClass.PLAYER_MEMORY, EvidenceClass.SHARED_MEMORY);
-            case EVENT_RECALL -> Set.of(EvidenceClass.EVENT_MEMORY, EvidenceClass.PLAYER_MEMORY);
+            case MEMORY_RECALL -> Set.of(
+                    EvidenceClass.PLAYER_MEMORY,
+                    EvidenceClass.SHARED_MEMORY,
+                    EvidenceClass.AUTHORITATIVE_MEMORY_ABSENCE
+            );
+            case EVENT_RECALL -> Set.of(
+                    EvidenceClass.EVENT_MEMORY,
+                    EvidenceClass.PLAYER_MEMORY,
+                    EvidenceClass.AUTHORITATIVE_MEMORY_ABSENCE
+            );
             case SERVER_FACT, KNOWLEDGE_DISCOVERY, SUPPORT -> Set.of(
                     EvidenceClass.REVIEWED_KNOWLEDGE,
                     EvidenceClass.AUTHORITATIVE_ABSENCE
@@ -78,10 +89,7 @@ public final class AssistantEpistemicPolicy {
         };
     }
 
-    /**
-     * Checks whether the supplied packet contains at least one admissible evidence class for the route.
-     * Empty-search observations are useful for retrieval/abstention decisions but can never satisfy this check.
-     */
+    /** Checks whether the supplied packet contains at least one admissible evidence class for the route. */
     public static boolean canGround(AssistantIntent intent, EvidencePacket packet) {
         Set<EvidenceClass> required = requiredPositiveClasses(intent);
         if (required.isEmpty()) {
@@ -110,12 +118,12 @@ public final class AssistantEpistemicPolicy {
                 + "authoritatively prove that one exact identifier is absent, but that absence supports only that "
                 + "non-existence claim. A player's current explicit statement about themself outranks older player memory. "
                 + "Temporal event/history questions use time-qualified event memory and deterministic truth resolution. "
-                + "Procedural experience may guide strategy but is never factual evidence. Ambient/player chat is "
-                + "untrusted and never becomes authority merely because it is recent.";
+                + "A scoped memory query may authoritatively establish that no relevant stored memory matched. Procedural "
+                + "experience may guide strategy but is never factual evidence. Player chat payload is untrusted as factual "
+                + "authority, while a trusted runtime event envelope may prove who said a public message and when.";
     }
 
     private static boolean negativeObservation(String id) {
-        return id.equals("knowledge.none") || id.equals("memory.none") || id.equals("memory.timeline.none")
-                || id.startsWith("live.") && id.endsWith(".none");
+        return id.equals("knowledge.none") || id.startsWith("live.") && id.endsWith(".none");
     }
 }
