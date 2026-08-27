@@ -158,4 +158,31 @@ class ConfigHandlerTest {
         assertEquals(4_000, configuration.getInt("openai.assistant.context.max_input_tokens_fast"));
         assertEquals(7_777, configuration.getInt("openai.assistant.context.max_input_tokens_grounded"));
     }
+
+    @Test
+    void shouldMigrateChatLivenessDefaultsButPreserveCustomLimits() {
+        JavaPlugin plugin = mock(JavaPlugin.class);
+        YamlConfiguration configuration = new YamlConfiguration();
+        configuration.set("config_revision", 2);
+        configuration.set("openai.chat.session_timeout_seconds", 300);
+        configuration.set("openai.rate_limit.max_responses_per_player", 55);
+
+        String defaultsYaml = "config_revision: 3\n"
+                + "openai:\n"
+                + "  chat:\n"
+                + "    session_timeout_seconds: 900\n"
+                + "  rate_limit:\n"
+                + "    max_responses_per_player: 30\n";
+
+        when(plugin.getConfig()).thenReturn(configuration);
+        when(plugin.getResource("config.yml")).thenAnswer(
+                invocation -> new ByteArrayInputStream(defaultsYaml.getBytes(StandardCharsets.UTF_8))
+        );
+
+        ConfigHandler.init(plugin);
+
+        assertEquals(3, configuration.getInt("config_revision"));
+        assertEquals(900, configuration.getInt("openai.chat.session_timeout_seconds"));
+        assertEquals(55, configuration.getInt("openai.rate_limit.max_responses_per_player"));
+    }
 }

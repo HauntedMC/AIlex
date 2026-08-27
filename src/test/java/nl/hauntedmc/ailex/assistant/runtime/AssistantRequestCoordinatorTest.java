@@ -8,7 +8,9 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AssistantRequestCoordinatorTest {
@@ -76,5 +78,21 @@ class AssistantRequestCoordinatorTest {
         assertTrue(queued.accepted());
         assertEquals(AssistantRequestCoordinator.Disposition.REJECTED_FULL, rejected.disposition());
         assertNotNull(rejected.requestId());
+    }
+
+    @Test
+    void schedulerDispatchFailureMustNotLeaveOwnerPermanentlyBusy() {
+        UUID player = UUID.randomUUID();
+        AssistantRequestCoordinator coordinator = new AssistantRequestCoordinator(task -> {
+            throw new IllegalStateException("scheduler rejected task");
+        });
+
+        assertThrows(IllegalStateException.class, () -> coordinator.submit(
+                player, AssistantRequestCoordinator.Priority.DIRECT, () -> { }, 1, 4
+        ));
+
+        assertEquals(0, coordinator.activeRequests());
+        assertEquals(0, coordinator.queuedRequests());
+        assertFalse(coordinator.hasActiveRequest(player));
     }
 }

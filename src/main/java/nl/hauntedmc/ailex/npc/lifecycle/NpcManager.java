@@ -6,6 +6,7 @@ import net.citizensnpcs.api.npc.NPCRegistry;
 import nl.hauntedmc.ailex.config.DataHandler;
 import nl.hauntedmc.ailex.npc.NPC;
 import nl.hauntedmc.ailex.npc.NPCData;
+import nl.hauntedmc.ailex.util.LoggerUtils;
 import nl.hauntedmc.ailex.util.PacketUtils;
 
 import java.util.ArrayList;
@@ -29,7 +30,7 @@ public class NpcManager {
     private final BooleanSupplier spawningEnabled;
 
     /**
-     * Creates the lifecycle manager for AIlex-owned NPCs.
+     * Creates a lifecycle manager for AIlex-owned NPCs.
      */
     public NpcManager() {
         this(() -> true);
@@ -46,36 +47,51 @@ public class NpcManager {
     }
 
     /**
-     * Create a new NPC of the given class at the given location with the given id and name
-     * If an NPC with the given id already exists, it will not be created
+     * Create a new NPC of the given class at the given location with the given id and name.
+     * Registration and chat availability are independent from whether Citizens can currently spawn the physical entity.
+     * If an NPC with the given id already exists, it will not be created.
+     *
      * @param npcClass the class of the NPC
+     * @param npcData persisted NPC definition
      * @param <T> the type of the NPC
      */
     public <T extends NPC> void createNPC(Class<T> npcClass, NPCData npcData) {
         if (!spawningEnabled.getAsBoolean()) {
             throw new IllegalStateException("NPC spawning is disabled in config.yml.");
         }
-        if (!npcRegistry.containsKey(npcData.getId())) {
-            try {
-                // Create a new instance of the NPC
-                T npc = npcClass.getDeclaredConstructor(NPCData.class).newInstance(npcData);
-
-                // Register the NPC
-                npcRegistry.put(npcData.getId(), npc);
-
-                // Save the NPC data to the data file
-                DataHandler.saveNPC(npcData);
-
-                // Spawn the NPC
-                npc.spawn();
-
-                // Broadcast the player info add packet
-                PacketUtils.broadcastPlayerInfoAddPacket(npc);
-            } catch (Exception e) {
-                throw new IllegalArgumentException("Failed to create NPC of class: " + npcClass.getName(), e);
-            }
-        } else {
+        if (npcClass == null) {
+            throw new IllegalArgumentException("NPC class is required.");
+        }
+        if (npcData == null || !npcData.isValid()) {
+            throw new IllegalArgumentException("NPC data is invalid.");
+        }
+        if (npcRegistry.containsKey(npcData.getId())) {
             throw new IllegalArgumentException("NPC with ID " + npcData.getId() + " already exists.");
+        }
+
+        final T npc;
+        try {
+            npc = npcClass.getDeclaredConstructor(NPCData.class).newInstance(npcData);
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalArgumentException("Failed to create NPC of class: " + npcClass.getName(), exception);
+        }
+
+        // The logical assistant is registered and persisted before embodiment. Physical spawn failure must not make
+        // an otherwise valid chat assistant disappear from the runtime registry.
+        npcRegistry.put(npcData.getId(), npc);
+        DataHandler.saveNPC(npcData);
+
+        try {
+            npc.spawn();
+            if (npc.isSpawned()) {
+                PacketUtils.broadcastPlayerInfoAddPacket(npc);
+            } else {
+                LoggerUtils.logWarning("NPC " + npcData.getName() + " (id " + npcData.getId()
+                        + ") is registered for chat but Citizens did not create a physical entity.");
+            }
+        } catch (RuntimeException exception) {
+            LoggerUtils.logWarning("NPC " + npcData.getName() + " (id " + npcData.getId()
+                    + ") is registered for chat but physical spawn failed: " + exception.getMessage());
         }
     }
 
@@ -88,11 +104,14 @@ public class NpcManager {
             // Remove the NPC from the data file
             DataHandler.removeNPC(id);
 
-            // Broadcast the player info add packet
-            PacketUtils.broadcastPlayerInfoRemovePacket(npcRegistry.get(id));
+            NPC npc = npcRegistry.get(id);
+            // Broadcast removal only when a physical Citizens entity actually exists.
+            if (npc.isSpawned()) {
+                PacketUtils.broadcastPlayerInfoRemovePacket(npc);
+            }
 
-            // Remove the NPC from the game
-            npcRegistry.get(id).remove();
+            // Remove the NPC from the game/runtime.
+            npc.remove();
 
             // Clean up the NPC registry by removing the NPC
             npcRegistry.remove(id);
@@ -118,8 +137,8 @@ public class NpcManager {
     }
 
     /**
-     * Load all NPCs from the data config
-     * This method will create and register all NPCs that are saved in the data config
+     * Load all NPCs from the data config.
+     * One invalid or physically unspawnable NPC must never prevent other configured assistants from loading.
      */
     public void loadNPCs() {
         if (!spawningEnabled.getAsBoolean()) {
@@ -132,8 +151,11 @@ public class NpcManager {
             try {
                 Class<? extends NPC> npcClass = (Class<? extends NPC>) Class.forName(npcData.getNpcClass());
                 createNPC(npcClass, npcData);
-            } catch (ClassNotFoundException e) {
-                e.printStackTrace();
+            } catch (ClassNotFoundException exception) {
+                LoggerUtils.logError("Could not load NPC " + npcData.getId() + ": class "
+                        + npcData.getNpcClass() + " was not found.");
+            } catch (RuntimeException exception) {
+                LoggerUtils.logError("Could not load NPC " + npcData.getId() + ": " + exception.getMessage());
             }
         }
     }
@@ -172,7 +194,7 @@ public class NpcManager {
 
     /**
      * Unload the given NPC
-     * @param npc the NPC to unload
+     * @param npc The NPC to unload
      */
     private void unloadNPC(NPC npc) {
         // Save the NPC data to the data file

@@ -137,13 +137,25 @@ public class AssistantRequestCoordinator {
     }
 
     private void dispatch(QueuedWork work) {
-        dispatcher.accept(() -> {
-            try {
-                work.action().run();
-            } finally {
-                complete(work.ownerId());
-            }
-        });
+        try {
+            dispatcher.accept(() -> {
+                try {
+                    work.action().run();
+                } finally {
+                    complete(work.ownerId());
+                }
+            });
+        } catch (RuntimeException | Error exception) {
+            releaseFailedDispatch(work.ownerId());
+            throw exception;
+        }
+    }
+
+    /** A rejected scheduler submission must never leave the player permanently marked as busy. */
+    private synchronized void releaseFailedDispatch(UUID ownerId) {
+        if (activeOwners.remove(ownerId)) {
+            activeRequests = Math.max(0, activeRequests - 1);
+        }
     }
 
     private void complete(UUID ownerId) {

@@ -146,7 +146,7 @@ public final class AssistantChatController implements AutoCloseable {
         NpcManager npcManager = plugin.getNpcManager();
         if (npcManager != null) {
             for (NPC npc : npcManager.getNPCRegistry().values()) {
-                if (npc.isChatEnabled() && npc.isSpawned() && AssistantMentionMatcher.isMentioned(message, npc.getName())) {
+                if (chatAvailable(npc) && AssistantMentionMatcher.isMentioned(message, npc.getName())) {
                     return AssistantChatTarget.fromNpc(npc);
                 }
             }
@@ -176,7 +176,15 @@ public final class AssistantChatController implements AutoCloseable {
             return null;
         }
         NPC npc = npcManager.getNPCRegistry().get(active.npcId());
-        return npc != null && npc.isChatEnabled() && npc.isSpawned() ? AssistantChatTarget.fromNpc(npc) : null;
+        return chatAvailable(npc) ? AssistantChatTarget.fromNpc(npc) : null;
+    }
+
+    /**
+     * Conversational availability is intentionally independent from Citizens entity spawn state. A chunk unload or
+     * failed physical respawn may remove embodiment, but must never make an otherwise registered chat assistant silent.
+     */
+    static boolean chatAvailable(NPC npc) {
+        return npc != null && npc.isChatEnabled();
     }
 
     private void submitRequest(
@@ -185,29 +193,32 @@ public final class AssistantChatController implements AutoCloseable {
             String message,
             ChatContextStore.ContextSettings contextSettings
     ) {
-        if (!configuration.mayUse(source)) {
-            chatContextStore.recordGeneralChat(source.getName(), message, contextSettings);
-            sendFeedback(source, "access_denied", "Je kunt AIlex hier niet gebruiken.");
-            return;
-        }
-        if (assistantService == null) {
-            sendFeedback(source, "failure", "Mijn AI-service is nu niet beschikbaar. Probeer het zo nog eens.");
-            return;
-        }
-        if (!responseRateLimiter.tryAcquire(source.getUniqueId(), configuration.bypassRateLimit(source))) {
-            chatContextStore.recordGeneralChat(source.getName(), message, contextSettings);
-            sendRateLimitFeedback(source);
-            return;
-        }
-
         UUID sourceId = source.getUniqueId();
         String sourceName = source.getName();
         AssistantConversationManager.Snapshot dialogue = conversationManager.snapshot(
                 sourceId, target.id(), configuration.sessionTimeoutMillis()
         );
-        conversationManager.recordUser(sourceId, target.id(), sourceName, message);
         UUID requestId = requestTracer.start(sourceName, target.name(), dialogue.active() ? "follow-up" : "direct");
 
+        if (!configuration.mayUse(source)) {
+            chatContextStore.recordGeneralChat(sourceName, message, contextSettings);
+            requestTracer.transition(requestId, AssistantRequestTracer.State.REJECTED, "access-denied");
+            sendFeedback(source, "access_denied", "Je kunt AIlex hier niet gebruiken.");
+            return;
+        }
+        if (assistantService == null) {
+            requestTracer.transition(requestId, AssistantRequestTracer.State.UPSTREAM_FAILED, "assistant-service-unavailable");
+            sendFeedback(source, "failure", "Mijn AI-service is nu niet beschikbaar. Probeer het zo nog eens.");
+            return;
+        }
+        if (!responseRateLimiter.tryAcquire(sourceId, configuration.bypassRateLimit(source))) {
+            chatContextStore.recordGeneralChat(sourceName, message, contextSettings);
+            requestTracer.transition(requestId, AssistantRequestTracer.State.REJECTED, "rate-limited");
+            sendRateLimitFeedback(source);
+            return;
+        }
+
+        conversationManager.recordUser(sourceId, target.id(), sourceName, message);
         try {
             String userPrompt = promptWithWorkingHistory(target, source, message, dialogue, contextSettings);
             AssistantService.PreparedRequest prepared = assistantService.prepare(
@@ -235,8 +246,8 @@ public final class AssistantChatController implements AutoCloseable {
             );
             handleSubmission(source, requestId, submission);
         } catch (RuntimeException exception) {
-            requestTracer.transition(requestId, AssistantRequestTracer.State.UPSTREAM_FAILED, "prepare");
-            LoggerUtils.logError("Could not prepare assistant chat request: " + exception.getMessage());
+            requestTracer.transition(requestId, AssistantRequestTracer.State.UPSTREAM_FAILED, "prepare-or-dispatch");
+            LoggerUtils.logError("Could not prepare or dispatch assistant chat request: " + exception.getMessage());
             sendFeedback(source, "failure", "Mijn AI-service gaf geen bruikbaar antwoord. Probeer het nog eens.");
         }
     }
@@ -449,8 +460,7 @@ public final class AssistantChatController implements AutoCloseable {
             return null;
         }
         return npcManager.getNPCRegistry().values().stream()
-                .filter(NPC::isChatEnabled)
-                .filter(NPC::isSpawned)
+                .filter(AssistantChatController::chatAvailable)
                 .findFirst()
                 .map(AssistantChatTarget::fromNpc)
                 .orElse(null);
