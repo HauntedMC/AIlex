@@ -49,6 +49,51 @@ class ResilientOpenAiResponsesClientTest {
     }
 
     @Test
+    void resultApiCannotBypassReliabilityBoundary() throws Exception {
+        HttpClient httpClient = mock(HttpClient.class);
+        HttpResponse<String> unavailable = mockStringResponse(503, "{\"error\":{\"message\":\"busy\"}}");
+        when(httpClient.send(any(HttpRequest.class), anyStringBodyHandler())).thenReturn(unavailable);
+
+        try (MockedStatic<LoggerUtils> ignored = mockStatic(LoggerUtils.class)) {
+            ResilientOpenAiResponsesClient client = new ResilientOpenAiResponsesClient(
+                    "key", "gpt-5.6-terra", httpClient, false
+            );
+
+            OpenAiUnavailableException exception = assertThrows(
+                    OpenAiUnavailableException.class,
+                    () -> client.getChatResult(
+                            "system", "hello", OpenAiResponsesClient.RequestOptions.defaults()
+                    )
+            );
+
+            assertEquals(FailureKind.UPSTREAM, exception.failureKind());
+            verify(httpClient, times(1)).send(any(HttpRequest.class), anyStringBodyHandler());
+        }
+    }
+
+    @Test
+    void normalizedEmptySuccessCannotTurnIntoFallbackAssistantText() throws Exception {
+        HttpClient httpClient = mock(HttpClient.class);
+        HttpResponse<String> emptyQuotedText = mockStringResponse(200, successfulResponse("\\\"\\\""));
+        when(httpClient.send(any(HttpRequest.class), anyStringBodyHandler())).thenReturn(emptyQuotedText);
+
+        try (MockedStatic<LoggerUtils> ignored = mockStatic(LoggerUtils.class)) {
+            ResilientOpenAiResponsesClient client = new ResilientOpenAiResponsesClient(
+                    "key", "gpt-5.6-terra", httpClient, false
+            );
+
+            OpenAiUnavailableException exception = assertThrows(
+                    OpenAiUnavailableException.class,
+                    () -> client.getChatResponse("system", "hello")
+            );
+
+            assertEquals(FailureKind.INVALID_RESPONSE, exception.failureKind());
+            assertEquals(200, exception.httpStatus());
+            verify(httpClient, times(1)).send(any(HttpRequest.class), anyStringBodyHandler());
+        }
+    }
+
+    @Test
     void transientUpstreamFailureRetriesOnceThenReturnsRealAnswer() throws Exception {
         HttpClient httpClient = mock(HttpClient.class);
         HttpResponse<String> unavailable = mockStringResponse(503, "{\"error\":{\"message\":\"busy\"}}");
