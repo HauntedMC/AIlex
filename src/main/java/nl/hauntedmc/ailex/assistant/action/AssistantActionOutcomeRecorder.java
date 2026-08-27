@@ -28,6 +28,18 @@ public final class AssistantActionOutcomeRecorder {
         this.experienceMemory = experienceMemory;
     }
 
+    /**
+     * Records the result returned by the deterministic action boundary.
+     *
+     * <p>The audit event is scoped to the requester/NPC and may in turn support a procedural lesson. The original player
+     * message is deliberately not persisted here; it is used only by the action validator before this method is called.
+     * Rejected proposals are useful experience too, but they never become evidence that an action occurred.</p>
+     *
+     * @param requester player whose explicit request was validated
+     * @param npcId stable NPC memory identity
+     * @param playerMessage original request; retained in the signature for outcome-call-site clarity, never persisted
+     * @param result deterministic validation/execution result
+     */
     public void record(
             Player requester,
             String npcId,
