@@ -12,6 +12,8 @@ import nl.hauntedmc.ailex.npc.lifecycle.NpcManager;
 
 import org.bukkit.entity.Player;
 
+import java.util.Locale;
+
 /**
  * Cheap trusted observation boundary for public chat addressed to an AIlex NPC.
  *
@@ -40,7 +42,9 @@ public final class AssistantChatObservationService {
         }
 
         AssistantIntent intent = AssistantIntentClassifier.analyze(message).intent();
-        boolean recallQuestion = intent == AssistantIntent.EVENT_RECALL || intent == AssistantIntent.MEMORY_RECALL;
+        boolean recallQuestion = intent == AssistantIntent.EVENT_RECALL
+                || intent == AssistantIntent.MEMORY_RECALL
+                || looksLikeRecentEventRecall(message);
         NpcManager npcManager = plugin.getNpcManager();
         if (npcManager == null) {
             return;
@@ -66,5 +70,23 @@ public final class AssistantChatObservationService {
                 );
             }
         }
+    }
+
+    static boolean looksLikeRecentEventRecall(String message) {
+        String text = message == null ? "" : message.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
+        return containsAny(text,
+                "wie vroeg net", "wie vroeg dat", "wie zei net", "wie zei dat", "wat vroeg net", "wat zei net",
+                "who just asked", "who asked that", "who just said", "who said that", "what did they just ask",
+                "what did they just say"
+        );
+    }
+
+    private static boolean containsAny(String text, String... phrases) {
+        for (String phrase : phrases) {
+            if (text.contains(phrase)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
