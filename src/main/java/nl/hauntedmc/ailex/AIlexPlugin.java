@@ -10,6 +10,7 @@ import nl.hauntedmc.ailex.command.MainCommand;
 import nl.hauntedmc.ailex.config.ConfigHandler;
 import nl.hauntedmc.ailex.config.DataHandler;
 import nl.hauntedmc.ailex.infrastructure.openai.OpenAiResponsesClient;
+import nl.hauntedmc.ailex.infrastructure.openai.ResilientOpenAiResponsesClient;
 import nl.hauntedmc.ailex.listener.citizens.NPCDeathListener;
 import nl.hauntedmc.ailex.listener.citizens.NPCSpawnListener;
 import nl.hauntedmc.ailex.listener.player.PlayerJoinListener;
@@ -49,7 +50,7 @@ public class AIlexPlugin extends JavaPlugin {
                 () -> getConfig().getBoolean("openai.assistant.observability.enabled", true),
                 () -> getConfig().getBoolean("openai.assistant.observability.include_requester_name", true)
         );
-        openAiResponsesClient = new OpenAiResponsesClient(this);
+        openAiResponsesClient = new ResilientOpenAiResponsesClient(this);
         assistantMemoryService = new AssistantMemoryService(this);
         assistantEventMemoryService = new AssistantEventMemoryService(this);
         assistantContextProviderRegistry = new AssistantContextProviderRegistry();
@@ -168,7 +169,7 @@ public class AIlexPlugin extends JavaPlugin {
     }
 
     public void reloadOpenAiResponsesClient() {
-        openAiResponsesClient = new OpenAiResponsesClient(this);
+        openAiResponsesClient = new ResilientOpenAiResponsesClient(this);
         if (assistantService != null) {
             assistantService.reload();
         }
