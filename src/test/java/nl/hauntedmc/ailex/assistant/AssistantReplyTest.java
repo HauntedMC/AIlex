@@ -38,8 +38,8 @@ class AssistantReplyTest {
                 "",
                 List.of(),
                 Map.of(
-                        0, Set.of("knowledge.survival"),
-                        1, Set.of("knowledge.survival")
+                        0, Set.of("knowledge.survival")),
+                        1, Set.of("knowledge.survival"))
                 ),
                 true
         );
@@ -64,7 +64,7 @@ class AssistantReplyTest {
     }
 
     @Test
-    void accidentalLegacyJsonEnvelopeMustNeverLeakIntoMinecraftChat() {
+    void accidentalJsonEnvelopeMustNeverLeakIntoMinecraftChat() {
         AssistantReply reply = AssistantReply.fromPlainText(
                 "{\"response\":\"Ik kan dat niet verifiëren.\",\"evidence\":[]}"
         );
@@ -76,7 +76,7 @@ class AssistantReplyTest {
     }
 
     @Test
-    void malformedLegacyEnvelopeMatchingProductionScreenshotMustBeRecovered() {
+    void malformedProtocolEnvelopeMustBeRecovered() {
         AssistantReply reply = AssistantReply.fromPlainText(
                 "\"response\":\"Ik kan niet verifiëren of de nieuwe Haunty-versie live is.\",\"evidence\":[]"
         );
@@ -88,7 +88,7 @@ class AssistantReplyTest {
     }
 
     @Test
-    void accidentalCurrentStructuredEnvelopeOnPlainPathIsUnwrapped() {
+    void accidentalStructuredEnvelopeOnPlainPathIsUnwrapped() {
         AssistantReply reply = AssistantReply.fromPlainText(
                 "{\"lines\":[\"Hoi!\",\"Waarmee kan ik helpen?\"],\"evidence_ids\":[]}"
         );
