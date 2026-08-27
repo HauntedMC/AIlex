@@ -23,28 +23,38 @@ import java.util.List;
 public final class OpenAiToolPlanningClient {
 
     private static final URI ENDPOINT = URI.create("https://api.openai.com/v1/responses");
+    private static final int MAX_OUTPUT_TOKENS = 220;
+    private static final long TRANSIENT_FAILURE_COOLDOWN_MILLIS = 10_000L;
+    private static final long AUTH_FAILURE_COOLDOWN_MILLIS = 60_000L;
+
     private final String apiKey;
     private final String model;
     private final HttpClient httpClient;
+    private volatile long unavailableUntilMillis;
 
     public OpenAiToolPlanningClient(JavaPlugin plugin) {
-        FileConfiguration config = plugin.getConfig();
-        this.apiKey = clean(config.getString("openai.api_key", ""));
-        this.model = clean(config.getString(
+        this(plugin == null ? null : plugin.getConfig(), HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(5)).build());
+    }
+
+    OpenAiToolPlanningClient(FileConfiguration config, HttpClient httpClient) {
+        this.apiKey = config == null ? "" : clean(config.getString("openai.api_key", ""));
+        this.model = config == null ? "" : clean(config.getString(
                 "openai.assistant.agent.planner_model",
                 config.getString("openai.assistant.models.fast.model", "gpt-5.6-luna")
         ));
-        this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+        this.httpClient = httpClient;
     }
 
     public PlanningResponse plan(List<JsonElement> history, List<JsonObject> tools, Duration timeout) {
-        if (apiKey.isBlank() || model.isBlank() || history == null || history.isEmpty()) {
+        if (apiKey.isBlank() || model.isBlank() || history == null || history.isEmpty()
+                || System.currentTimeMillis() < unavailableUntilMillis) {
             return PlanningResponse.failure();
         }
         JsonObject payload = new JsonObject();
         payload.addProperty("model", model);
         payload.addProperty("store", false);
-        payload.addProperty("max_output_tokens", 220);
+        payload.addProperty("max_output_tokens", MAX_OUTPUT_TOKENS);
         payload.addProperty("parallel_tool_calls", false);
         JsonObject reasoning = new JsonObject();
         reasoning.addProperty("effort", "low");
@@ -73,15 +83,31 @@ public final class OpenAiToolPlanningClient {
                     request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
             );
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                LoggerUtils.logWarning("[AIlex agent] planner request failed with status " + response.statusCode());
+                handleHttpFailure(response.statusCode());
                 return PlanningResponse.failure();
             }
-            return parse(response.body());
+            PlanningResponse parsed = parse(response.body());
+            if (!parsed.success()) {
+                markUnavailable(
+                        TRANSIENT_FAILURE_COOLDOWN_MILLIS,
+                        "Planner response did not contain a usable output payload"
+                );
+            }
+            return parsed;
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             return PlanningResponse.failure();
-        } catch (IOException | RuntimeException exception) {
-            LoggerUtils.logWarning("[AIlex agent] planner request failed: " + exception.getMessage());
+        } catch (IOException exception) {
+            markUnavailable(
+                    TRANSIENT_FAILURE_COOLDOWN_MILLIS,
+                    "Planner transport failed: " + exception.getMessage()
+            );
+            return PlanningResponse.failure();
+        } catch (RuntimeException exception) {
+            markUnavailable(
+                    TRANSIENT_FAILURE_COOLDOWN_MILLIS,
+                    "Planner response parsing failed: " + exception.getMessage()
+            );
             return PlanningResponse.failure();
         }
     }
@@ -152,6 +178,25 @@ public final class OpenAiToolPlanningClient {
         int inputTokens = integer(usage, "input_tokens");
         int outputTokens = integer(usage, "output_tokens");
         return new PlanningResponse(List.copyOf(calls), text.toString().trim(), true, inputTokens, outputTokens);
+    }
+
+    private void handleHttpFailure(int status) {
+        String message = "Planner request failed with status " + status;
+        if (status == 401 || status == 403) {
+            markUnavailable(AUTH_FAILURE_COOLDOWN_MILLIS, message);
+        } else if (status == 408 || status == 429 || status >= 500) {
+            markUnavailable(TRANSIENT_FAILURE_COOLDOWN_MILLIS, message);
+        } else {
+            LoggerUtils.logWarning("[AIlex agent] " + message);
+        }
+    }
+
+    private void markUnavailable(long cooldownMillis, String message) {
+        unavailableUntilMillis = Math.max(
+                unavailableUntilMillis,
+                System.currentTimeMillis() + Math.max(0L, cooldownMillis)
+        );
+        LoggerUtils.logWarning("[AIlex agent] " + message + "; planner temporarily disabled.");
     }
 
     private int integer(JsonObject object, String key) {
