@@ -98,13 +98,13 @@ public final class AssistantChatConfiguration {
         return new ChatContextStore.ContextSettings(
                 bool(CONTEXT + ".enabled", true),
                 bool(CONTEXT + ".persist_to_disk", false),
-                integer(CONTEXT + ".max_message_characters", 720, 80, 2_000),
+                integer(CONTEXT + ".max_message_characters", 900, 80, 2_000),
                 bool(CONTEXT + ".include_timestamps", true),
                 string(CONTEXT + ".timestamp_format", "HH:mm:ss"),
-                history("general_chat", 160, 3_600, 3_000),
-                history("conversation", 80, 21_600, 6_000),
-                history("bot_memory", 100, 21_600, 4_000),
-                integer(CONTEXT + ".max_context_characters", 14_000, 1_000, 32_000)
+                history("general_chat", 160, 3_600, 4_000),
+                history("conversation", 80, 21_600, 8_000),
+                history("bot_memory", 100, 21_600, 5_000),
+                integer(CONTEXT + ".max_context_characters", 18_000, 1_000, 32_000)
         );
     }
 
