@@ -38,8 +38,8 @@ class AssistantReplyTest {
                 "",
                 List.of(),
                 Map.of(
-                        0, Set.of("knowledge.survival")),
-                        1, Set.of("knowledge.survival"))
+                        0, Set.of("knowledge.survival"),
+                        1, Set.of("knowledge.survival")
                 ),
                 true
         );
