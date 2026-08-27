@@ -22,19 +22,21 @@ import java.util.regex.Pattern;
 /**
  * Deterministic registry for exact HauntedMC identifiers such as Discord channels, commands and ranks.
  *
- * <p>Unlike free-text RAG, a canonical registry can distinguish an exact identifier from a translated or guessed one.
- * Kinds explicitly marked {@code @complete} may also produce safe negative evidence when an exact identifier is absent.
- * The language model still explains the result; Java decides whether the identifier exists.</p>
+ * <p>Unlike free-text RAG, this registry distinguishes canonical spellings from translated or guessed identifiers.
+ * Complete kinds can also provide safe negative evidence. The same audited data is rendered to a generated Markdown
+ * knowledge source so the existing RAG/grounding pipeline receives these deterministic existence rules.</p>
  */
 public final class CanonicalIdentifierRegistry {
 
     private static final Pattern EXPLICIT_IDENTIFIER = Pattern.compile("(?<![\\p{L}\\p{N}_-])([#/][\\p{L}\\p{N}_:+-]+)");
     private static final int MAX_MATCHES = 4;
+    private static final String GENERATED_FILE = "canonical-identifiers.generated.md";
 
     private final JavaPlugin plugin;
     private volatile Map<String, Entry> exact = Map.of();
     private volatile Map<String, List<Entry>> aliases = Map.of();
     private volatile Set<String> completeKinds = Set.of();
+    private volatile List<Entry> orderedEntries = List.of();
 
     public CanonicalIdentifierRegistry(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -45,14 +47,13 @@ public final class CanonicalIdentifierRegistry {
     public void reload() {
         File file = new File(plugin.getDataFolder(), "knowledge/entities.tsv");
         if (!file.isFile()) {
-            exact = Map.of();
-            aliases = Map.of();
-            completeKinds = Set.of();
+            clear();
             return;
         }
         Map<String, Entry> exactEntries = new HashMap<>();
         Map<String, List<Entry>> aliasEntries = new HashMap<>();
         Set<String> complete = new HashSet<>();
+        List<Entry> ordered = new ArrayList<>();
         try {
             for (String rawLine : Files.readAllLines(file.toPath(), StandardCharsets.UTF_8)) {
                 String line = rawLine.trim();
@@ -79,6 +80,7 @@ public final class CanonicalIdentifierRegistry {
                 String description = columns.length >= 4 ? columns[3].trim() : "";
                 Entry entry = new Entry(kind, canonical, entryAliases, description);
                 exactEntries.put(exactKey(kind, canonical), entry);
+                ordered.add(entry);
                 for (String alias : entryAliases) {
                     aliasEntries.computeIfAbsent(normalize(alias), ignored -> new ArrayList<>()).add(entry);
                 }
@@ -86,9 +88,7 @@ public final class CanonicalIdentifierRegistry {
             }
         } catch (IOException exception) {
             LoggerUtils.logWarning("Could not load canonical identifier registry: " + exception.getMessage());
-            exact = Map.of();
-            aliases = Map.of();
-            completeKinds = Set.of();
+            clear();
             return;
         }
         Map<String, List<Entry>> immutableAliases = new HashMap<>();
@@ -96,6 +96,32 @@ public final class CanonicalIdentifierRegistry {
         exact = Map.copyOf(exactEntries);
         aliases = Map.copyOf(immutableAliases);
         completeKinds = Set.copyOf(complete);
+        orderedEntries = List.copyOf(ordered);
+    }
+
+    /**
+     * Writes a generated reviewed Markdown source consumed by {@link LocalKnowledgeIndex}. The TSV remains the source of
+     * truth; operators should never edit the generated file directly.
+     */
+    public void writeKnowledgeSnapshot() {
+        File directory = new File(plugin.getDataFolder(), "knowledge");
+        File generated = new File(directory, GENERATED_FILE);
+        if (orderedEntries.isEmpty()) {
+            if (generated.isFile()) {
+                try {
+                    Files.delete(generated.toPath());
+                } catch (IOException exception) {
+                    LoggerUtils.logWarning("Could not remove stale canonical identifier knowledge: " + exception.getMessage());
+                }
+            }
+            return;
+        }
+        try {
+            Files.createDirectories(directory.toPath());
+            Files.writeString(generated.toPath(), renderKnowledge(), StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            LoggerUtils.logWarning("Could not render canonical identifier knowledge: " + exception.getMessage());
+        }
     }
 
     /**
@@ -161,6 +187,50 @@ public final class CanonicalIdentifierRegistry {
 
     public int size() {
         return exact.size();
+    }
+
+    private String renderKnowledge() {
+        StringBuilder output = new StringBuilder("""
+                ---
+                id: hauntedmc.canonical-identifiers
+                title: Canonical HauntedMC identifiers
+                aliases: [canonical identifiers, exact commands, exact channels, exact ranks, exact gamemodes]
+                category: canonical-identifier
+                authority: operator-confirmed
+                updated: 2026-08-27
+                expires: null
+                source: knowledge/entities.tsv
+                ---
+
+                This file is generated from the reviewed canonical registry. Identifiers are proper names: copy them exactly,
+                never translate them, and never invent a spelling that is not listed. A kind marked COMPLETE is exhaustive;
+                therefore an exact identifier of that kind that is absent from the list does not exist in the reviewed registry.
+                """);
+        String previousKind = "";
+        for (Entry entry : orderedEntries) {
+            if (!entry.kind().equals(previousKind)) {
+                previousKind = entry.kind();
+                output.append("\n\n## ").append(previousKind)
+                        .append(completeKinds.contains(previousKind) ? " — COMPLETE" : " — known identifiers")
+                        .append('\n');
+            }
+            output.append("- `").append(entry.canonical()).append('`');
+            if (!entry.aliases().isEmpty()) {
+                output.append(" — query aliases: ").append(String.join(", ", entry.aliases()));
+            }
+            if (!entry.description().isBlank()) {
+                output.append(" — ").append(entry.description());
+            }
+            output.append('\n');
+        }
+        return output.toString().trim() + '\n';
+    }
+
+    private void clear() {
+        exact = Map.of();
+        aliases = Map.of();
+        completeKinds = Set.of();
+        orderedEntries = List.of();
     }
 
     private LocalKnowledgeIndex.KnowledgeChunk chunk(String id, String title, String text) {
