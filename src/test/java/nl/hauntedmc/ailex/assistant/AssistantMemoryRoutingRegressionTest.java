@@ -102,4 +102,23 @@ class AssistantMemoryRoutingRegressionTest {
         assertEquals(AssistantMode.GROUNDED, dutch.mode());
         assertEquals(AssistantIntent.EVENT_RECALL, english.intent());
     }
+
+    @Test
+    void productionNamedPlayerRecallRoutesDirectlyToMemory() {
+        AssistantIntentClassifier.Analysis analysis = AssistantIntentClassifier.analyze(
+                "wat weet je over stuyvert haunty"
+        );
+
+        assertEquals(AssistantIntent.MEMORY_RECALL, analysis.intent());
+        assertEquals(AssistantMode.GROUNDED, analysis.mode());
+    }
+
+    @Test
+    void namedGameplayTopicDoesNotBecomePlayerMemoryRecall() {
+        AssistantIntentClassifier.Analysis analysis = AssistantIntentClassifier.analyze(
+                "wat weet je over redstone haunty"
+        );
+
+        assertEquals(AssistantIntent.GAMEPLAY_HELP, analysis.intent());
+    }
 }
