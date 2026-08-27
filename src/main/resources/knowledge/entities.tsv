@@ -1,0 +1,54 @@
+# Reviewed canonical HauntedMC identifiers. Format: kind<TAB>canonical<TAB>aliases<TAB>description
+# @complete marks an identifier kind whose canonical list is exhaustive for safe negative answers.
+@complete	discord-channel
+@complete	rank
+@complete	game-mode
+
+discord-channel	#announcements	announcements,aankondigingen,announcement channel,aankondigingen kanaal	Official announcements and important news.
+discord-channel	#welcome	welcome,welkom	Welcome and join information.
+discord-channel	#notification-roles	notification roles,notifications	Notification role selection.
+discord-channel	#link-account	link account,account linking,account koppelen	Minecraft/account linking.
+discord-channel	#changelogs	changelogs,changes,updates	Published changes and update notes.
+discord-channel	#links	links,official links	Official links.
+discord-channel	#rules	rules,regels	Discord/community rules.
+discord-channel	#support	support,help	Support/help route.
+discord-channel	#build-showcase	build showcase,showcase	Community build showcases.
+discord-channel	#polls	polls,peilingen	Community polls.
+discord-channel	#rate-my-build	rate my build,build feedback	Build feedback and rating.
+discord-channel	#chat	chat,general chat,algemene chat	General community chat.
+discord-channel	#bot-chat	bot chat,bots	Bot-related chat.
+discord-channel	#movies-series	movies series,movies,series,films	Movies and series.
+discord-channel	#food	food,eten	Food chat.
+discord-channel	#pets	pets,huisdieren	Pets chat.
+discord-channel	#memes	memes	Memes.
+discord-channel	#music	music,muziek	Music.
+discord-channel	#off-topic	off topic,off-topic	Off-topic chat.
+discord-channel	#show-room	show room,showroom	Show-room channel.
+discord-channel	#sport	sport,sports	Sports.
+discord-channel	#gaming-tech	gaming tech,gaming,technology,technologie	Gaming and technology.
+
+rank	Speler	player,speler	Base public player rank.
+rank	Elite	elite	Public rank.
+rank	Legend	legend	Public rank.
+rank	Supreme	supreme	Public rank.
+rank	Supreme+	supreme+,supreme plus	Highest public rank in the reviewed rank order.
+
+game-mode	Survival	survival	Currently active game-mode category.
+game-mode	Creative	creative	Currently active game-mode category.
+game-mode	Minigames	minigames,minigame	Currently active game-mode category.
+
+command	/help	help	In-game help route.
+command	/rules	rules	Server rules route.
+command	/regels	regels	Dutch server rules route.
+command	/ranks	ranks	Current rank information.
+command	/discord	discord	Community Discord route.
+command	/support	support	Support route.
+command	/vote	vote,voting	Voting route.
+command	/link	link	HauntyLink account linking.
+command	/lobby	lobby	Network lobby navigation.
+command	/menu	menu,server selector	Server Selector.
+command	/spawn	spawn	Spawn navigation.
+command	/autopickup	autopickup	AutoPickup toggle for eligible players.
+command	/lottery buy	lottery buy	Buy a lottery ticket; price and timing must come from current evidence.
+command	/fly	fly	FairPerks fly command.
+command	/god	god	FairPerks god command.
