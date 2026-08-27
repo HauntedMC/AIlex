@@ -1,6 +1,6 @@
 # Configuration
 
-`src/main/resources/config.yml` is the source of truth for shipped settings. Production overrides should stay small; change a default only when measurements or deployment topology justify it. `config_revision` is used only for narrowly scoped migrations of old shipped defaults: a value that exactly matches an older AIlex default may be upgraded to its newer default, while operator-customized values are preserved.
+`src/main/resources/config.yml` is the source of truth for shipped settings. Production overrides should stay small; change a default only when measurements or deployment topology justify it. On startup and reload, AIlex aligns the active configuration with this current schema: existing values for valid keys are preserved, missing keys receive the bundled default, and unknown keys are removed.
 
 ## API and adaptive inference
 
@@ -54,7 +54,7 @@ The index fuses BM25/exact/phrase/concept signals with learned semantic similari
 
 Knowledge articles live in the configured external `knowledge` directory. Keep them concise, attributable and player-safe. Never put credentials, staff-only notes, reports, sanctions, private player information or infrastructure details in knowledge files.
 
-Bundled files listed in `knowledge/index.txt` are AIlex-managed reviewed knowledge and are refreshed from the plugin JAR on startup. This prevents a plugin update from leaving an old on-disk built-in knowledge file active. Operator-authored knowledge must use separate filenames not listed in the manifest; those files are left untouched. Commands, Discord channel names, URLs, ranks, roles, warps, menu names and other exact server identifiers should be stored canonically and never translated into invented identifiers. If the exact identifier is not in trusted evidence, AIlex must abstain rather than guess.
+Bundled files listed in `knowledge/index.txt` are AIlex-managed reviewed knowledge and are refreshed from the plugin JAR on startup. Operator-authored knowledge must use separate filenames not listed in the manifest; those files are left untouched. Commands, Discord channel names, URLs, ranks, roles, warps, menu names and other exact server identifiers should be stored canonically and never translated into invented identifiers. If the exact identifier is not in trusted evidence, AIlex must abstain rather than guess.
 
 Open-ended prompts such as “tell me a fun fact” use corpus discovery rather than forcing a meaningless lexical search.
 
@@ -114,7 +114,7 @@ memory:
       table_prefix: "ailex_"
 ```
 
-`MemoryRecord` is the backward-compatible durable storage envelope. The cognitive memory model separates current/historical `MemoryClaim`s, typed `MemoryEvent`s, ordered `MemoryEpisode`s, relationship `MemoryEdge`s and verified procedural experience. Raw chat is not the durable identity model.
+`MemoryRecord` is the durable storage envelope. The cognitive memory model separates current/historical `MemoryClaim`s, typed `MemoryEvent`s, ordered `MemoryEpisode`s, relationship `MemoryEdge`s and verified procedural experience. Raw chat is not the durable identity model.
 
 Memory candidates still pass source-support and privacy validation. Structured output being enabled does **not** mean every first-person sentence becomes permanent memory; it only gives the validator a candidate to evaluate.
 
@@ -197,7 +197,7 @@ Plain-text FAST generation is an explicitly separate transport path. It must emi
 - proactive requests yield to direct traffic;
 - embeddings and read tools fail toward simpler deterministic retrieval or explicit abstention rather than taking down chat;
 - shared memory never performs database network I/O on the Paper tick thread;
-- manifest-managed bundled knowledge refreshes on plugin upgrades instead of silently remaining stale on disk;
+- managed bundled knowledge is refreshed from the plugin JAR on startup;
 - exact HauntedMC identifiers are evidence-gated and are not translated or guessed.
 
 ## Observability
