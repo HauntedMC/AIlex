@@ -14,14 +14,6 @@ public interface MemoryRepository extends AutoCloseable {
     /** Loads historical versions for temporal questions, newest-first and bounded by the requested limit. */
     List<MemoryRecord> loadTimeline(String subjectId, String relationId, String key, int limit);
 
-    /**
-     * Legacy wall-clock change view. Shared repositories should implement sequence-based changes below instead; this
-     * default remains for storage implementations compiled against the 1.7 transition API.
-     */
-    default List<MemoryRecord> loadChangedSince(long sinceEpochMillis, int limit) {
-        return List.of();
-    }
-
     /** Monotonic repository-owned change cursor. Wall-clock timestamps are not safe cross-runtime cursors. */
     default long latestChangeSequence() {
         return 0L;
