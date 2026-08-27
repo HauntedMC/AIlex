@@ -185,13 +185,14 @@ public final class ContextCompiler {
     }
 
     private String dialogueText(AssistantDialogueContext dialogue) {
-        if (!dialogue.recentTurns().isBlank()) {
-            return dialogue.recentTurns();
-        }
         StringBuilder value = new StringBuilder("pending_answer=").append(dialogue.pendingAnswer());
         if (dialogue.previousIntent() != null) {
-            value.append(" | previous_intent=")
+            value.append("\nprevious_intent=")
                     .append(dialogue.previousIntent().name().toLowerCase(java.util.Locale.ROOT));
+        }
+        if (!dialogue.recentTurns().isBlank()) {
+            value.append('\n').append(dialogue.recentTurns());
+            return value.toString();
         }
         if (!dialogue.previousUserMessage().isBlank()) {
             value.append("\nprevious_user=").append(dialogue.previousUserMessage());
