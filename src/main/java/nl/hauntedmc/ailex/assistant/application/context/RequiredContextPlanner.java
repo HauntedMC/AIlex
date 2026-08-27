@@ -72,8 +72,10 @@ public final class RequiredContextPlanner {
                 "mijn ", "mij ", "mezelf", "voor mij", "over mij", "wat zal ik", "wat moet ik", "wat raad je",
                 "advies", "aanraden", "aanbevel", "suggest", "recommend", "for me", "about me", "my ", "me ",
                 "what should i", "what do you suggest", "what would you recommend", "remember", "onthoud",
-                "vergeet", "forget", "vorige keer", "last time", "eerder", "previously", "mijn project",
-                "my project", "mijn doel", "my goal", "favoriet", "favorite", "voorkeur", "prefer"
+                "onthouden", "vergeet", "forget", "vorige keer", "last time", "eerder", "previously", "mijn project",
+                "my project", "mijn doel", "my goal", "favoriet", "favorite", "favourite", "lievelings", "voorkeur",
+                "prefer", "ik hou van", "ik houd van", "i like", "i love", "ik ben fan", "i am a fan",
+                "ik speel sinds", "ik speel al sinds", "i have played since", "i've played since"
         );
     }
 
