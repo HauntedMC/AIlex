@@ -11,9 +11,9 @@ import java.util.Map;
 /**
  * Compiles independently sourced assistant context into a bounded prompt.
  *
- * <p>The current request is always retained. Budget is allocated to active dialogue and trusted task context before raw
- * historical chat. Rendering then puts low-authority history earlier and the most current trusted evidence near the end,
- * reducing the chance that relevant evidence is buried in the middle of a long prompt.</p>
+ * <p>The current request is always retained. Active source families reserve enough budget to remain represented before
+ * larger earlier sections can consume the window. Low-authority history is rendered early and current trusted evidence
+ * remains near the end so relevant support is not silently starved or buried in a long prompt.</p>
  */
 public final class ContextCompiler {
 
@@ -40,9 +40,18 @@ public final class ContextCompiler {
         tokensBySource.put("request", used);
         int remaining = Math.max(0, budget - used);
 
+        boolean hasDialogue = dialogue != null && dialogue.active();
+        boolean hasLive = !blank(liveContext);
+        boolean hasMemory = !blank(durableMemory);
+        boolean hasEvidence = evidence != null && !evidence.isEmpty();
+        int liveReserve = hasLive ? sourceReserve(liveCap(mode, budget), budget, 8, 600) : 0;
+        int memoryReserve = hasMemory ? sourceReserve(memoryCap(mode, budget), budget, 10, 500) : 0;
+        int evidenceReserve = hasEvidence ? sourceReserve(evidenceCap(mode, budget), budget, 5, 800) : 0;
+
         RenderedSection dialogueSection = RenderedSection.empty();
-        if (dialogue != null && dialogue.active() && remaining > 0) {
-            int allocated = Math.min(remaining, dialogueCap(mode, budget));
+        if (hasDialogue && remaining > 0) {
+            int available = Math.max(0, remaining - liveReserve - memoryReserve - evidenceReserve);
+            int allocated = Math.min(available, dialogueCap(mode, budget));
             dialogueSection = render("dialogue", DIALOGUE_HEADING, dialogueText(dialogue), allocated, true);
             used += dialogueSection.tokens();
             remaining = Math.max(0, budget - used);
@@ -50,8 +59,9 @@ public final class ContextCompiler {
         }
 
         RenderedSection liveSection = RenderedSection.empty();
-        if (!blank(liveContext) && remaining > 0) {
-            int allocated = Math.min(remaining, liveCap(mode, budget));
+        if (hasLive && remaining > 0) {
+            int available = Math.max(liveReserve, remaining - memoryReserve - evidenceReserve);
+            int allocated = Math.min(remaining, Math.min(available, liveCap(mode, budget)));
             liveSection = render(
                     "live", "Trusted live Minecraft context", liveContext, allocated, false
             );
@@ -61,8 +71,9 @@ public final class ContextCompiler {
         }
 
         RenderedSection memorySection = RenderedSection.empty();
-        if (!blank(durableMemory) && remaining > 0) {
-            int allocated = Math.min(remaining, memoryCap(mode, budget));
+        if (hasMemory && remaining > 0) {
+            int available = Math.max(memoryReserve, remaining - evidenceReserve);
+            int allocated = Math.min(remaining, Math.min(available, memoryCap(mode, budget)));
             memorySection = render(
                     "memory", "Relevant saved assistant memory", durableMemory, allocated, false
             );
@@ -71,7 +82,7 @@ public final class ContextCompiler {
             record(tokensBySource, memorySection);
         }
 
-        if (evidence != null && !evidence.isEmpty() && remaining > 0) {
+        if (hasEvidence && remaining > 0) {
             int evidenceBudget = Math.min(remaining, evidenceCap(mode, budget));
             for (ContextSource source : evidence) {
                 if (evidenceBudget <= 0 || remaining <= 0) {
@@ -112,6 +123,10 @@ public final class ContextCompiler {
 
         String prompt = output.toString().trim();
         return new CompiledContext(prompt, estimateTokens(prompt), Map.copyOf(tokensBySource));
+    }
+
+    private int sourceReserve(int cap, int budget, int divisor, int minimum) {
+        return Math.min(cap, Math.max(minimum, budget / divisor));
     }
 
     private int dialogueCap(AssistantMode mode, int budget) {
