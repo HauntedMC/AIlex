@@ -6,13 +6,14 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AssistantGroundingPolicyTest {
 
     @Test
-    void groundedRoutesFailClosedWhenRetrievalReturnsNothing() {
+    void groundedRoutesFailClosedWhenNoObservationWasPerformed() {
         for (AssistantIntent intent : Set.of(
                 AssistantIntent.SERVER_FACT,
                 AssistantIntent.KNOWLEDGE_DISCOVERY,
@@ -35,7 +36,7 @@ class AssistantGroundingPolicyTest {
                 AssistantIntent.SERVER_FACT, Set.of("knowledge.none")
         ));
         assertFalse(AssistantGroundingPolicy.hasRequiredEvidence(
-                AssistantIntent.SERVER_FACT, Set.of("memory.fact")
+                AssistantIntent.SERVER_FACT, Set.of("memory.player.fact")
         ));
 
         assertTrue(AssistantGroundingPolicy.hasRequiredEvidence(
@@ -49,11 +50,40 @@ class AssistantGroundingPolicyTest {
         ));
 
         assertTrue(AssistantGroundingPolicy.hasRequiredEvidence(
-                AssistantIntent.MEMORY_RECALL, Set.of("memory.fact")
+                AssistantIntent.MEMORY_RECALL, Set.of("memory.player.fact")
         ));
-        assertFalse(AssistantGroundingPolicy.hasRequiredEvidence(
+        assertTrue(AssistantGroundingPolicy.hasRequiredEvidence(
+                AssistantIntent.EVENT_RECALL, Set.of("memory.event.1234")
+        ));
+    }
+
+    @Test
+    void scopedMemoryMissCanGroundOnlyAMemoryAbsenceAnswer() {
+        assertEquals(EvidenceClass.AUTHORITATIVE_MEMORY_ABSENCE,
+                AssistantEpistemicPolicy.classify("memory.none"));
+        assertEquals(EvidenceClass.AUTHORITATIVE_MEMORY_ABSENCE,
+                AssistantEpistemicPolicy.classify("memory.timeline.none"));
+        assertTrue(AssistantGroundingPolicy.hasRequiredEvidence(
                 AssistantIntent.MEMORY_RECALL, Set.of("memory.none")
         ));
+        assertTrue(AssistantGroundingPolicy.hasRequiredEvidence(
+                AssistantIntent.EVENT_RECALL, Set.of("memory.timeline.none")
+        ));
+        assertFalse(AssistantGroundingPolicy.hasRequiredEvidence(
+                AssistantIntent.SERVER_FACT, Set.of("memory.none")
+        ));
+    }
+
+    @Test
+    void typedMemoryIdsPreserveEventAndSharedProvenance() {
+        assertEquals(EvidenceClass.PLAYER_MEMORY,
+                AssistantEpistemicPolicy.classify("memory.player.abc"));
+        assertEquals(EvidenceClass.SHARED_MEMORY,
+                AssistantEpistemicPolicy.classify("memory.shared.abc"));
+        assertEquals(EvidenceClass.EVENT_MEMORY,
+                AssistantEpistemicPolicy.classify("memory.event.abc"));
+        assertEquals(EvidenceClass.EVENT_MEMORY,
+                AssistantEpistemicPolicy.classify("memory.episode.abc"));
     }
 
     @Test
