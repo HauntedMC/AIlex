@@ -127,7 +127,7 @@ class AssistantConversationManagerTest {
         assertEquals(2, active.npcId());
 
         clock.addAndGet(3_000L);
-        assertNull(manager.activeTarget(player, 2, 2_000L));
+        assertNull(manager.activeTarget(player, 2_000L));
         assertFalse(manager.snapshot(player, 2, 2_000L).active());
     }
 }
