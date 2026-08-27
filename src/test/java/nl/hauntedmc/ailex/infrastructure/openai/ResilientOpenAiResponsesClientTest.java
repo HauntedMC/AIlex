@@ -117,6 +117,30 @@ class ResilientOpenAiResponsesClientTest {
     }
 
     @Test
+    void invalidSuccessfulResponsesDoNotPoisonProviderCircuit() throws Exception {
+        HttpClient httpClient = mock(HttpClient.class);
+        HttpResponse<String> invalid = mockStringResponse(200, "{\"output\":[]}");
+        when(httpClient.send(any(HttpRequest.class), anyStringBodyHandler())).thenReturn(invalid);
+
+        try (MockedStatic<LoggerUtils> ignored = mockStatic(LoggerUtils.class)) {
+            ResilientOpenAiResponsesClient client = new ResilientOpenAiResponsesClient(
+                    "key", "gpt-5.6-terra", httpClient, false
+            );
+
+            for (int attempt = 0; attempt < 7; attempt++) {
+                OpenAiUnavailableException exception = assertThrows(
+                        OpenAiUnavailableException.class,
+                        () -> client.getChatResponse("system", "hello")
+                );
+                assertEquals(FailureKind.INVALID_RESPONSE, exception.failureKind());
+            }
+
+            assertTrue(client.usageStatus().contains("provider_circuit=closed"));
+            verify(httpClient, times(7)).send(any(HttpRequest.class), anyStringBodyHandler());
+        }
+    }
+
+    @Test
     void authenticationFailuresDoNotPoisonProviderCircuit() throws Exception {
         HttpClient httpClient = mock(HttpClient.class);
         HttpResponse<String> unauthorized = mockStringResponse(
@@ -138,6 +162,30 @@ class ResilientOpenAiResponsesClientTest {
             }
 
             assertTrue(client.usageStatus().contains("provider_circuit=closed"));
+            verify(httpClient, times(7)).send(any(HttpRequest.class), anyStringBodyHandler());
+        }
+    }
+
+    @Test
+    void disabledProviderCircuitNeverRejectsRequests() throws Exception {
+        HttpClient httpClient = mock(HttpClient.class);
+        HttpResponse<String> unavailable = mockStringResponse(503, "{\"error\":{\"message\":\"busy\"}}");
+        when(httpClient.send(any(HttpRequest.class), anyStringBodyHandler())).thenReturn(unavailable);
+
+        try (MockedStatic<LoggerUtils> ignored = mockStatic(LoggerUtils.class)) {
+            ResilientOpenAiResponsesClient client = new ResilientOpenAiResponsesClient(
+                    "key", "gpt-5.6-terra", httpClient, false, false
+            );
+
+            for (int attempt = 0; attempt < 7; attempt++) {
+                OpenAiUnavailableException exception = assertThrows(
+                        OpenAiUnavailableException.class,
+                        () -> client.getChatResponse("system", "hello")
+                );
+                assertEquals(FailureKind.UPSTREAM, exception.failureKind());
+            }
+
+            assertTrue(client.usageStatus().contains("provider_circuit=disabled"));
             verify(httpClient, times(7)).send(any(HttpRequest.class), anyStringBodyHandler());
         }
     }
