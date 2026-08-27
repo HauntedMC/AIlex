@@ -539,11 +539,12 @@ public class OpenAiResponsesClient {
     }
 
     private JsonObject createInputMessage(String role, String text) {
+        String normalizedRole = "assistant".equalsIgnoreCase(role) ? "assistant" : "user";
         JsonObject message = new JsonObject();
-        message.addProperty("role", role);
+        message.addProperty("role", normalizedRole);
         JsonArray content = new JsonArray();
         JsonObject textContent = new JsonObject();
-        textContent.addProperty("type", "input_text");
+        textContent.addProperty("type", "assistant".equals(normalizedRole) ? "output_text" : "input_text");
         textContent.addProperty("text", text);
         content.add(textContent);
         message.add("content", content);
