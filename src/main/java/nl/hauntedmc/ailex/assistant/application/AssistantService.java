@@ -262,13 +262,9 @@ public final class AssistantService {
             return complete(request, completedProfile, fallbackFor(request, "unverified"), modelCalls, evidence.size(),
                     "unverified");
         }
-        if (remainingDuration(request).isZero() || remainingDuration(request).isNegative()) {
-            initialBreaker.recordFailure(request.settings().circuitBreakerEnabled());
-            fallbacks.incrementAndGet();
-            return complete(request, completedProfile, fallbackFor(request, "deadline"), modelCalls, evidence.size(),
-                    "deadline");
-        }
 
+        // The deadline prevents starting more provider/tool work. Once an acceptable answer already exists, throwing it
+        // away cannot reduce latency and only turns a successful request into a needless player-facing failure.
         initialBreaker.recordSuccess();
         replies.incrementAndGet();
         persistCandidates(request, reply);
