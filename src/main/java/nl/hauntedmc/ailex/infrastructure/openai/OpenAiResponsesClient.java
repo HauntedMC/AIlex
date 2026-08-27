@@ -19,7 +19,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 
-/** Responses API client with privacy controls, stable cache routing, and first-class usage accounting. */
+/** Responses API client with privacy controls, role-aware dialogue replay, cache routing and usage accounting. */
 public class OpenAiResponsesClient {
 
     static final String OPENAI_RESPONSES_API_URL = "https://api.openai.com/v1/responses";
@@ -30,13 +30,14 @@ public class OpenAiResponsesClient {
             + "If asked for inappropriate content, refuse briefly and redirect to a safe topic. "
             + "Keep all replies age-appropriate and safe-for-work.";
 
-    private static final int MAX_CHAT_RESPONSE_LENGTH = 600;
+    private static final int MAX_CHAT_RESPONSE_LENGTH = 1_200;
     private static final int DEFAULT_MAX_OUTPUT_TOKENS = 120;
     private static final String DEFAULT_REASONING_EFFORT = "low";
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(20);
-    private static final String SYSTEM_RESPONSE_INSTRUCTION = "Return exactly one short plain-text Minecraft chat response. "
-            + "If you refuse, keep it brief and safe. Do not use markdown, quotes, or speaker labels.";
+    private static final String SYSTEM_RESPONSE_INSTRUCTION = "Return only player-facing Minecraft chat text. "
+            + "Be concise but complete; do not omit a useful explanation merely to force one sentence. "
+            + "Do not use markdown, quotes around the whole reply, protocol fields, or speaker labels.";
 
     private final String apiKey;
     private final String model;
@@ -62,11 +63,11 @@ public class OpenAiResponsesClient {
     OpenAiResponsesClient(FileConfiguration config) {
         this(
                 config.getString("openai.api_key", ""),
-                config.getString("openai.model", "gpt-5.6-luna"),
+                config.getString("openai.model", "gpt-5.6-terra"),
                 HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build(),
                 config.getBoolean("openai.safety.enabled", true),
                 config.getString("openai.safety.system_prompt", SAFETY_SYSTEM_PROMPT),
-                Math.clamp(config.getInt("openai.max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS), 16, 600),
+                Math.clamp(config.getInt("openai.max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS), 16, 1_200),
                 config.getString("openai.reasoning_effort", DEFAULT_REASONING_EFFORT),
                 config.getBoolean("openai.store_responses", false),
                 Duration.ofSeconds(Math.clamp(config.getInt("openai.request_timeout_seconds", 20), 3, 60))
@@ -114,7 +115,7 @@ public class OpenAiResponsesClient {
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
         this.safetyEnabled = safetyEnabled;
         this.safetySystemPrompt = safetySystemPrompt == null ? "" : safetySystemPrompt.trim();
-        this.maxOutputTokens = Math.clamp(maxOutputTokens, 16, 600);
+        this.maxOutputTokens = Math.clamp(maxOutputTokens, 16, 1_200);
         this.reasoningEffort = sanitizeReasoningEffort(reasoningEffort);
         this.storeResponses = storeResponses;
         this.requestTimeout = requestTimeout == null || requestTimeout.isNegative() || requestTimeout.isZero()
@@ -329,9 +330,17 @@ public class OpenAiResponsesClient {
         if (!instructions.isBlank()) {
             payload.addProperty("instructions", instructions);
         }
+
+        ResponsesConversationInput.Parsed conversation = ResponsesConversationInput.parse(prompt);
         JsonArray input = new JsonArray();
-        input.add(createInputMessage("user", prompt));
+        for (ResponsesConversationInput.RoleMessage previous : conversation.history()) {
+            if (!previous.text().isBlank()) {
+                input.add(createInputMessage(previous.role(), previous.text()));
+            }
+        }
+        input.add(createInputMessage("user", conversation.currentPrompt()));
         payload.add("input", input);
+
         if (responseFormat != null) {
             JsonObject text = new JsonObject();
             text.add("format", responseFormat.deepCopy());
@@ -644,6 +653,7 @@ public class OpenAiResponsesClient {
         if (normalized.startsWith("\"") && normalized.endsWith("\"") && normalized.length() > 1) {
             normalized = normalized.substring(1, normalized.length() - 1).trim();
         }
+        // Plain transport remains one chat component; richer answers come from more content, not protocol-visible formatting.
         normalized = normalized.replaceAll("\\s*\n+\\s*", " ").replaceAll("\\s{2,}", " ").trim();
         if (normalized.isEmpty()) {
             return FALLBACK_RESPONSE;
