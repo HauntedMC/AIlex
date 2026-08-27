@@ -47,6 +47,19 @@ public final class AssistantActionService {
         this.moveHereActionFactory = moveHereActionFactory;
     }
 
+    /**
+     * Re-validates and executes at most two model-proposed physical actions.
+     *
+     * <p>A proposal is insufficient on its own: the action must also be enabled, explicitly allowed in configuration,
+     * directly requested in the player's message, and compatible with the current NPC/world state. No generic model
+     * instruction can bypass these checks. The returned result is suitable for deterministic audit/outcome recording.</p>
+     *
+     * @param requester player whose message is the authority for the requested movement
+     * @param npc physical AIlex NPC that may receive the action
+     * @param playerMessage original player message used for explicit-intent matching
+     * @param proposals bounded model output to validate
+     * @return immutable executed/rejected action lists and a compact deterministic outcome code
+     */
     public ActionResult validateAndExecute(
             Player requester,
             NPC npc,
@@ -77,6 +90,7 @@ public final class AssistantActionService {
         );
     }
 
+    /** Returns whether the deterministic physical-action boundary is enabled by server configuration. */
     public boolean enabled() {
         FileConfiguration config = plugin == null ? null : plugin.getConfig();
         return config != null && config.getBoolean("openai.assistant.actions.enabled", true);
@@ -172,6 +186,7 @@ public final class AssistantActionService {
         return value == null ? "" : value.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
     }
 
+    /** Deterministic execution result; absence from {@code executed} means the action did not occur. */
     public record ActionResult(
             List<AssistantActionType> executed,
             List<AssistantActionType> rejected,
