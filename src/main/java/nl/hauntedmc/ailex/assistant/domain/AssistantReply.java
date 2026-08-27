@@ -55,7 +55,7 @@ public record AssistantReply(
         }
     }
 
-    /** Source-compatible constructor for callers that do not use embodied actions. */
+    /** Convenience constructor for callers that do not use embodied actions. */
     public AssistantReply(
             List<String> lines,
             Set<String> evidenceIds,
