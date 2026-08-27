@@ -10,103 +10,75 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
 
 root = Path(__file__).resolve().parents[2]
 
-# Put explicit player-memory ingestion at the central assistant request boundary, so direct messages, standalone mode and
-# accepted implicit follow-ups all receive the same deterministic memory behavior.
-path = root / "src/main/java/nl/hauntedmc/ailex/assistant/application/AssistantService.java"
+# Production players commonly use Dutch informal "onthou" rather than "onthoud". Treat both as the same explicit
+# remember speech act; this is a routing normalization, not a relaxation of memory safety.
+path = root / "src/main/java/nl/hauntedmc/ailex/assistant/application/routing/AssistantIntentClassifier.java"
 text = path.read_text()
 text = replace_once(
     text,
-    "import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantExperienceMemoryService;\n",
-    "import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantExperienceMemoryService;\n"
-    "import nl.hauntedmc.ailex.assistant.infrastructure.memory.ExplicitPlayerMemoryService;\n",
-    "AssistantService explicit-memory import",
+    '            "onthoud", "onthouden", "herinner", "herinneren", "remember", "remembered", "weet", "wist", "vergeet",\n',
+    '            "onthou", "onthoud", "onthouden", "herinner", "herinneren", "remember", "remembered", "weet", "wist", "vergeet",\n',
+    "classifier informal onthou token",
 )
 text = replace_once(
     text,
-    "    private final AssistantRelationshipMemoryService relationshipMemory;\n",
-    "    private final AssistantRelationshipMemoryService relationshipMemory;\n"
-    "    private final ExplicitPlayerMemoryService explicitPlayerMemory;\n",
-    "AssistantService explicit-memory field",
-)
-text = replace_once(
-    text,
-    "        this.relationshipMemory = new AssistantRelationshipMemoryService(memoryService);\n",
-    "        this.relationshipMemory = new AssistantRelationshipMemoryService(memoryService);\n"
-    "        this.explicitPlayerMemory = new ExplicitPlayerMemoryService(memoryService);\n",
-    "AssistantService explicit-memory constructor",
-)
-text = replace_once(
-    text,
-    """        UUID playerId = player.getUniqueId();
-        if (memoryService != null && settings.toolAllowed("session")) {
-            memoryService.observe(playerId, message);
-""",
-    """        UUID playerId = player.getUniqueId();
-        if (memoryService != null && settings.toolAllowed("session")) {
-            ExplicitPlayerMemoryService.Result explicitResult = explicitPlayerMemory.observe(
-                    playerId, player.getName(), message
-            );
-            if (settings.diagnosticLogging() && explicitResult.proposed() > 0) {
-                LoggerUtils.logInfo("[AIlex memory] explicit requester=" + sanitizeLogField(player.getName())
-                        + " operation=" + (explicitResult.forget() ? "forget" : "upsert")
-                        + " proposed=" + explicitResult.proposed()
-                        + " accepted=" + explicitResult.accepted());
-            }
-            memoryService.observe(playerId, message);
-""",
-    "AssistantService explicit-memory prepare",
+    '        if (containsAnyPhrase(normalized, "onthoud ", "onthoud dat ", "onthouden dat ", "remember ", "remember that ")) {\n',
+    '        if (containsAnyPhrase(normalized, "onthou ", "onthou dat ", "onthoud ", "onthoud dat ", "onthouden dat ", "remember ", "remember that ")) {\n',
+    "classifier informal onthou phrase",
 )
 path.write_text(text)
 
-# Treat a tiny set of unmistakable reactions as active-dialogue continuations even when the prior assistant line was not a
-# question. This fixes the production 'zucht' dead-air case without making ordinary arbitrary server chat implicit follow-up.
-path = root / "src/main/java/nl/hauntedmc/ailex/assistant/runtime/AssistantConversationManager.java"
+path = root / "src/main/java/nl/hauntedmc/ailex/assistant/application/context/RequiredContextPlanner.java"
 text = path.read_text()
 text = replace_once(
     text,
-    """        if (normalized.length() > 320) {
-            return false;
-        }
-        if (startsLikeSubstantiveFollowUp(normalized)
-""",
-    """        if (normalized.length() > 320) {
-            return false;
-        }
-        if (isSocialReactionFollowUp(normalized)) {
-            return true;
-        }
-        if (startsLikeSubstantiveFollowUp(normalized)
-""",
-    "ConversationManager social-reaction gate",
+    '                "what should i", "what do you suggest", "what would you recommend", "remember", "onthoud",\n',
+    '                "what should i", "what do you suggest", "what would you recommend", "remember", "onthou", "onthoud",\n',
+    "context informal onthou",
 )
-text = replace_once(
-    text,
-    """    private boolean previousAssistantAskedQuestion(Snapshot snapshot) {
-""",
-    """    private boolean isSocialReactionFollowUp(String text) {
-        String stripped = text.replaceAll("[?!.,]+$", "").trim();
-        return SetLike.SOCIAL_REACTIONS.contains(stripped);
-    }
+path.write_text(text)
 
-    private boolean previousAssistantAskedQuestion(Snapshot snapshot) {
-""",
-    "ConversationManager social-reaction method",
+path = root / "src/main/java/nl/hauntedmc/ailex/assistant/infrastructure/memory/ExplicitPlayerMemoryService.java"
+text = path.read_text()
+text = replace_once(
+    text,
+    '    private static final Pattern HAIR = Pattern.compile(\n',
+    '    private static final Pattern PLAYS_SINCE_REVERSED = Pattern.compile(\n'
+    '            "ik\\\\s+(?:al\\\\s+)?sinds\\\\s+(\\\\d{4}).{0,48}\\\\bspeel\\\\b",\n'
+    '            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE\n'
+    '    );\n'
+    '    private static final Pattern HAIR = Pattern.compile(\n',
+    "explicit memory reversed play-since pattern",
 )
 text = replace_once(
     text,
-    """        private static final Set<String> TERSE = Set.of(
-                "ja", "nee", "ok", "oke", "oké", "waarom", "hoezo", "wacht", "huh", "yes", "no", "okay",
-                "why", "wait", "hmm"
-        );
-""",
-    """        private static final Set<String> TERSE = Set.of(
-                "ja", "nee", "ok", "oke", "oké", "waarom", "hoezo", "wacht", "huh", "yes", "no", "okay",
-                "why", "wait", "hmm"
-        );
-        private static final Set<String> SOCIAL_REACTIONS = Set.of(
-                "zucht", "pff", "pfff", "ugh", "sigh"
-        );
-""",
-    "ConversationManager social-reaction vocabulary",
+    '            ".*?\\\\b(?:onthoud(?:en)?|remember)\\\\b(?:\\\\s+dat|\\\\s+that)?\\\\s+(.+)",\n',
+    '            ".*?\\\\b(?:onthou(?:d|den)?|remember)\\\\b(?:\\\\s+dat|\\\\s+that)?\\\\s+(.+)",\n',
+    "explicit memory informal onthou regex",
+)
+text = replace_once(
+    text,
+    '        String clean = compact(message);\n        if (AssistantIntentClassifier.isMemoryForgetStatement(clean)) {\n',
+    '        String clean = compact(message);\n'
+    '        String extractionText = clean.replaceAll("(?i)\\\\bsidns\\\\b", "sinds");\n'
+    '        if (AssistantIntentClassifier.isMemoryForgetStatement(clean)) {\n',
+    "explicit memory production typo normalization",
+)
+text = replace_once(
+    text,
+    '        List<MemoryCandidate> candidates = extractWriteCandidates(clean);\n',
+    '        List<MemoryCandidate> candidates = extractWriteCandidates(extractionText);\n',
+    "explicit memory normalized extraction input",
+)
+text = replace_once(
+    text,
+    '        Matcher hair = HAIR.matcher(message);\n',
+    '        Matcher reversedPlaySince = PLAYS_SINCE_REVERSED.matcher(message);\n'
+    '        if (reversedPlaySince.find()) {\n'
+    '            add(result, "fact", "plays_since", reversedPlaySince.group(1));\n'
+    '            return List.copyOf(result);\n'
+    '        }\n\n'
+    '        Matcher hair = HAIR.matcher(message);\n',
+    "explicit memory reversed play-since extraction",
 )
 path.write_text(text)
