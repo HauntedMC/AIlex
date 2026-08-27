@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -17,6 +18,22 @@ class AssistantEpistemicPolicyTest {
         ));
         assertFalse(AssistantEpistemicPolicy.canGround(
                 AssistantIntent.SERVER_FACT, new EvidencePacket(Set.of("knowledge.none"))
+        ));
+    }
+
+    @Test
+    void authoritativeCanonicalAbsenceIsDistinctFromAnEmptySearch() {
+        assertEquals(
+                EvidenceClass.AUTHORITATIVE_ABSENCE,
+                AssistantEpistemicPolicy.classify("entity.missing.discord-channel.aankondigingen")
+        );
+        assertTrue(AssistantEpistemicPolicy.canGround(
+                AssistantIntent.SERVER_FACT,
+                new EvidencePacket(Set.of("entity.missing.discord-channel.aankondigingen"))
+        ));
+        assertFalse(AssistantEpistemicPolicy.canGround(
+                AssistantIntent.LIVE_STATE,
+                new EvidencePacket(Set.of("entity.missing.discord-channel.aankondigingen"))
         ));
     }
 
