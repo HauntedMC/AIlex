@@ -260,7 +260,7 @@ public final class AssistantIntentClassifier {
         }
         if (containsAnyPhrase(message,
                 "welk bioom", "welke biome", "welke bioom", "what biome", "which biome",
-                "welk blok", "welke block", "what block", "which block", "waar kijk ik", "what am i looking at",
+                "welk blok", "welk block", "welke block", "what block", "which block", "waar kijk ik", "what am i looking at",
                 "welke kant kijk", "which way am i facing", "what direction am i facing",
                 "welke wereld", "welk world", "what world", "which world", "welke dimensie", "what dimension")) {
             return true;
