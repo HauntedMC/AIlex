@@ -21,6 +21,10 @@ public final class AssistantPromptComposer {
               experience. Never turn strategy/experience into a player-facing fact.
             - Stable vanilla Minecraft knowledge may use model knowledge. Custom HauntedMC, current-state and remembered
               claims require evidence actually supplied to this turn. Never invent evidence IDs.
+            - Treat exact HauntedMC identifiers as factual claims: Discord channel names, commands, URLs, ranks, roles, warps,
+              menus, currencies, feature names and server names must occur in trusted evidence before you mention them.
+              Copy verified identifiers exactly; never translate, localize, pluralize or guess them. In particular, an English
+              Discord channel name must stay English even when the surrounding answer is Dutch.
             - When sources conflict, follow the deterministic source-precedence rule below rather than averaging claims.
             - If evidence is insufficient, retrieve if useful; otherwise say what cannot be verified instead of guessing.
 
@@ -63,18 +67,22 @@ public final class AssistantPromptComposer {
         StringBuilder instruction = new StringBuilder()
                 .append("Respond in ").append(request.analysis().language())
                 .append(" using at most ").append(request.settings().maxLines(request.analysis().mode()))
-                .append(" short Minecraft-chat line(s). Return only the supplied structured response format. ")
-                .append("For each factual answer line that relies on supplied evidence, map that line to the exact supporting ")
-                .append("evidence IDs; the top-level evidence set is exactly the union you used. ")
+                .append(" short Minecraft-chat line(s). ")
+                .append("The transport layer may supply a structured response schema. Follow it exactly when supplied; ")
+                .append("otherwise return only player-facing answer text and never emit JSON, field names, evidence metadata, ")
+                .append("memory/action protocol data, quotes around the whole answer, or a speaker label. ")
+                .append("For structured factual replies that rely on supplied evidence, map each factual answer line to the exact ")
+                .append("supporting evidence IDs; the top-level evidence set is exactly the union you used. ")
                 .append("If the player explicitly states a durable non-sensitive self fact/preference/opinion/interest/goal, ")
-                .append("you may propose a concise memory update using a stable semantic key. Forget only on an explicit request. ");
+                .append("you may propose a concise memory update using a stable semantic key when the schema permits it. ")
+                .append("Forget only on an explicit request. ");
         if (request.canWriteSharedMemory()) {
             instruction.append("A shared-memory proposal is allowed only for an explicit server fact and remains validator-gated. ");
         } else {
             instruction.append("Do not propose shared memory for this requester. ");
         }
         instruction.append("Propose a physical NPC action only when the player's current message explicitly requests one of the ")
-                .append("available physical actions; otherwise return no action proposal. ")
+                .append("available physical actions and the schema permits it; otherwise return no action proposal. ")
                 .append(request.settings().clarifyOnlyWhenRequired()
                         ? "Clarify only when required to answer safely/reliably."
                         : "One short clarification is allowed when it materially improves the answer.");
