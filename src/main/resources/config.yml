@@ -2,7 +2,7 @@ openai:
   api_key: ""
   model: "gpt-5.6-luna"
   # Default cap for direct/proactive fallback chat; assistant profiles use their own limits below.
-  max_output_tokens: 200
+  max_output_tokens: 240
   # Valid values: none, low, medium, high, xhigh, max.
   reasoning_effort: "low"
   # Player chat is not retained by the API provider.
@@ -30,14 +30,14 @@ openai:
         minimum_margin: 0.025
     context:
       # Hard ceilings, not targets. ContextCompiler selects only useful sources and can use more space when needed.
-      max_input_tokens_fast: 3000
-      max_input_tokens_grounded: 9000
-      max_input_tokens_deliberate: 18000
+      max_input_tokens_fast: 4000
+      max_input_tokens_grounded: 12000
+      max_input_tokens_deliberate: 24000
     retrieval:
       # Hybrid retrieval fuses lexical/BM25 precision with learned semantic recall and diversity suppression.
       hybrid_enabled: true
-      max_chunks: 10
-      max_evidence_characters: 24000
+      max_chunks: 12
+      max_evidence_characters: 32000
       query_cache_seconds: 300
       exclude_expired: true
       semantic_embeddings:
@@ -59,15 +59,15 @@ openai:
         model: "gpt-5.6-luna"
         reasoning_effort: "low"
         # FAST can still use structured JSON for memory-writing turns; leave enough room for the envelope.
-        max_output_tokens: 220
+        max_output_tokens: 260
       grounded:
         model: "gpt-5.6-terra"
         reasoning_effort: "medium"
-        max_output_tokens: 360
+        max_output_tokens: 480
       deliberate:
         model: "gpt-5.6-sol"
         reasoning_effort: "high"
-        max_output_tokens: 640
+        max_output_tokens: 800
     tools:
       # Read-only capability ceiling. Player-helpful state is allowed; secrets and infrastructure internals are not.
       read_only: true
@@ -78,14 +78,14 @@ openai:
       minimum_confidence: "medium"
     delivery:
       max_lines_fast: 1
-      max_lines_grounded: 3
-      max_lines_deliberate: 4
-      max_line_characters: 240
+      max_lines_grounded: 4
+      max_lines_deliberate: 5
+      max_line_characters: 280
     memory:
       enabled: true
       max_shared_facts: 1024
       max_player_memories: 256
-      max_context_characters: 8000
+      max_context_characters: 10000
       # Only trusted staff may turn player statements into network-wide learned facts.
       shared_write_permission: "ailex.admin"
       retrieval:
@@ -197,7 +197,7 @@ openai:
       message: "Je hebt de AI-limiet bereikt. Probeer het over {remaining_seconds} seconden opnieuw."
   knowledge:
     enabled: true
-    max_characters: 24000
+    max_characters: 32000
     # Reviewed knowledge articles are indexed locally. Never put secrets, staff notes, reports, API keys,
     # IP addresses, sanctions or personal data here because retrieved evidence can be sent to the model.
     external:
@@ -208,30 +208,32 @@ openai:
     prompt: |-
       Gebruik de gereviewde bestanden in knowledge/ als bron voor HauntedMC-specifieke feiten.
       Geef live Paper-state voor actuele toestand voorrang en verzin nooit ontbrekende commands, prijzen,
-      rewards, warps, ranks, resetdatums of beschikbaarheid. Bij onvoldoende bewijs: verifieer of onthoud je.
+      rewards, warps, ranks, resetdatums, Discord-kanalen of beschikbaarheid. Kopieer server-identifiers exact uit bewijs;
+      vertaal of lokaliseer kanaalnamen, commands, URLs, ranks, roles, warps of menu-namen nooit.
+      Bij onvoldoende bewijs: verifieer of onthoud je.
   chat_context:
     enabled: true
     # Ambient/raw chat is short-lived context only. Durable knowledge belongs in typed semantic/episodic memory.
     persist_to_disk: false
-    max_message_characters: 720
-    max_context_characters: 14000
+    max_message_characters: 900
+    max_context_characters: 18000
     include_timestamps: true
     timestamp_format: "HH:mm:ss"
     general_chat:
       enabled: true
       max_messages: 160
       max_age_seconds: 3600
-      max_context_characters: 3000
+      max_context_characters: 4000
     conversation:
       enabled: true
       max_messages: 80
       max_age_seconds: 21600
-      max_context_characters: 6000
+      max_context_characters: 8000
     bot_memory:
       enabled: true
       max_messages: 100
       max_age_seconds: 21600
-      max_context_characters: 4000
+      max_context_characters: 5000
 npc:
   enabled: true
   defaults:
