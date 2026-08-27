@@ -146,7 +146,7 @@ public final class AssistantChatController implements AutoCloseable {
         NpcManager npcManager = plugin.getNpcManager();
         if (npcManager != null) {
             for (NPC npc : npcManager.getNPCRegistry().values()) {
-                if (npc.isChatEnabled() && npc.isSpawned() && AssistantMentionMatcher.isMentioned(message, npc.getName())) {
+                if (chatAvailable(npc) && AssistantMentionMatcher.isMentioned(message, npc.getName())) {
                     return AssistantChatTarget.fromNpc(npc);
                 }
             }
@@ -176,7 +176,15 @@ public final class AssistantChatController implements AutoCloseable {
             return null;
         }
         NPC npc = npcManager.getNPCRegistry().get(active.npcId());
-        return npc != null && npc.isChatEnabled() && npc.isSpawned() ? AssistantChatTarget.fromNpc(npc) : null;
+        return chatAvailable(npc) ? AssistantChatTarget.fromNpc(npc) : null;
+    }
+
+    /**
+     * Conversational availability is intentionally independent from Citizens entity spawn state. A chunk unload or
+     * failed physical respawn may remove embodiment, but must never make an otherwise registered chat assistant silent.
+     */
+    static boolean chatAvailable(NPC npc) {
+        return npc != null && npc.isChatEnabled();
     }
 
     private void submitRequest(
@@ -449,8 +457,7 @@ public final class AssistantChatController implements AutoCloseable {
             return null;
         }
         return npcManager.getNPCRegistry().values().stream()
-                .filter(NPC::isChatEnabled)
-                .filter(NPC::isSpawned)
+                .filter(AssistantChatController::chatAvailable)
                 .findFirst()
                 .map(AssistantChatTarget::fromNpc)
                 .orElse(null);
