@@ -1,6 +1,7 @@
 README.md
 entities.tsv
 server-overview.md
+ailex-capabilities.md
 current-server-state.md
 staff-and-live-status.md
 discord.md
