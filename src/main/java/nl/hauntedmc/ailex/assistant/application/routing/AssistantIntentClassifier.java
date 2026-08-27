@@ -58,7 +58,7 @@ public final class AssistantIntentClassifier {
             "diamonds", "ore", "erts"
     );
     private static final Set<String> MEMORY_WORDS = Set.of(
-            "onthoud", "onthouden", "herinner", "herinneren", "remember", "remembered", "weet", "wist", "vergeet",
+            "onthou", "onthoud", "onthouden", "herinner", "herinneren", "remember", "remembered", "weet", "wist", "vergeet",
             "forget"
     );
     private static final Set<String> EVENT_WORDS = Set.of(
@@ -147,7 +147,7 @@ public final class AssistantIntentClassifier {
         if (normalized.isBlank() || looksLikeQuestion(normalized) || isDirectMemoryRecall(normalized)) {
             return false;
         }
-        if (containsAnyPhrase(normalized, "onthoud ", "onthoud dat ", "onthouden dat ", "remember ", "remember that ")) {
+        if (containsAnyPhrase(normalized, "onthou ", "onthou dat ", "onthoud ", "onthoud dat ", "onthouden dat ", "remember ", "remember that ")) {
             return true;
         }
         return containsAnyPhrase(normalized,

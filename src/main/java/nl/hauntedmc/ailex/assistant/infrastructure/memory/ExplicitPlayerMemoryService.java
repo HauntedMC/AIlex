@@ -35,6 +35,10 @@ public final class ExplicitPlayerMemoryService {
                     + "(\\d{4})\\b",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
     );
+    private static final Pattern PLAYS_SINCE_REVERSED = Pattern.compile(
+            "ik\\s+(?:al\\s+)?sinds\\s+(\\d{4}).{0,48}\\bspeel\\b",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
+    );
     private static final Pattern HAIR = Pattern.compile(
             "(?:ik\\s+heb\\s+(bruin|blond|zwart|rood)\\s+haar|i\\s+have\\s+(brown|blonde?|black|red)\\s+hair)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
@@ -53,7 +57,7 @@ public final class ExplicitPlayerMemoryService {
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
     );
     private static final Pattern REMEMBER_PREFIX = Pattern.compile(
-            ".*?\\b(?:onthoud(?:en)?|remember)\\b(?:\\s+dat|\\s+that)?\\s+(.+)",
+            ".*?\\b(?:onthou(?:d|den)?|remember)\\b(?:\\s+dat|\\s+that)?\\s+(.+)",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
     );
     private static final Pattern FORGET_PREFIX = Pattern.compile(
@@ -76,6 +80,7 @@ public final class ExplicitPlayerMemoryService {
             return Result.none();
         }
         String clean = compact(message);
+        String extractionText = clean.replaceAll("(?i)\\bsidns\\b", "sinds");
         if (AssistantIntentClassifier.isMemoryForgetStatement(clean)) {
             return forget(playerId, playerName, clean);
         }
@@ -83,7 +88,7 @@ public final class ExplicitPlayerMemoryService {
             return Result.none();
         }
 
-        List<MemoryCandidate> candidates = extractWriteCandidates(clean);
+        List<MemoryCandidate> candidates = extractWriteCandidates(extractionText);
         String validatorMessage = validatorEquivalent(clean);
         int accepted = 0;
         for (MemoryCandidate candidate : candidates.stream().limit(3).toList()) {
@@ -135,6 +140,12 @@ public final class ExplicitPlayerMemoryService {
         Matcher playsSince = PLAYS_SINCE.matcher(message);
         if (playsSince.find()) {
             add(result, "fact", "plays_since", playsSince.group(1));
+            return List.copyOf(result);
+        }
+
+        Matcher reversedPlaySince = PLAYS_SINCE_REVERSED.matcher(message);
+        if (reversedPlaySince.find()) {
+            add(result, "fact", "plays_since", reversedPlaySince.group(1));
             return List.copyOf(result);
         }
 

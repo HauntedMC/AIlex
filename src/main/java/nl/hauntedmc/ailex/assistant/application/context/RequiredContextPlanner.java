@@ -71,7 +71,7 @@ public final class RequiredContextPlanner {
         return containsAny(text,
                 "mijn ", "mij ", "mezelf", "voor mij", "over mij", "wat zal ik", "wat moet ik", "wat raad je",
                 "advies", "aanraden", "aanbevel", "suggest", "recommend", "for me", "about me", "my ", "me ",
-                "what should i", "what do you suggest", "what would you recommend", "remember", "onthoud",
+                "what should i", "what do you suggest", "what would you recommend", "remember", "onthou", "onthoud",
                 "onthouden", "vergeet", "forget", "vorige keer", "last time", "eerder", "previously", "mijn project",
                 "my project", "mijn doel", "my goal", "favoriet", "favorite", "favourite", "lievelings", "voorkeur",
                 "prefer", "ik hou van", "ik houd van", "i like", "i love", "ik ben fan", "i am a fan",
