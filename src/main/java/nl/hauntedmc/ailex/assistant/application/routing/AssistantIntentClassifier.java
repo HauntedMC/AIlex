@@ -95,6 +95,15 @@ public final class AssistantIntentClassifier {
         if (isDirectMemoryRecall(normalized)) {
             return new Analysis(AssistantIntent.MEMORY_RECALL, AssistantMode.GROUNDED, language);
         }
+
+        // A player declaring or explicitly changing durable information is not asking us to recall old memory and is not
+        // asking for current live state. This must run before the broad memory/live keyword rules below. In particular,
+        // sentences such as "mijn lievelings block is netherite block" contain both a first-person cue and "block", but
+        // they describe a preference rather than the block currently in front of the player.
+        if (isMemoryWriteStatement(normalized) || isMemoryForgetStatement(normalized)) {
+            return new Analysis(AssistantIntent.CONVERSATION, AssistantMode.FAST, language);
+        }
+
         if (context.active() && containsAny(normalized, MEMORY_WORDS)) {
             return new Analysis(AssistantIntent.MEMORY_RECALL, AssistantMode.GROUNDED, language);
         }
@@ -127,6 +136,55 @@ public final class AssistantIntentClassifier {
             return new Analysis(AssistantIntent.CONTEXT_FOLLOWUP, mode, language);
         }
         return new Analysis(AssistantIntent.CONVERSATION, AssistantMode.FAST, language);
+    }
+
+    /**
+     * Strong, low-risk signal that the current message is a durable self-declaration or explicit remember command.
+     * This is intentionally narrower than generic first-person language so "ik heb een vraag" never becomes memory.
+     */
+    public static boolean isMemoryWriteStatement(String message) {
+        String normalized = cleanForRouting(message);
+        if (normalized.isBlank() || looksLikeQuestion(normalized) || isDirectMemoryRecall(normalized)) {
+            return false;
+        }
+        if (containsAnyPhrase(normalized, "onthoud ", "onthoud dat ", "onthouden dat ", "remember ", "remember that ")) {
+            return true;
+        }
+        return containsAnyPhrase(normalized,
+                "mijn favoriete ", "mijn lievelings ", "mijn favoriet ", "mijn voorkeur ",
+                "my favorite ", "my favourite ", "my preference ", "i prefer ",
+                "ik hou van ", "ik houd van ", "ik ben fan van ", "i like ", "i love ", "i am a fan of ",
+                "ik ben geïnteresseerd in ", "ik ben geinteresseerd in ", "i am interested in ", "i'm interested in ",
+                "mijn doel ", "my goal ", "ik werk aan ", "i am working on ", "i'm working on ",
+                "ik spaar voor ", "i am saving for ", "i'm saving for ",
+                "ik speel sinds ", "ik speel hier sinds ", "ik speel al sinds ",
+                "i play since ", "i have played since ", "i've played since ",
+                "ik heb bruin haar", "ik heb blond haar", "ik heb zwart haar", "ik heb rood haar",
+                "i have brown hair", "i have blonde hair", "i have blond hair", "i have black hair", "i have red hair"
+        );
+    }
+
+    public static boolean isMemoryForgetStatement(String message) {
+        String normalized = cleanForRouting(message);
+        return containsAnyPhrase(normalized,
+                "vergeet ", "vergeet dat ", "niet meer onthouden", "forget ", "forget that ", "don't remember ",
+                "do not remember "
+        );
+    }
+
+    private static boolean looksLikeQuestion(String message) {
+        String normalized = cleanForRouting(message);
+        if (normalized.endsWith("?")) {
+            return true;
+        }
+        return containsAnyPhrase(normalized,
+                "wat is ", "wat zijn ", "wat weet ", "wat heb ", "wie ", "waar ", "wanneer ", "hoe ", "waarom ",
+                "what is ", "what are ", "what do ", "what did ", "who ", "where ", "when ", "how ", "why "
+        );
+    }
+
+    private static String cleanForRouting(String message) {
+        return message == null ? "" : message.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
     }
 
     private static boolean isServerFactQuestion(String message) {
