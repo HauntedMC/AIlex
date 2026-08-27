@@ -1,3 +1,5 @@
+config_revision: 2
+
 openai:
   api_key: ""
   model: "gpt-5.6-luna"
