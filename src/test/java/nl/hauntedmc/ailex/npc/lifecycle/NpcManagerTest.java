@@ -10,6 +10,7 @@ import net.citizensnpcs.api.npc.MetadataStore;
 import net.citizensnpcs.api.npc.NPCRegistry;
 
 import nl.hauntedmc.ailex.config.DataHandler;
+import nl.hauntedmc.ailex.util.LoggerUtils;
 
 import org.bukkit.Location;
 import org.junit.jupiter.api.Test;
@@ -96,7 +97,8 @@ class NpcManagerTest {
         when(unmanagedMetadata.get("ailex.internal-id", Integer.MIN_VALUE)).thenReturn(Integer.MIN_VALUE);
 
         try (MockedStatic<DataHandler> mockedDataHandler = org.mockito.Mockito.mockStatic(DataHandler.class);
-             MockedStatic<CitizensAPI> mockedCitizens = org.mockito.Mockito.mockStatic(CitizensAPI.class)) {
+             MockedStatic<CitizensAPI> mockedCitizens = org.mockito.Mockito.mockStatic(CitizensAPI.class);
+             MockedStatic<LoggerUtils> mockedLogger = org.mockito.Mockito.mockStatic(LoggerUtils.class)) {
             mockedDataHandler.when(DataHandler::loadNPCs).thenReturn(Map.of(42, npcData));
             mockedCitizens.when(CitizensAPI::getNPCRegistry).thenReturn(citizensRegistry);
 
@@ -106,6 +108,9 @@ class NpcManagerTest {
             verify(citizensRegistry, never()).deregister(externalNpc);
             verify(citizensRegistry, never()).deregister(unmanagedNpc);
             verify(citizensRegistry).saveToStore();
+            mockedLogger.verify(() -> LoggerUtils.logError(
+                    "Could not load NPC 42: class class was not found."
+            ));
         }
     }
 
