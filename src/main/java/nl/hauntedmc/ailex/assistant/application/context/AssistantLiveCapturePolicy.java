@@ -27,7 +27,7 @@ public final class AssistantLiveCapturePolicy {
         if (plan != null) {
             sources.addAll(plan.liveSources());
         }
-        if (!agentEnabled || mode == AssistantMode.HANDOFF || settings == null) {
+        if (!agentEnabled || mode == AssistantMode.FAST || mode == AssistantMode.HANDOFF || settings == null) {
             return Set.copyOf(sources);
         }
         if (settings.toolAllowed("requester")) {

@@ -1,6 +1,6 @@
 package nl.hauntedmc.ailex.assistant.action;
 
-import nl.hauntedmc.ailex.ai.action.move.FollowPlayerAction;
+import nl.hauntedmc.ailex.ai.action.Actionable;
 import nl.hauntedmc.ailex.npc.NPC;
 
 import org.bukkit.World;
@@ -24,7 +24,10 @@ class AssistantActionServiceTest {
     @Test
     void explicitFollowRequestCanQueueOnlyWhitelistedFollowAction() {
         JavaPlugin plugin = plugin();
-        AssistantActionService service = new AssistantActionService(plugin);
+        Actionable followAction = mock(Actionable.class);
+        AssistantActionService service = new AssistantActionService(
+                plugin, ignored -> followAction, ignored -> mock(Actionable.class)
+        );
         Player requester = mock(Player.class);
         Player npcEntity = mock(Player.class);
         World world = mock(World.class);
@@ -40,7 +43,7 @@ class AssistantActionServiceTest {
         );
 
         assertEquals(List.of(AssistantActionType.FOLLOW_REQUESTER), result.executed());
-        verify(npc).queueAction(any(FollowPlayerAction.class));
+        verify(npc).queueAction(followAction);
     }
 
     @Test

@@ -88,7 +88,7 @@ public final class AssistantEventMemoryService implements Listener {
             return;
         }
         List<MemoryRecord> relationship = memory.search(
-                playerId, npcId, "interaction relationship", Set.of(MemoryKind.RELATIONSHIP), 16
+                playerId, npcId, "interaction count", Set.of(MemoryKind.RELATIONSHIP), 16
         ).stream().filter(record -> record.scope() == MemoryScope.PLAYER_NPC).toList();
         int previous = relationship.stream()
                 .filter(record -> record.key().equals("interaction_count"))

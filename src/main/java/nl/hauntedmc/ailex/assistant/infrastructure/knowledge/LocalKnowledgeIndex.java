@@ -137,6 +137,9 @@ public final class LocalKnowledgeIndex {
                     .findFirst()
                     .orElse(0.0D);
             double semantic = semanticScores.getOrDefault(chunk.id(), 0.0D);
+            if (lexical <= 0.0D && semantic <= 0.0D) {
+                continue;
+            }
             double rrf = reciprocalRank(lexicalRanks.get(chunk.id())) + reciprocalRank(semanticRanks.get(chunk.id()));
             double combined = lexical + semantic * SEMANTIC_WEIGHT + rrf * RRF_WEIGHT
                     + freshnessWeight(chunk) * 0.30D;

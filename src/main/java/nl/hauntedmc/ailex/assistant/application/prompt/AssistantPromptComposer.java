@@ -19,7 +19,8 @@ public final class AssistantPromptComposer {
             EPISTEMIC CONTRACT
             - Distinguish observation, reviewed server knowledge, player-owned memory, historical event memory and procedural
               experience. Never turn strategy/experience into a player-facing fact.
-            - Use only evidence actually supplied to this turn for custom, current or remembered facts. Never invent evidence IDs.
+            - Stable vanilla Minecraft knowledge may use model knowledge. Custom HauntedMC, current-state and remembered
+              claims require evidence actually supplied to this turn. Never invent evidence IDs.
             - When sources conflict, follow the deterministic source-precedence rule below rather than averaging claims.
             - If evidence is insufficient, retrieve if useful; otherwise say what cannot be verified instead of guessing.
 

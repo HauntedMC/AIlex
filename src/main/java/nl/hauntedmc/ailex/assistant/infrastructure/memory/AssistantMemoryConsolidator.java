@@ -128,11 +128,16 @@ public final class AssistantMemoryConsolidator {
     }
 
     private String primaryTopic(MemoryRecord record) {
-        for (String tag : record.tags()) {
-            if (!Set.of("event", "session", "join", "quit", "world").contains(tag)
-                    && !tag.startsWith("world:")) {
-                return safeTopic(tag);
-            }
+        String specificTag = record.tags().stream()
+                .filter(tag -> !Set.of("event", "session", "join", "quit", "world", "project").contains(tag))
+                .filter(tag -> !tag.startsWith("world:"))
+                .map(this::safeTopic)
+                .filter(tag -> !tag.isBlank())
+                .sorted()
+                .findFirst()
+                .orElse("");
+        if (!specificTag.isBlank()) {
+            return specificTag;
         }
         String key = record.key();
         int separator = key.indexOf('.');

@@ -1,6 +1,7 @@
 package nl.hauntedmc.ailex.assistant.action;
 
 import nl.hauntedmc.ailex.ai.action.ActionContext;
+import nl.hauntedmc.ailex.ai.action.Actionable;
 import nl.hauntedmc.ailex.ai.action.move.FollowPlayerAction;
 import nl.hauntedmc.ailex.ai.action.move.MoveHereAction;
 import nl.hauntedmc.ailex.npc.NPC;
@@ -13,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Deterministic plan→validate→execute boundary for the small embodied capability surface. The model can only propose;
@@ -27,9 +29,22 @@ public final class AssistantActionService {
     );
 
     private final JavaPlugin plugin;
+    private final Function<ActionContext, Actionable> followActionFactory;
+    private final Function<ActionContext, Actionable> moveHereActionFactory;
 
     public AssistantActionService(JavaPlugin plugin) {
+        this(plugin, FollowPlayerAction::new, MoveHereAction::new);
+    }
+
+    /** Test seam that keeps action-policy tests independent from the legacy global movement configuration. */
+    AssistantActionService(
+            JavaPlugin plugin,
+            Function<ActionContext, Actionable> followActionFactory,
+            Function<ActionContext, Actionable> moveHereActionFactory
+    ) {
         this.plugin = plugin;
+        this.followActionFactory = followActionFactory;
+        this.moveHereActionFactory = moveHereActionFactory;
     }
 
     public ActionResult validateAndExecute(
@@ -108,7 +123,11 @@ public final class AssistantActionService {
                         .setTargetEntity(requester)
                         .setPriority(10)
                         .build();
-                npc.queueAction(new FollowPlayerAction(context));
+                Actionable action = followActionFactory.apply(context);
+                if (action == null) {
+                    return false;
+                }
+                npc.queueAction(action);
                 return true;
             }
             case COME_HERE -> {
@@ -120,7 +139,11 @@ public final class AssistantActionService {
                         .setTargetLocation(requester.getLocation().clone())
                         .setPriority(10)
                         .build();
-                npc.queueAction(new MoveHereAction(context));
+                Actionable action = moveHereActionFactory.apply(context);
+                if (action == null) {
+                    return false;
+                }
+                npc.queueAction(action);
                 return true;
             }
             default -> {
