@@ -228,9 +228,13 @@ class AssistantIntentClassifierTest {
         assertEquals(24_000, settings.maxInputTokens(AssistantMode.DELIBERATE));
         assertEquals(12, settings.maxChunks());
         assertEquals(32_000, settings.maxEvidenceCharacters());
-        assertEquals(240, settings.profileFor(AssistantMode.FAST).maxOutputTokens());
-        assertEquals(480, settings.profileFor(AssistantMode.GROUNDED).maxOutputTokens());
-        assertEquals(800, settings.profileFor(AssistantMode.DELIBERATE).maxOutputTokens());
+        assertEquals("gpt-5.6-terra", settings.profileFor(AssistantMode.FAST).model());
+        assertEquals(400, settings.profileFor(AssistantMode.FAST).maxOutputTokens());
+        assertEquals(640, settings.profileFor(AssistantMode.GROUNDED).maxOutputTokens());
+        assertEquals(1_000, settings.profileFor(AssistantMode.DELIBERATE).maxOutputTokens());
+        assertEquals(3, settings.maxLines(AssistantMode.FAST));
+        assertEquals(5, settings.maxLines(AssistantMode.GROUNDED));
+        assertEquals(8, settings.maxLines(AssistantMode.DELIBERATE));
     }
 
     @Test

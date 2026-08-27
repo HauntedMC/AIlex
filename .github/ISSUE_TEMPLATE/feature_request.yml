@@ -55,7 +55,7 @@ body:
       options:
         - label: May require permission/config changes
           required: false
-        - label: May affect backward compatibility
+        - label: May affect integrations or existing behavior
           required: false
         - label: May affect runtime performance
           required: false

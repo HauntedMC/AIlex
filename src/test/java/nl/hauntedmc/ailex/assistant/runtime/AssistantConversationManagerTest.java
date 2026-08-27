@@ -26,7 +26,8 @@ class AssistantConversationManagerTest {
         assertTrue(pending.active());
         assertTrue(pending.pendingAnswer());
         assertEquals("wat gaat er mis haunty", pending.previousUserMessage());
-        assertTrue(pending.promptContext().contains("pending_answer=true"));
+        assertTrue(pending.promptContext().contains("user(remymine): wat gaat er mis haunty"));
+        assertFalse(pending.promptContext().contains("pending_answer="));
 
         clock.addAndGet(500L);
         manager.recordAssistant(player, 7, "Haunty", "De chatgame lijkt vastgelopen.", AssistantIntent.EVENT_RECALL);

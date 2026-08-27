@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
@@ -31,7 +30,7 @@ import java.util.stream.Stream;
 /**
  * Local hybrid knowledge index. Exact commands and server terminology remain lexical-first, while learned embeddings
  * supply real semantic/paraphrase recall. Ranking fuses BM25, exact/title/alias signals, multilingual concept expansion,
- * neural cosine similarity and reciprocal-rank evidence before redundancy suppression.
+ * neural cosine similarity and reciprocal-rank evidence before adaptive second-stage diversity selection.
  */
 public final class LocalKnowledgeIndex {
 
@@ -51,6 +50,7 @@ public final class LocalKnowledgeIndex {
     private final JavaPlugin plugin;
     private final KnowledgeDocumentParser documentParser = new KnowledgeDocumentParser();
     private final boolean managedEmbeddingProvider;
+    private final CanonicalIdentifierRegistry canonicalIdentifiers;
     private volatile SemanticEmbeddingProvider embeddingProvider;
     private final AtomicBoolean semanticWarmupRunning = new AtomicBoolean();
     private volatile List<KnowledgeChunk> chunks = List.of();
@@ -73,12 +73,15 @@ public final class LocalKnowledgeIndex {
     ) {
         this.plugin = plugin;
         this.managedEmbeddingProvider = managedEmbeddingProvider;
+        this.canonicalIdentifiers = new CanonicalIdentifierRegistry(plugin);
         this.embeddingProvider = managedEmbeddingProvider ? new OpenAiEmbeddingProvider(plugin) : embeddingProvider;
         reload();
     }
 
-    /** Rebuilds the immutable in-memory index after configuration or knowledge changes. */
+    /** Rebuilds generated canonical knowledge and the immutable in-memory index after configuration/knowledge changes. */
     public void reload() {
+        canonicalIdentifiers.reload();
+        canonicalIdentifiers.writeKnowledgeSnapshot();
         List<KnowledgeChunk> loaded = new ArrayList<>();
         FileConfiguration config = plugin.getConfig();
         if (config != null && config.getBoolean("openai.knowledge.enabled", true)) {
@@ -110,15 +113,20 @@ public final class LocalKnowledgeIndex {
     /** Query-focused retrieval for concrete server/gameplay questions. */
     public List<KnowledgeChunk> search(String query, AssistantSettings settings) {
         String normalizedQuery = query == null ? "" : query.replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
-        String cacheKey = "search|" + normalizedQuery + '|' + settings.maxChunks() + '|'
+        String cacheKey = "search-v3|" + normalizedQuery + '|' + settings.maxChunks() + '|'
                 + settings.maxEvidenceCharacters() + '|' + settings.excludeExpired() + '|' + settings.hybridRetrieval();
         CachedSearch cached = searchCache.get(cacheKey);
         if (cached != null && cached.isFresh(settings.queryCacheSeconds())) {
             return cached.chunks();
         }
+        List<KnowledgeChunk> canonicalEvidence = canonicalIdentifiers.evidenceFor(normalizedQuery);
         List<KnowledgeChunk> localChunks = chunks;
         if (localChunks.isEmpty()) {
-            return List.of();
+            List<KnowledgeChunk> direct = limitEvidence(
+                    canonicalEvidence, settings.maxChunks(), settings.maxEvidenceCharacters()
+            );
+            searchCache.put(cacheKey, new CachedSearch(direct, System.currentTimeMillis()));
+            return direct;
         }
 
         QueryFeatures features = queryFeatures(normalizedQuery);
@@ -148,9 +156,23 @@ public final class LocalKnowledgeIndex {
             }
         }
         fused.sort(Comparator.comparingDouble(ScoredChunk::score).reversed());
-        List<KnowledgeChunk> selected = selectDiverse(fused, settings.maxChunks(), settings.maxEvidenceCharacters());
-        searchCache.put(cacheKey, new CachedSearch(List.copyOf(selected), System.currentTimeMillis()));
-        return selected;
+        double topScore = fused.isEmpty() ? 0.0D : fused.getFirst().score();
+        double secondScore = fused.size() < 2 ? 0.0D : fused.get(1).score();
+        AdaptiveEvidencePolicy.Budget selection = AdaptiveEvidencePolicy.select(
+                normalizedQuery,
+                settings.maxChunks(),
+                settings.maxEvidenceCharacters(),
+                topScore,
+                secondScore
+        );
+        List<KnowledgeChunk> selected = selectDiverse(
+                fused, selection.maxChunks(), selection.maxCharacters()
+        );
+        List<KnowledgeChunk> merged = mergeCanonicalEvidence(
+                canonicalEvidence, selected, selection.maxChunks(), selection.maxCharacters()
+        );
+        searchCache.put(cacheKey, new CachedSearch(merged, System.currentTimeMillis()));
+        return merged;
     }
 
     /** Source-compatible discovery entry point used by the assistant orchestration. */
@@ -213,8 +235,17 @@ public final class LocalKnowledgeIndex {
         if (provider == null || query.isBlank() || !provider.available()) {
             return Map.of();
         }
-        ensureSemanticVectors(candidates, provider);
-        warmSemanticIndexAsync();
+        if (managedEmbeddingProvider) {
+            // Production corpus vectors warm in the background. Never make the first player synchronously embed the
+            // entire corpus inside the assistant deadline; lexical retrieval remains available while warmup is cold.
+            warmSemanticIndexAsync();
+            if (semanticVectors.isEmpty()) {
+                return Map.of();
+            }
+        } else {
+            // Deterministic/injected providers used by tests can populate synchronously without external latency.
+            ensureSemanticVectors(candidates, provider);
+        }
         List<double[]> queryVector = provider.embed(List.of(query));
         if (queryVector.size() != 1 || queryVector.getFirst().length == 0) {
             return Map.of();
@@ -234,7 +265,6 @@ public final class LocalKnowledgeIndex {
         return Map.copyOf(scores);
     }
 
-    /** Ensures a cold query has document vectors instead of silently degrading a semantic-only request. */
     private void ensureSemanticVectors(List<KnowledgeChunk> candidates, SemanticEmbeddingProvider provider) {
         List<KnowledgeChunk> missing = candidates.stream()
                 .filter(chunk -> !semanticVectors.containsKey(chunk.id()))
@@ -261,7 +291,7 @@ public final class LocalKnowledgeIndex {
             return;
         }
         List<KnowledgeChunk> snapshot = chunks;
-        CompletableFuture.runAsync(() -> {
+        Thread.ofVirtual().name("AIlex-Knowledge-Embedding-Warmup").start(() -> {
             try {
                 for (int offset = 0; offset < snapshot.size(); offset += 48) {
                     List<KnowledgeChunk> batch = snapshot.subList(offset, Math.min(snapshot.size(), offset + 48));
@@ -276,7 +306,10 @@ public final class LocalKnowledgeIndex {
                         return;
                     }
                     for (int index = 0; index < missing.size(); index++) {
-                        semanticVectors.put(missing.get(index).id(), vectors.get(index));
+                        double[] vector = vectors.get(index);
+                        if (vector != null && vector.length > 0) {
+                            semanticVectors.put(missing.get(index).id(), vector);
+                        }
                     }
                 }
             } catch (RuntimeException exception) {
@@ -322,7 +355,8 @@ public final class LocalKnowledgeIndex {
         for (ScoredChunk scored : ranked) {
             KnowledgeChunk chunk = scored.chunk();
             String fingerprint = normalizeForDedup(chunk.title() + ' ' + chunk.text());
-            boolean duplicate = normalizedFingerprints.stream().anyMatch(existing -> similarity(existing, fingerprint) > 0.82D);
+            boolean duplicate = normalizedFingerprints.stream()
+                    .anyMatch(existing -> similarity(existing, fingerprint) > 0.82D);
             if (duplicate) {
                 continue;
             }
@@ -337,6 +371,50 @@ public final class LocalKnowledgeIndex {
             }
         }
         return List.copyOf(selected);
+    }
+
+    private List<KnowledgeChunk> mergeCanonicalEvidence(
+            List<KnowledgeChunk> canonical,
+            List<KnowledgeChunk> retrieved,
+            int maxChunks,
+            int maxCharacters
+    ) {
+        List<KnowledgeChunk> combined = new ArrayList<>();
+        Set<String> ids = new HashSet<>();
+        if (canonical != null) {
+            for (KnowledgeChunk chunk : canonical) {
+                if (chunk != null && ids.add(chunk.id())) {
+                    combined.add(chunk);
+                }
+            }
+        }
+        if (retrieved != null) {
+            for (KnowledgeChunk chunk : retrieved) {
+                if (chunk != null && ids.add(chunk.id())) {
+                    combined.add(chunk);
+                }
+            }
+        }
+        return limitEvidence(combined, maxChunks, maxCharacters);
+    }
+
+    private List<KnowledgeChunk> limitEvidence(List<KnowledgeChunk> candidates, int maxChunks, int maxCharacters) {
+        List<KnowledgeChunk> result = new ArrayList<>();
+        int characters = 0;
+        for (KnowledgeChunk chunk : candidates) {
+            if (chunk == null) {
+                continue;
+            }
+            if (!result.isEmpty() && characters + chunk.text().length() > maxCharacters) {
+                continue;
+            }
+            result.add(chunk);
+            characters += chunk.text().length();
+            if (result.size() >= maxChunks) {
+                break;
+            }
+        }
+        return List.copyOf(result);
     }
 
     private double score(KnowledgeChunk chunk, QueryFeatures query) {
@@ -502,11 +580,14 @@ public final class LocalKnowledgeIndex {
             return List.of();
         }
         int maxFiles = Math.clamp(config.getInt("openai.knowledge.external.max_files", 64), 1, 256);
-        int maxCharacters = Math.clamp(config.getInt("openai.knowledge.external.max_characters", 120_000), 1_000, 1_000_000);
+        int maxCharacters = Math.clamp(config.getInt(
+                "openai.knowledge.external.max_characters", 120_000
+        ), 1_000, 1_000_000);
         List<Path> files;
         try (Stream<Path> stream = Files.list(directory.toPath())) {
             files = stream.filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".md"))
+                    .filter(path -> !path.getFileName().toString().equalsIgnoreCase("README.md"))
                     .sorted()
                     .limit(maxFiles)
                     .toList();
@@ -551,13 +632,19 @@ public final class LocalKnowledgeIndex {
                 continue;
             }
             int separator = trimmed.indexOf(':');
-            result.put(trimmed.substring(1, separator).trim().toLowerCase(Locale.ROOT), trimmed.substring(separator + 1).trim());
+            result.put(
+                    trimmed.substring(1, separator).trim().toLowerCase(Locale.ROOT),
+                    trimmed.substring(separator + 1).trim()
+            );
         }
         return result;
     }
 
     private String stripMetadata(String body) {
-        return body.lines().filter(line -> !line.trim().startsWith("@")).collect(java.util.stream.Collectors.joining("\n")).trim();
+        return body.lines()
+                .filter(line -> !line.trim().startsWith("@"))
+                .collect(java.util.stream.Collectors.joining("\n"))
+                .trim();
     }
 
     private List<String> aliases(String raw) {
@@ -583,7 +670,9 @@ public final class LocalKnowledgeIndex {
     }
 
     private String safeId(String value) {
-        String id = value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9._-]+", "-").replaceAll("-+", "-");
+        String id = value.toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9._-]+", "-")
+                .replaceAll("-+", "-");
         return id.length() <= 96 ? id : id.substring(0, 96);
     }
 

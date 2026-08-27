@@ -56,7 +56,15 @@ class AssistantReplyTest {
     }
 
     @Test
-    void accidentalLegacyJsonEnvelopeMustNeverLeakIntoMinecraftChat() {
+    void plainChatPreservesUsefulBoundedLines() {
+        AssistantReply reply = AssistantReply.fromPlainText("Eerste regel\n\nTweede regel\nDerde regel");
+
+        assertTrue(reply.valid());
+        assertEquals(List.of("Eerste regel", "Tweede regel", "Derde regel"), reply.lines());
+    }
+
+    @Test
+    void accidentalJsonEnvelopeMustNeverLeakIntoMinecraftChat() {
         AssistantReply reply = AssistantReply.fromPlainText(
                 "{\"response\":\"Ik kan dat niet verifiëren.\",\"evidence\":[]}"
         );
@@ -68,7 +76,7 @@ class AssistantReplyTest {
     }
 
     @Test
-    void malformedLegacyEnvelopeMatchingProductionScreenshotMustBeRecovered() {
+    void malformedProtocolEnvelopeMustBeRecovered() {
         AssistantReply reply = AssistantReply.fromPlainText(
                 "\"response\":\"Ik kan niet verifiëren of de nieuwe Haunty-versie live is.\",\"evidence\":[]"
         );
@@ -80,13 +88,13 @@ class AssistantReplyTest {
     }
 
     @Test
-    void accidentalCurrentStructuredEnvelopeOnPlainPathIsUnwrapped() {
+    void accidentalStructuredEnvelopeOnPlainPathIsUnwrapped() {
         AssistantReply reply = AssistantReply.fromPlainText(
                 "{\"lines\":[\"Hoi!\",\"Waarmee kan ik helpen?\"],\"evidence_ids\":[]}"
         );
 
         assertTrue(reply.valid());
-        assertEquals(List.of("Hoi! Waarmee kan ik helpen?"), reply.lines());
+        assertEquals(List.of("Hoi!", "Waarmee kan ik helpen?"), reply.lines());
     }
 
     @Test

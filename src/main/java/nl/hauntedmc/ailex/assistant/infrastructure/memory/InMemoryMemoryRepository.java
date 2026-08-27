@@ -37,15 +37,6 @@ final class InMemoryMemoryRepository implements MemoryRepository {
     }
 
     @Override
-    public List<MemoryRecord> loadChangedSince(long sinceEpochMillis, int limit) {
-        return records.values().stream()
-                .filter(record -> record.lastConfirmed() > sinceEpochMillis || record.expiresAt() > sinceEpochMillis)
-                .sorted(Comparator.comparingLong(this::changeClock))
-                .limit(Math.clamp(limit, 1, 2_048))
-                .toList();
-    }
-
-    @Override
     public void upsert(MemoryRecord record) {
         records.put(record.id(), record);
     }
@@ -63,10 +54,6 @@ final class InMemoryMemoryRepository implements MemoryRepository {
     @Override
     public void close() {
         records.clear();
-    }
-
-    private long changeClock(MemoryRecord record) {
-        return Math.max(record.lastConfirmed(), record.expiresAt());
     }
 
     private String clean(String value) {

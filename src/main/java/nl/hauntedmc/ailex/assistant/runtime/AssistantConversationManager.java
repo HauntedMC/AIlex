@@ -9,20 +9,35 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongSupplier;
+import java.util.regex.Pattern;
 
 /**
  * Tracks active player-to-assistant dialogue independently from ambient server chat.
- * Recent turns are retained as a bounded working-memory window so follow-ups can resolve references and corrections.
+ *
+ * <p>Recent turns stay verbatim while older turns are folded into a bounded mid-term digest and a tiny topic state.
+ * This gives AIlex short/mid-term conversational continuity without turning raw dialogue into durable long-term memory.</p>
  */
 public class AssistantConversationManager {
 
-    private static final int MAX_TURNS = 24;
-    private static final int MAX_PROMPT_CHARACTERS = 6_000;
+    private static final int MAX_TURNS = 28;
+    private static final int MAX_PROMPT_CHARACTERS = 8_000;
+    private static final int MAX_RECENT_TURN_CHARACTERS = 5_600;
+    private static final int MAX_MIDTERM_CHARACTERS = 1_800;
+    private static final int MAX_TOPIC_TERMS = 10;
     private static final long CLEANUP_INTERVAL_MILLIS = 60_000L;
+    private static final Pattern TOKEN_SEPARATOR = Pattern.compile("[^\\p{L}\\p{N}_/-]+");
+    private static final Set<String> TOPIC_STOP_WORDS = Set.of(
+            "ailex", "als", "and", "ben", "bij", "dan", "dat", "de", "deze", "die", "dit", "een", "en",
+            "for", "haunted", "hauntedmc", "haunty", "heb", "het", "hoe", "i", "ik", "in", "is", "it", "je",
+            "jij", "kan", "maar", "me", "met", "mijn", "naar", "niet", "of", "om", "op", "the", "to", "van",
+            "wat", "we", "wel", "why", "with", "you", "your"
+    );
+
     private final Map<SessionKey, Session> sessions = new ConcurrentHashMap<>();
     private final LongSupplier clock;
     private final AtomicLong lastCleanupMillis = new AtomicLong(Long.MIN_VALUE);
@@ -53,8 +68,9 @@ public class AssistantConversationManager {
             session.lastActivityMillis = clock.getAsLong();
             session.pendingAnswer = true;
             session.previousUserMessage = compact(message, 720);
+            updateTopics(session, message);
             session.turns.addLast(new Turn("user", compact(speaker, 48), compact(message, 900)));
-            trim(session.turns);
+            trim(session);
         }
     }
 
@@ -66,7 +82,7 @@ public class AssistantConversationManager {
             session.previousAssistantMessage = compact(message, 720);
             session.previousIntent = intent;
             session.turns.addLast(new Turn("assistant", compact(speaker, 48), compact(message, 900)));
-            trim(session.turns);
+            trim(session);
         }
     }
 
@@ -177,10 +193,12 @@ public class AssistantConversationManager {
 
     private Snapshot snapshot(Session session) {
         StringBuilder context = new StringBuilder();
-        if (session.previousIntent != null) {
-            context.append("previous_intent=").append(session.previousIntent.name().toLowerCase(Locale.ROOT)).append('\n');
+        if (!session.topics.isEmpty()) {
+            context.append("session_topics=").append(String.join(",", session.topics)).append('\n');
         }
-        context.append("pending_answer=").append(session.pendingAnswer).append('\n');
+        if (!session.midtermDigest.isBlank()) {
+            context.append("midterm_dialogue=").append(session.midtermDigest).append('\n');
+        }
         for (Turn turn : session.turns) {
             context.append(turn.role()).append('(').append(turn.speaker()).append("): ")
                     .append(turn.message()).append('\n');
@@ -203,9 +221,39 @@ public class AssistantConversationManager {
         return clock.getAsLong() - session.lastActivityMillis > Math.max(1L, timeoutMillis);
     }
 
-    private void trim(Deque<Turn> turns) {
-        while (turns.size() > MAX_TURNS) {
-            turns.removeFirst();
+    private void trim(Session session) {
+        while (session.turns.size() > MAX_TURNS || recentTurnCharacters(session.turns) > MAX_RECENT_TURN_CHARACTERS) {
+            rememberMidterm(session, session.turns.removeFirst());
+        }
+    }
+
+    private int recentTurnCharacters(Deque<Turn> turns) {
+        int characters = 0;
+        for (Turn turn : turns) {
+            characters += turn.role().length() + turn.speaker().length() + turn.message().length() + 5;
+        }
+        return characters;
+    }
+
+    private void rememberMidterm(Session session, Turn turn) {
+        String fragment = turn.role() + ": " + compact(turn.message(), 180);
+        String combined = session.midtermDigest.isBlank() ? fragment : session.midtermDigest + " | " + fragment;
+        session.midtermDigest = combined.length() <= MAX_MIDTERM_CHARACTERS
+                ? combined
+                : "…" + combined.substring(combined.length() - MAX_MIDTERM_CHARACTERS + 1);
+    }
+
+    private void updateTopics(Session session, String message) {
+        for (String token : TOKEN_SEPARATOR.split(message == null ? "" : message.toLowerCase(Locale.ROOT))) {
+            String topic = token.trim();
+            if (topic.length() < 3 || TOPIC_STOP_WORDS.contains(topic) || topic.matches("\\d+")) {
+                continue;
+            }
+            session.topics.remove(topic);
+            session.topics.addLast(topic);
+            while (session.topics.size() > MAX_TOPIC_TERMS) {
+                session.topics.removeFirst();
+            }
         }
     }
 
@@ -246,15 +294,17 @@ public class AssistantConversationManager {
 
     private static final class Session {
         private final Deque<Turn> turns = new ArrayDeque<>();
+        private final Deque<String> topics = new ArrayDeque<>();
         private long lastActivityMillis;
         private boolean pendingAnswer;
         private AssistantIntent previousIntent;
         private String previousUserMessage = "";
         private String previousAssistantMessage = "";
+        private String midtermDigest = "";
     }
 
     private static final class SetLike {
-        private static final java.util.Set<String> TERSE = java.util.Set.of(
+        private static final Set<String> TERSE = Set.of(
                 "ja", "nee", "ok", "oke", "oké", "waarom", "hoezo", "wacht", "huh", "yes", "no", "okay",
                 "why", "wait", "hmm"
         );

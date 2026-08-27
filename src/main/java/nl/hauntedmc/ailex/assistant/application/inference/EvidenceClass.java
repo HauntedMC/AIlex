@@ -4,6 +4,7 @@ package nl.hauntedmc.ailex.assistant.application.inference;
 public enum EvidenceClass {
     LIVE_RUNTIME,
     REVIEWED_KNOWLEDGE,
+    AUTHORITATIVE_ABSENCE,
     PLAYER_MEMORY,
     SHARED_MEMORY,
     EVENT_MEMORY,

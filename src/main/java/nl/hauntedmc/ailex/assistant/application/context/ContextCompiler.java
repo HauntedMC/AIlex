@@ -3,6 +3,7 @@ package nl.hauntedmc.ailex.assistant.application.context;
 import nl.hauntedmc.ailex.assistant.domain.AssistantDialogueContext;
 import nl.hauntedmc.ailex.assistant.domain.AssistantMode;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,12 +11,13 @@ import java.util.Map;
 /**
  * Compiles independently sourced assistant context into a bounded prompt.
  *
- * <p>The current request is always retained. Active dialogue and trusted live state outrank durable memory and
- * retrieved knowledge. Source ceilings scale with the route budget instead of imposing tiny global constants, so a
- * complex grounded request can use materially more context without making ordinary chat expensive.</p>
+ * <p>The current request is always retained. Active source families reserve enough budget to remain represented before
+ * larger earlier sections can consume the window. Low-authority history is rendered early and current trusted evidence
+ * remains near the end so relevant support is not silently starved or buried in a long prompt.</p>
  */
 public final class ContextCompiler {
 
+    public static final String DIALOGUE_HEADING = "Active player-assistant dialogue";
     private static final int CHARACTERS_PER_TOKEN_ESTIMATE = 4;
 
     public CompiledContext compile(
@@ -29,60 +31,109 @@ public final class ContextCompiler {
             String historicalChat
     ) {
         int budget = Math.max(512, maximumInputTokens);
-        StringBuilder output = new StringBuilder();
         Map<String, Integer> tokensBySource = new LinkedHashMap<>();
+        List<RenderedSection> trustedSections = new ArrayList<>();
 
         int requestCap = Math.min(budget, Math.max(1_000, budget / 4));
-        int used = appendRequired(output, tokensBySource, "request", basePrompt, requestCap);
+        String request = clip(basePrompt, requestCap, false);
+        int used = estimateTokens(request);
+        tokensBySource.put("request", used);
         int remaining = Math.max(0, budget - used);
 
-        if (dialogue != null && dialogue.active() && remaining > 0) {
-            int allocated = Math.min(remaining, dialogueCap(mode, budget));
-            used += append(output, tokensBySource, "dialogue", "Active player-assistant dialogue",
-                    dialogueText(dialogue), allocated, true);
+        boolean hasDialogue = dialogue != null && dialogue.active();
+        boolean hasLive = !blank(liveContext);
+        boolean hasMemory = !blank(durableMemory);
+        boolean hasEvidence = evidence != null && !evidence.isEmpty();
+        int liveReserve = hasLive ? sourceReserve(liveCap(mode, budget), budget, 8, 600) : 0;
+        int memoryReserve = hasMemory ? sourceReserve(memoryCap(mode, budget), budget, 10, 500) : 0;
+        int evidenceReserve = hasEvidence ? sourceReserve(evidenceCap(mode, budget), budget, 5, 800) : 0;
+
+        RenderedSection dialogueSection = RenderedSection.empty();
+        if (hasDialogue && remaining > 0) {
+            int available = Math.max(0, remaining - liveReserve - memoryReserve - evidenceReserve);
+            int allocated = Math.min(available, dialogueCap(mode, budget));
+            dialogueSection = render("dialogue", DIALOGUE_HEADING, dialogueText(dialogue), allocated, true);
+            used += dialogueSection.tokens();
             remaining = Math.max(0, budget - used);
+            record(tokensBySource, dialogueSection);
         }
-        if (!blank(liveContext) && remaining > 0) {
-            int allocated = Math.min(remaining, liveCap(mode, budget));
-            used += append(output, tokensBySource, "live", "Trusted live Minecraft context", liveContext,
-                    allocated, false);
+
+        RenderedSection liveSection = RenderedSection.empty();
+        if (hasLive && remaining > 0) {
+            int available = Math.max(liveReserve, remaining - memoryReserve - evidenceReserve);
+            int allocated = Math.min(remaining, Math.min(available, liveCap(mode, budget)));
+            liveSection = render(
+                    "live", "Trusted live Minecraft context", liveContext, allocated, false
+            );
+            used += liveSection.tokens();
             remaining = Math.max(0, budget - used);
+            record(tokensBySource, liveSection);
         }
-        if (!blank(durableMemory) && remaining > 0) {
-            int allocated = Math.min(remaining, memoryCap(mode, budget));
-            used += append(output, tokensBySource, "memory", "Relevant saved assistant memory", durableMemory,
-                    allocated, false);
+
+        RenderedSection memorySection = RenderedSection.empty();
+        if (hasMemory && remaining > 0) {
+            int available = Math.max(memoryReserve, remaining - evidenceReserve);
+            int allocated = Math.min(remaining, Math.min(available, memoryCap(mode, budget)));
+            memorySection = render(
+                    "memory", "Relevant saved assistant memory", durableMemory, allocated, false
+            );
+            used += memorySection.tokens();
             remaining = Math.max(0, budget - used);
+            record(tokensBySource, memorySection);
         }
-        if (evidence != null && !evidence.isEmpty() && remaining > 0) {
+
+        if (hasEvidence && remaining > 0) {
             int evidenceBudget = Math.min(remaining, evidenceCap(mode, budget));
             for (ContextSource source : evidence) {
                 if (evidenceBudget <= 0 || remaining <= 0) {
                     break;
                 }
                 int allocated = Math.min(evidenceBudget, remaining);
-                int consumed = append(output, tokensBySource, "evidence:" + source.id(),
+                RenderedSection section = render(
+                        "evidence:" + source.id(),
                         "Trusted knowledge source " + source.id() + " — " + source.title(),
-                        source.text(), allocated, false);
-                evidenceBudget -= consumed;
-                used += consumed;
+                        source.text(), allocated, false
+                );
+                evidenceBudget -= section.tokens();
+                used += section.tokens();
                 remaining = Math.max(0, budget - used);
+                record(tokensBySource, section);
+                if (!section.text().isBlank()) {
+                    trustedSections.add(section);
+                }
             }
         }
+
+        RenderedSection historySection = RenderedSection.empty();
         if (!blank(historicalChat) && remaining > 0) {
-            used += append(output, tokensBySource, "history", "Relevant recent untrusted chat history", historicalChat,
-                    remaining, true);
+            historySection = render(
+                    "history", "Relevant recent untrusted chat history", historicalChat, remaining, true
+            );
+            record(tokensBySource, historySection);
         }
+
+        // Render low-authority historical material early; keep current trusted evidence close to the final user request tail.
+        StringBuilder output = new StringBuilder();
+        appendRaw(output, request);
+        appendRaw(output, historySection.text());
+        appendRaw(output, dialogueSection.text());
+        appendRaw(output, memorySection.text());
+        trustedSections.forEach(section -> appendRaw(output, section.text()));
+        appendRaw(output, liveSection.text());
 
         String prompt = output.toString().trim();
         return new CompiledContext(prompt, estimateTokens(prompt), Map.copyOf(tokensBySource));
     }
 
+    private int sourceReserve(int cap, int budget, int divisor, int minimum) {
+        return Math.min(cap, Math.max(minimum, budget / divisor));
+    }
+
     private int dialogueCap(AssistantMode mode, int budget) {
         return switch (mode) {
-            case FAST, HANDOFF -> Math.max(700, budget / 4);
-            case GROUNDED -> Math.max(1_600, budget / 3);
-            case DELIBERATE -> Math.max(2_400, budget / 3);
+            case FAST, HANDOFF -> Math.max(900, budget / 3);
+            case GROUNDED -> Math.max(1_800, budget / 3);
+            case DELIBERATE -> Math.max(2_800, budget / 3);
         };
     }
 
@@ -96,7 +147,7 @@ public final class ContextCompiler {
 
     private int memoryCap(AssistantMode mode, int budget) {
         return switch (mode) {
-            case FAST, HANDOFF -> Math.max(700, budget / 4);
+            case FAST, HANDOFF -> Math.max(800, budget / 4);
             case GROUNDED -> Math.max(1_800, budget / 3);
             case DELIBERATE -> Math.max(3_000, budget / 3);
         };
@@ -110,23 +161,7 @@ public final class ContextCompiler {
         };
     }
 
-    private int appendRequired(
-            StringBuilder output,
-            Map<String, Integer> tokensBySource,
-            String sourceId,
-            String value,
-            int maximumTokens
-    ) {
-        String clipped = clip(value, maximumTokens, false);
-        appendRaw(output, clipped);
-        int tokens = estimateTokens(clipped);
-        tokensBySource.put(sourceId, tokens);
-        return tokens;
-    }
-
-    private int append(
-            StringBuilder output,
-            Map<String, Integer> tokensBySource,
+    private RenderedSection render(
             String sourceId,
             String heading,
             String value,
@@ -134,21 +169,24 @@ public final class ContextCompiler {
             boolean keepTail
     ) {
         if (maximumTokens <= 0 || blank(value)) {
-            return 0;
+            return RenderedSection.empty();
         }
         int headingTokens = estimateTokens(heading) + 4;
         if (maximumTokens <= headingTokens + 4) {
-            return 0;
+            return RenderedSection.empty();
         }
         String clipped = clip(value, maximumTokens - headingTokens, keepTail);
         if (clipped.isBlank()) {
-            return 0;
+            return RenderedSection.empty();
         }
         String section = "[" + heading + "]\n" + clipped;
-        appendRaw(output, section);
-        int tokens = estimateTokens(section);
-        tokensBySource.put(sourceId, tokens);
-        return tokens;
+        return new RenderedSection(sourceId, section, estimateTokens(section));
+    }
+
+    private void record(Map<String, Integer> tokensBySource, RenderedSection section) {
+        if (section != null && !section.sourceId().isBlank() && section.tokens() > 0) {
+            tokensBySource.put(section.sourceId(), section.tokens());
+        }
     }
 
     private void appendRaw(StringBuilder output, String value) {
@@ -164,11 +202,11 @@ public final class ContextCompiler {
     private String dialogueText(AssistantDialogueContext dialogue) {
         StringBuilder value = new StringBuilder("pending_answer=").append(dialogue.pendingAnswer());
         if (dialogue.previousIntent() != null) {
-            value.append(" | previous_intent=")
+            value.append("\nprevious_intent=")
                     .append(dialogue.previousIntent().name().toLowerCase(java.util.Locale.ROOT));
         }
         if (!dialogue.recentTurns().isBlank()) {
-            value.append("\n").append(dialogue.recentTurns());
+            value.append('\n').append(dialogue.recentTurns());
             return value.toString();
         }
         if (!dialogue.previousUserMessage().isBlank()) {
@@ -217,5 +255,11 @@ public final class ContextCompiler {
     }
 
     public record CompiledContext(String prompt, int estimatedTokens, Map<String, Integer> tokensBySource) {
+    }
+
+    private record RenderedSection(String sourceId, String text, int tokens) {
+        private static RenderedSection empty() {
+            return new RenderedSection("", "", 0);
+        }
     }
 }

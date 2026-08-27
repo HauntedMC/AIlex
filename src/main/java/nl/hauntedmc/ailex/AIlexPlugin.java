@@ -53,6 +53,8 @@ public class AIlexPlugin extends JavaPlugin {
         assistantMemoryService = new AssistantMemoryService(this);
         assistantEventMemoryService = new AssistantEventMemoryService(this);
         assistantContextProviderRegistry = new AssistantContextProviderRegistry();
+        // AssistantService owns the knowledge index; that index reloads the canonical TSV and renders its generated
+        // evidence snapshot before indexing, so startup and /ailex ai rebuild-index follow one authoritative lifecycle.
         assistantService = new AssistantService(this);
         npcManager = new NpcManager(this::isNpcEnabled);
 
@@ -104,7 +106,8 @@ public class AIlexPlugin extends JavaPlugin {
                 throw new IllegalStateException("The bundled knowledge manifest is missing");
             }
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(resource, StandardCharsets.UTF_8))) {
-                reader.lines().map(String::trim).filter(file -> file.endsWith(".md"))
+                reader.lines().map(String::trim)
+                        .filter(file -> file.endsWith(".md") || file.endsWith(".tsv"))
                         .forEach(file -> saveResource("knowledge/" + file, true));
             }
         } catch (IOException exception) {

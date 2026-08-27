@@ -41,7 +41,7 @@ class OpenAiUsageTest {
     }
 
     @Test
-    void shouldAggregateUsageForLegacyStringApisToo() throws Exception {
+    void shouldAggregateUsageForStringApisToo() throws Exception {
         HttpClient http = mock(HttpClient.class);
         HttpResponse<String> first = response(200, 1000, 800, 150, 20, 1020, "eerste");
         HttpResponse<String> second = response(200, 600, 300, 0, 12, 612, "tweede");
