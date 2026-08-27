@@ -137,7 +137,7 @@ public class OpenAiResponsesClient {
         return getChatResponse(systemPrompt, userPrompt, RequestOptions.defaults());
     }
 
-    /** Backward-compatible text API. Prefer {@link #getChatResult} when per-request usage telemetry is needed. */
+    /** Text convenience API. Prefer {@link #getChatResult} when per-request usage telemetry is needed. */
     public String getChatResponse(String systemPrompt, String userPrompt, RequestOptions options) {
         return getChatResult(systemPrompt, userPrompt, options).text();
     }
@@ -154,7 +154,7 @@ public class OpenAiResponsesClient {
         return getStructuredChatResponse(systemPrompt, userPrompt, responseFormat, RequestOptions.defaults());
     }
 
-    /** Backward-compatible structured text API. Prefer {@link #getStructuredChatResult} for per-request usage. */
+    /** Structured text convenience API. Prefer {@link #getStructuredChatResult} for per-request usage. */
     public String getStructuredChatResponse(
             String systemPrompt, String userPrompt, JsonObject responseFormat, RequestOptions options
     ) {
@@ -178,7 +178,7 @@ public class OpenAiResponsesClient {
         );
     }
 
-    /** Cumulative usage for this client instance, including calls made through legacy String-returning APIs. */
+    /** Cumulative usage for this client instance, including calls made through String-returning APIs. */
     public UsageSnapshot usageSnapshot() {
         Usage usage = new Usage(
                 inputTokens.get(), cachedInputTokens.get(), cacheWriteTokens.get(), outputTokens.get(), totalTokens.get()
@@ -446,7 +446,7 @@ public class OpenAiResponsesClient {
         }
     }
 
-    /** One Responses API result; failure text keeps legacy caller behavior while exposing success separately. */
+    /** One Responses API result with player-safe failure text and an explicit success signal. */
     public record ResponseResult(String text, Usage usage, int httpStatus, boolean success) {
         public ResponseResult {
             text = text == null ? "" : text;
