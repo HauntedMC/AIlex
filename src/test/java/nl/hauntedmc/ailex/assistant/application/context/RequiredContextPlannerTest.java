@@ -38,6 +38,21 @@ class RequiredContextPlannerTest {
 
         assertTrue(plan.durableMemory());
         assertFalse(plan.knowledge());
+        assertFalse(plan.eventMemory());
+    }
+
+    @Test
+    void memoryRecallShouldIncludeBoundedEpisodicObservations() {
+        RequiredContextPlanner.Plan plan = planner.plan(
+                AssistantIntent.MEMORY_RECALL,
+                AssistantMode.GROUNDED,
+                "wat heb je onthouden over eten?",
+                AssistantSettings.defaults()
+        );
+
+        assertTrue(plan.durableMemory());
+        assertTrue(plan.eventMemory());
+        assertTrue(plan.liveSources().isEmpty());
     }
 
     @Test
