@@ -20,6 +20,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class ResilientOpenAiResponsesClientTest {
@@ -89,6 +90,68 @@ class ResilientOpenAiResponsesClientTest {
 
             assertEquals(FailureKind.INVALID_RESPONSE, exception.failureKind());
             assertEquals(200, exception.httpStatus());
+            verify(httpClient, times(1)).send(any(HttpRequest.class), anyStringBodyHandler());
+        }
+    }
+
+    @Test
+    void missingConfigurationIsNotMisreportedAsTransportFailure() {
+        HttpClient httpClient = mock(HttpClient.class);
+
+        try (MockedStatic<LoggerUtils> ignored = mockStatic(LoggerUtils.class)) {
+            ResilientOpenAiResponsesClient client = new ResilientOpenAiResponsesClient(
+                    "", "gpt-5.6-terra", httpClient, false
+            );
+
+            for (int attempt = 0; attempt < 7; attempt++) {
+                OpenAiUnavailableException exception = assertThrows(
+                        OpenAiUnavailableException.class,
+                        () -> client.getChatResponse("system", "hello")
+                );
+                assertEquals(FailureKind.CONFIGURATION, exception.failureKind());
+            }
+
+            assertTrue(client.usageStatus().contains("last_failure=configuration"));
+            assertTrue(client.usageStatus().contains("provider_circuit=closed"));
+            verifyNoInteractions(httpClient);
+        }
+    }
+
+    @Test
+    void invalidLocalRequestDoesNotTouchProviderOrCircuit() {
+        HttpClient httpClient = mock(HttpClient.class);
+
+        try (MockedStatic<LoggerUtils> ignored = mockStatic(LoggerUtils.class)) {
+            ResilientOpenAiResponsesClient client = new ResilientOpenAiResponsesClient(
+                    "key", "gpt-5.6-terra", httpClient, false
+            );
+
+            OpenAiUnavailableException exception = assertThrows(
+                    OpenAiUnavailableException.class,
+                    () -> client.getChatResponse("system", "   ")
+            );
+
+            assertEquals(FailureKind.INVALID_REQUEST, exception.failureKind());
+            assertTrue(client.usageStatus().contains("provider_circuit=closed"));
+            verifyNoInteractions(httpClient);
+        }
+    }
+
+    @Test
+    void perRequestModelCanSupplyMissingDefaultModel() throws Exception {
+        HttpClient httpClient = mock(HttpClient.class);
+        HttpResponse<String> success = mockStringResponse(200, successfulResponse("Hoi!"));
+        when(httpClient.send(any(HttpRequest.class), anyStringBodyHandler())).thenReturn(success);
+        OpenAiResponsesClient.RequestOptions options = new OpenAiResponsesClient.RequestOptions(
+                "gpt-5.6-terra", 120, "low", null, "", "", ""
+        );
+
+        try (MockedStatic<LoggerUtils> ignored = mockStatic(LoggerUtils.class)) {
+            ResilientOpenAiResponsesClient client = new ResilientOpenAiResponsesClient(
+                    "key", "", httpClient, false
+            );
+
+            assertEquals("Hoi!", client.getChatResponse("system", "hello", options));
             verify(httpClient, times(1)).send(any(HttpRequest.class), anyStringBodyHandler());
         }
     }
