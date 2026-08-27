@@ -26,6 +26,7 @@ public class AssistantConversationManager {
 
     private static final int MAX_TURNS = 28;
     private static final int MAX_PROMPT_CHARACTERS = 8_000;
+    private static final int MAX_RECENT_TURN_CHARACTERS = 5_600;
     private static final int MAX_MIDTERM_CHARACTERS = 1_800;
     private static final int MAX_TOPIC_TERMS = 10;
     private static final long CLEANUP_INTERVAL_MILLIS = 60_000L;
@@ -192,10 +193,6 @@ public class AssistantConversationManager {
 
     private Snapshot snapshot(Session session) {
         StringBuilder context = new StringBuilder();
-        if (session.previousIntent != null) {
-            context.append("previous_intent=").append(session.previousIntent.name().toLowerCase(Locale.ROOT)).append('\n');
-        }
-        context.append("pending_answer=").append(session.pendingAnswer).append('\n');
         if (!session.topics.isEmpty()) {
             context.append("session_topics=").append(String.join(",", session.topics)).append('\n');
         }
@@ -225,9 +222,17 @@ public class AssistantConversationManager {
     }
 
     private void trim(Session session) {
-        while (session.turns.size() > MAX_TURNS) {
+        while (session.turns.size() > MAX_TURNS || recentTurnCharacters(session.turns) > MAX_RECENT_TURN_CHARACTERS) {
             rememberMidterm(session, session.turns.removeFirst());
         }
+    }
+
+    private int recentTurnCharacters(Deque<Turn> turns) {
+        int characters = 0;
+        for (Turn turn : turns) {
+            characters += turn.role().length() + turn.speaker().length() + turn.message().length() + 5;
+        }
+        return characters;
     }
 
     private void rememberMidterm(Session session, Turn turn) {
