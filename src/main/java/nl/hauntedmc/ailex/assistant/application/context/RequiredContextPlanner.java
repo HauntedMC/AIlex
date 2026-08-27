@@ -30,7 +30,11 @@ public final class RequiredContextPlanner {
             case CONVERSATION, GAMEPLAY_HELP -> personalizationSignal(text);
             case LIVE_STATE, KNOWLEDGE_DISCOVERY, SAFETY, SUPPORT -> false;
         };
-        boolean eventMemory = settings.toolAllowed("session") && effectiveIntent == AssistantIntent.EVENT_RECALL;
+        // A memory-recall question asks what Haunty remembers, not only what was promoted into a semantic profile.
+        // Include bounded episodic observations too so public conversations and meaningful events are recallable without
+        // weakening player-memory visibility rules. Ordinary personalized conversation still avoids this extra context.
+        boolean eventMemory = settings.toolAllowed("session")
+                && (effectiveIntent == AssistantIntent.MEMORY_RECALL || effectiveIntent == AssistantIntent.EVENT_RECALL);
 
         EnumSet<LiveSource> live = EnumSet.noneOf(LiveSource.class);
         if (effectiveIntent == AssistantIntent.LIVE_STATE) {
