@@ -1,6 +1,7 @@
 package nl.hauntedmc.ailex.infrastructure.openai;
 
 import com.google.gson.JsonObject;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.net.http.HttpClient;
@@ -27,6 +28,8 @@ public final class ResilientOpenAiResponsesClient extends OpenAiResponsesClient 
 
     private final boolean retryTransientFailures;
     private final boolean providerCircuitEnabled;
+    private final boolean apiKeyConfigured;
+    private final String defaultModel;
     private final ProviderCircuitBreaker providerCircuitBreaker = new ProviderCircuitBreaker();
     private final Map<FailureKind, AtomicLong> failureCounts = new EnumMap<>(FailureKind.class);
     private final AtomicLong retries = new AtomicLong();
@@ -35,10 +38,13 @@ public final class ResilientOpenAiResponsesClient extends OpenAiResponsesClient 
 
     public ResilientOpenAiResponsesClient(JavaPlugin plugin) {
         super(plugin);
+        FileConfiguration config = plugin.getConfig();
         retryTransientFailures = true;
-        providerCircuitEnabled = plugin.getConfig().getBoolean(
+        providerCircuitEnabled = config.getBoolean(
                 "openai.assistant.reliability.circuit_breaker_enabled", true
         );
+        apiKeyConfigured = !clean(config.getString("openai.api_key", "")).isBlank();
+        defaultModel = clean(config.getString("openai.model", "gpt-5.6-terra"));
         initializeFailureCounters();
     }
 
@@ -65,11 +71,19 @@ public final class ResilientOpenAiResponsesClient extends OpenAiResponsesClient 
         super(apiKey, model, httpClient);
         this.retryTransientFailures = retryTransientFailures;
         this.providerCircuitEnabled = providerCircuitEnabled;
+        this.apiKeyConfigured = !clean(apiKey).isBlank();
+        this.defaultModel = clean(model);
         initializeFailureCounters();
     }
 
     @Override
     public ResponseResult getChatResult(String systemPrompt, String userPrompt, RequestOptions options) {
+        if (userPrompt == null || userPrompt.isBlank()) {
+            throwLocalFailure("chat", FailureKind.INVALID_REQUEST);
+        }
+        if (!requestConfigured(options)) {
+            throwLocalFailure("chat", FailureKind.CONFIGURATION);
+        }
         return executeReliably(
                 "chat",
                 () -> sanitizeChatResult(super.getChatResult(systemPrompt, userPrompt, options))
@@ -83,6 +97,12 @@ public final class ResilientOpenAiResponsesClient extends OpenAiResponsesClient 
             JsonObject responseFormat,
             RequestOptions options
     ) {
+        if (userPrompt == null || userPrompt.isBlank() || responseFormat == null) {
+            throwLocalFailure("structured-chat", FailureKind.INVALID_REQUEST);
+        }
+        if (!requestConfigured(options)) {
+            throwLocalFailure("structured-chat", FailureKind.CONFIGURATION);
+        }
         return executeReliably(
                 "structured-chat",
                 () -> super.getStructuredChatResult(systemPrompt, userPrompt, responseFormat, options)
@@ -99,6 +119,17 @@ public final class ResilientOpenAiResponsesClient extends OpenAiResponsesClient 
                 + ", provider_circuit=" + (providerCircuitEnabled ? providerCircuitBreaker.state() : "disabled")
                 + ", last_failure=" + failure.kind().name().toLowerCase(Locale.ROOT)
                 + (failure.httpStatus() > 0 ? "(" + failure.httpStatus() + ")" : "");
+    }
+
+    private boolean requestConfigured(RequestOptions options) {
+        String requestedModel = options == null ? "" : clean(options.model());
+        String effectiveModel = requestedModel.isBlank() ? defaultModel : requestedModel;
+        return apiKeyConfigured && !effectiveModel.isBlank();
+    }
+
+    private void throwLocalFailure(String operation, FailureKind kind) {
+        recordFailure(kind, 0);
+        throw new OpenAiUnavailableException(operation, kind, 0);
     }
 
     private ResponseResult sanitizeChatResult(ResponseResult result) {
@@ -181,8 +212,7 @@ public final class ResilientOpenAiResponsesClient extends OpenAiResponsesClient 
             if (providerCircuitEnabled) {
                 providerCircuitBreaker.recordProviderFailure();
             }
-        } else {
-            // A concrete non-provider outcome must not preserve a previous shared-provider outage state.
+        } else if (effective.providerReachable()) {
             providerCircuitBreaker.recordReachableOutcome();
         }
     }
@@ -197,25 +227,33 @@ public final class ResilientOpenAiResponsesClient extends OpenAiResponsesClient 
         }
     }
 
+    private static String clean(String value) {
+        return value == null ? "" : value.trim();
+    }
+
     public enum FailureKind {
-        NONE(false, false),
-        RATE_LIMITED(false, true),
-        UPSTREAM(true, true),
-        INVALID_RESPONSE(true, false),
-        TIMEOUT(false, true),
-        TRANSPORT(false, true),
-        AUTHENTICATION(false, false),
-        REQUEST_REJECTED(false, false),
-        INTERRUPTED(false, false),
-        CIRCUIT_OPEN(false, false),
-        UNKNOWN(false, false);
+        NONE(false, false, false),
+        RATE_LIMITED(false, true, true),
+        UPSTREAM(true, true, true),
+        INVALID_RESPONSE(true, false, true),
+        TIMEOUT(false, true, true),
+        TRANSPORT(false, true, false),
+        AUTHENTICATION(false, false, true),
+        REQUEST_REJECTED(false, false, true),
+        CONFIGURATION(false, false, false),
+        INVALID_REQUEST(false, false, false),
+        INTERRUPTED(false, false, false),
+        CIRCUIT_OPEN(false, false, false),
+        UNKNOWN(false, false, false);
 
         private final boolean retryable;
         private final boolean affectsCircuit;
+        private final boolean providerReachable;
 
-        FailureKind(boolean retryable, boolean affectsCircuit) {
+        FailureKind(boolean retryable, boolean affectsCircuit, boolean providerReachable) {
             this.retryable = retryable;
             this.affectsCircuit = affectsCircuit;
+            this.providerReachable = providerReachable;
         }
 
         boolean retryable() {
@@ -224,6 +262,10 @@ public final class ResilientOpenAiResponsesClient extends OpenAiResponsesClient 
 
         boolean affectsCircuit() {
             return affectsCircuit;
+        }
+
+        boolean providerReachable() {
+            return providerReachable;
         }
     }
 
