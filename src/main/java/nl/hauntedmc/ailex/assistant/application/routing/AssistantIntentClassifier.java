@@ -240,7 +240,10 @@ public final class AssistantIntentClassifier {
                 "wat gebeurde er", "wat is er gebeurd", "wat gebeurde vorige keer", "wat gebeurde er vorige keer",
                 "vorige keer gebeurde", "wat gebeurde eerder", "eerder vandaag gebeurde", "weet je nog wat er gebeurde",
                 "what happened", "what happened last time", "what happened earlier", "what happened before",
-                "last time what happened", "do you remember what happened"
+                "last time what happened", "do you remember what happened",
+                "wie vroeg net", "wie vroeg dat", "wie zei net", "wie zei dat", "wat vroeg je net", "wat zei je net",
+                "who just asked", "who asked that", "who just said", "who said that",
+                "what did you just ask", "what did you just say"
         );
     }
 
