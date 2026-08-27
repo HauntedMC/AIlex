@@ -31,7 +31,6 @@ public final class AssistantGenerationPolicy {
             return true;
         }
         return hasDurableMemorySignal(playerMessage)
-                || hasEmbodiedActionSignal(playerMessage)
                 || intent == AssistantIntent.MEMORY_RECALL
                 || intent == AssistantIntent.EVENT_RECALL;
     }
@@ -82,6 +81,9 @@ public final class AssistantGenerationPolicy {
                 || normalized.contains("actually");
     }
 
+    /**
+     * Kept for the separate embodiment subsystem. Physical-action language no longer changes chat-generation protocol.
+     */
     public static boolean hasEmbodiedActionSignal(String message) {
         String normalized = message == null ? "" : message.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
         return containsAny(normalized,
