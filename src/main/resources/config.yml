@@ -128,9 +128,9 @@ openai:
     nearby_response_radius: 32
     max_concurrent_requests: 4
     max_queued_requests: 8
-    # By default every player-triggered reply requires an explicit bot mention/name.
-    # Opt in only if you intentionally want an active dialogue to consume later unmentioned chat lines.
-    allow_implicit_followups: false
+    # Active dialogue may continue naturally without repeating the bot name. Conservative continuation and ambient
+    # conversation checks keep unrelated public chat from being consumed as a follow-up.
+    allow_implicit_followups: true
     session_timeout_seconds: 900
     feedback:
       access_denied: "Je kunt AIlex hier niet gebruiken."
