@@ -14,6 +14,10 @@ public final class MemoryRetentionPolicy {
     private static final Duration EVENT_HALF_LIFE = Duration.ofDays(10);
     private static final Duration SESSION_HALF_LIFE = Duration.ofHours(8);
 
+    /**
+     * Derives a lifecycle label from stored evidence without mutating the record.
+     * The stage describes retention maturity, not factual confidence or source authority.
+     */
     public MemoryLifecycleStage stage(MemoryRecord record, long now) {
         if (record == null) {
             return MemoryLifecycleStage.DECAYING;
@@ -32,6 +36,10 @@ public final class MemoryRetentionPolicy {
         return MemoryLifecycleStage.MATURE;
     }
 
+    /**
+     * Scores how strongly a transient trace should be retained at the supplied time.
+     * Competing related traces lower the score; durable semantic memories are protected with a score of {@code 1.0}.
+     */
     public double retentionScore(MemoryRecord record, long now, int competingTraceCount) {
         if (record == null) {
             return 0.0D;
@@ -53,6 +61,10 @@ public final class MemoryRetentionPolicy {
         return Math.clamp(score, 0.0D, 1.0D);
     }
 
+    /**
+     * Returns whether a transient trace is weak enough to expire under age plus topic interference.
+     * Explicitly verified traces and durable semantic memory cannot be removed by this passive policy.
+     */
     public boolean shouldExpire(MemoryRecord record, long now, List<MemoryRecord> competingTraces) {
         if (record == null || durableSemantic(record) || record.tags().contains("verified")) {
             return false;
@@ -67,7 +79,10 @@ public final class MemoryRetentionPolicy {
                 && retentionScore(record, now, competitors) < 0.28D;
     }
 
-    /** Successful externally grounded reuse reactivates salience, but does not change confidence or factual content. */
+    /**
+     * Reactivates salience after an externally grounded successful use.
+     * Confidence, value, provenance and occurrence time are intentionally unchanged: retrieval success is not new truth.
+     */
     public MemoryRecord reconsolidateVerifiedUse(MemoryRecord record, long now) {
         if (record == null || !record.activeAt(now)) {
             return record;
