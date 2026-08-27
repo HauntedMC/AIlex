@@ -15,22 +15,27 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
 /**
- * Selective episodic-memory recorder. It records meaningful state transitions with bounded TTLs and deliberately
- * ignores high-volume events such as movement, block changes, damage ticks and ordinary chat.
+ * Selective episodic-memory recorder. It records meaningful state transitions with bounded TTLs and deliberately ignores
+ * high-volume events such as movement, block changes and damage ticks. Public chat is recorded only when an AIlex NPC is
+ * explicitly addressed, which gives the NPC a bounded lived history without turning the whole server transcript into
+ * durable memory.
  */
 public final class AssistantEventMemoryService implements Listener {
 
     private static final Duration SESSION_TTL = Duration.ofHours(6);
     private static final Duration WORLD_TTL = Duration.ofHours(12);
+    private static final Duration PUBLIC_CHAT_TTL = Duration.ofHours(12);
     private static final Duration DEATH_TTL = Duration.ofDays(2);
     private static final Duration ADVANCEMENT_TTL = Duration.ofDays(30);
     private static final Duration RELATIONSHIP_TTL = Duration.ofDays(365);
+    private static final int MAX_PUBLIC_CHAT_CHARACTERS = 220;
 
     private final AssistantMemoryService memory;
 
@@ -59,7 +64,7 @@ public final class AssistantEventMemoryService implements Listener {
         String type = normalizeType(eventType);
         String player = playerId == null ? "" : playerId.toString();
         String npc = npcId == null ? "" : npcId.trim();
-        Set<String> effectiveTags = new java.util.HashSet<>(tags == null ? Set.of() : tags);
+        Set<String> effectiveTags = new HashSet<>(tags == null ? Set.of() : tags);
         effectiveTags.add("event");
         effectiveTags.add(type);
         return memory.rememberTrusted(
@@ -76,6 +81,51 @@ public final class AssistantEventMemoryService implements Listener {
                 now,
                 ttl == null ? Duration.ofDays(7) : ttl,
                 Set.copyOf(effectiveTags)
+        );
+    }
+
+    /**
+     * Records the fact that this NPC witnessed a public player message addressed to it.
+     *
+     * <p>The event is NPC-owned rather than player-owned: another player may ask the same NPC what it publicly witnessed,
+     * while private semantic memory about the speaker remains player-scoped. The stored value asserts only that the
+     * speaker said the quoted text; it does not promote the payload itself to trusted server knowledge.</p>
+     */
+    public MemoryRecord recordObservedPublicChat(
+            UUID speakerId,
+            String speakerName,
+            String npcId,
+            String npcName,
+            String message
+    ) {
+        if (memory == null || speakerId == null || npcId == null || npcId.isBlank() || message == null || message.isBlank()) {
+            return null;
+        }
+        long now = System.currentTimeMillis();
+        String safeSpeaker = compact(speakerName, 32);
+        String safeNpc = compact(npcName, 32);
+        String safeMessage = compact(message, MAX_PUBLIC_CHAT_CHARACTERS);
+        String summary = safeSpeaker + " said to " + safeNpc + ": \"" + safeMessage + "\"";
+        Set<String> tags = new HashSet<>();
+        tags.add("event");
+        tags.add("chat");
+        tags.add("public-chat");
+        tags.add("npc-observed");
+        tags.add("speaker:" + normalizeType(safeSpeaker));
+        return memory.rememberTrusted(
+                MemoryScope.EVENT,
+                "",
+                npcId.trim(),
+                MemoryKind.EVENT,
+                "chat.public." + now + '.' + UUID.randomUUID().toString().substring(0, 8),
+                summary,
+                1.0D,
+                0.78D,
+                "observed-public-chat",
+                speakerId.toString(),
+                now,
+                PUBLIC_CHAT_TTL,
+                Set.copyOf(tags)
         );
     }
 
@@ -236,6 +286,14 @@ public final class AssistantEventMemoryService implements Listener {
             return "familiar";
         }
         return "acquainted";
+    }
+
+    private String compact(String value, int maximumCharacters) {
+        String normalized = value == null ? "" : value.replaceAll("\\s+", " ").trim();
+        if (normalized.length() <= maximumCharacters) {
+            return normalized;
+        }
+        return normalized.substring(0, Math.max(0, maximumCharacters - 1)) + "…";
     }
 
     private String normalizeType(String value) {
