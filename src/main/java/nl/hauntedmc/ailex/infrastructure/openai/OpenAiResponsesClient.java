@@ -13,6 +13,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Locale;
@@ -34,7 +35,7 @@ public class OpenAiResponsesClient {
     private static final int DEFAULT_MAX_OUTPUT_TOKENS = 120;
     private static final String DEFAULT_REASONING_EFFORT = "low";
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
-    private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(20);
+    private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(30);
     private static final String SYSTEM_RESPONSE_INSTRUCTION = "Return only player-facing Minecraft chat text. "
             + "Be concise but complete; do not omit a useful explanation merely to force one sentence. "
             + "Do not use markdown, quotes around the whole reply, protocol fields, or speaker labels.";
@@ -70,7 +71,7 @@ public class OpenAiResponsesClient {
                 Math.clamp(config.getInt("openai.max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS), 16, 1_200),
                 config.getString("openai.reasoning_effort", DEFAULT_REASONING_EFFORT),
                 config.getBoolean("openai.store_responses", false),
-                Duration.ofSeconds(Math.clamp(config.getInt("openai.request_timeout_seconds", 20), 3, 60))
+                Duration.ofSeconds(Math.clamp(config.getInt("openai.request_timeout_seconds", 30), 3, 60))
         );
     }
 
@@ -232,6 +233,9 @@ public class OpenAiResponsesClient {
             Thread.currentThread().interrupt();
             LoggerUtils.logError("OpenAI request interrupted: " + exception.getMessage());
             return ResponseResult.failure(normalize ? FALLBACK_RESPONSE : "", 0);
+        } catch (HttpTimeoutException exception) {
+            LoggerUtils.logError("OpenAI request timed out: " + exception.getMessage());
+            return ResponseResult.failure(normalize ? FALLBACK_RESPONSE : "", 408);
         } catch (IOException exception) {
             LoggerUtils.logError("OpenAI request failed: " + exception.getMessage());
             return ResponseResult.failure(normalize ? FALLBACK_RESPONSE : "", 0);
