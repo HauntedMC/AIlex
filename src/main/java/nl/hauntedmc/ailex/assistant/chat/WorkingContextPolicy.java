@@ -14,7 +14,11 @@ public final class WorkingContextPolicy {
 
     public static boolean includeRawHistory(String message, AssistantDialogueContext dialogue) {
         AssistantIntent intent = AssistantIntentClassifier.analyze(message, dialogue).intent();
-        if (intent == AssistantIntent.EVENT_RECALL || intent == AssistantIntent.MEMORY_RECALL) {
+        // Durable MEMORY_RECALL already receives typed semantic memory plus bounded dialogue context. Automatically adding
+        // the ambient/raw transcript duplicated context, regularly filled the request budget, and slowed the exact turns
+        // that should primarily inspect remembered facts. EVENT_RECALL remains transcript-aware because recent chat can be
+        // the event the player is explicitly asking about.
+        if (intent == AssistantIntent.EVENT_RECALL) {
             return true;
         }
         String text = message == null ? "" : message.toLowerCase(Locale.ROOT);
