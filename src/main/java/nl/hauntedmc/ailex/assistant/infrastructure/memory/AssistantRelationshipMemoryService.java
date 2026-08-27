@@ -28,7 +28,7 @@ public final class AssistantRelationshipMemoryService {
                 .filter(record -> visibleToRelationship(record, player, npcId))
                 .toList();
         Set<String> evidence = new HashSet<>();
-        records.forEach(record -> evidence.add("memory." + record.id()));
+        records.forEach(record -> evidence.add(MemoryEvidenceId.forRecord(record)));
 
         int interactions = value(records, MemoryScope.PLAYER_NPC, MemoryKind.RELATIONSHIP, "interaction_count")
                 .map(this::integer).orElse(0);

@@ -666,7 +666,8 @@ public final class AssistantMemoryService implements AutoCloseable {
         long now = System.currentTimeMillis();
         Set<String> ids = evidenceIds.stream()
                 .filter(id -> id != null && id.startsWith("memory."))
-                .map(id -> id.substring("memory.".length()))
+                .map(MemoryEvidenceId::recordId)
+                .filter(id -> !id.isBlank())
                 .collect(java.util.stream.Collectors.toSet());
         if (ids.isEmpty()) {
             return;
