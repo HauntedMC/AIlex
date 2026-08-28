@@ -54,6 +54,15 @@ public final class SemanticNeedPlanner {
                 ? new AssistantIntentClassifier.Analysis(AssistantIntent.CONVERSATION, AssistantMode.FAST, "nl") : prior;
         RequiredContextPlanner.Plan safePlan = priorPlan == null
                 ? new RequiredContextPlanner.Plan(false, false, false, Set.of()) : priorPlan;
+
+        // Explicit remember/forget operations and durable self-declarations are already high-confidence speech acts.
+        // Embedding prototypes describe information needs, not speech acts, so letting them override these messages can
+        // convert "my favorite block is netherite" into LIVE_STATE simply because it is close to the block prototype.
+        if (AssistantIntentClassifier.isMemoryWriteStatement(message)
+                || AssistantIntentClassifier.isMemoryForgetStatement(message)) {
+            return Decision.fromPrior(safePrior, safePlan);
+        }
+
         if (safePrior.mode() == AssistantMode.HANDOFF || safePrior.intent() == AssistantIntent.SAFETY
                 || safePrior.intent() == AssistantIntent.SUPPORT || embeddings == null || !embeddings.available()) {
             return Decision.fromPrior(safePrior, safePlan);

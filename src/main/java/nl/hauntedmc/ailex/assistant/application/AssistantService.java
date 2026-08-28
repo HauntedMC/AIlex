@@ -26,9 +26,11 @@ import nl.hauntedmc.ailex.assistant.domain.AssistantSettings;
 import nl.hauntedmc.ailex.assistant.infrastructure.knowledge.LocalKnowledgeIndex;
 import nl.hauntedmc.ailex.assistant.infrastructure.live.PaperLiveContextEnricher;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantExperienceMemoryService;
+import nl.hauntedmc.ailex.assistant.infrastructure.memory.ExplicitPlayerMemoryService;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantMemoryService;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantRelationshipMemoryService;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryCandidate;
+import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryEvidenceId;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryKind;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryTopicView;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryRecord;
@@ -64,6 +66,7 @@ public final class AssistantService {
     private final AssistantMemoryService memoryService;
     private final AssistantExperienceMemoryService experienceMemory;
     private final AssistantRelationshipMemoryService relationshipMemory;
+    private final ExplicitPlayerMemoryService explicitPlayerMemory;
     private final AssistantReadAgent readAgent;
     private volatile SemanticNeedPlanner semanticNeedPlanner;
     private final ContextCompiler contextCompiler = new ContextCompiler();
@@ -87,6 +90,7 @@ public final class AssistantService {
         this.memoryService = plugin.getAssistantMemoryService();
         this.experienceMemory = new AssistantExperienceMemoryService(memoryService);
         this.relationshipMemory = new AssistantRelationshipMemoryService(memoryService);
+        this.explicitPlayerMemory = new ExplicitPlayerMemoryService(memoryService);
         this.readAgent = new AssistantReadAgent(plugin, knowledgeIndex, memoryService, experienceMemory);
         this.semanticNeedPlanner = new SemanticNeedPlanner(knowledgeIndex.semanticEmbeddingProvider());
         Thread.ofVirtual().name("AIlex-SemanticRouter-Warmup").start(semanticNeedPlanner::warm);
@@ -129,6 +133,15 @@ public final class AssistantService {
 
         UUID playerId = player.getUniqueId();
         if (memoryService != null && settings.toolAllowed("session")) {
+            ExplicitPlayerMemoryService.Result explicitResult = explicitPlayerMemory.observe(
+                    playerId, player.getName(), message
+            );
+            if (settings.diagnosticLogging() && explicitResult.proposed() > 0) {
+                LoggerUtils.logInfo("[AIlex memory] explicit requester=" + sanitizeLogField(player.getName())
+                        + " operation=" + (explicitResult.forget() ? "forget" : "upsert")
+                        + " proposed=" + explicitResult.proposed()
+                        + " accepted=" + explicitResult.accepted());
+            }
             memoryService.observe(playerId, message);
             memoryService.rememberExplicitLanguagePreference(playerId, message);
             String preferredLanguage = memoryService.preferredLanguage(playerId);
@@ -156,7 +169,7 @@ public final class AssistantService {
         String npcMemoryId = npc == null ? "0" : String.valueOf(npc.getId());
         String memory = "";
         if (memoryService != null && settings.toolAllowed("session") && plan.durableMemory()) {
-            memory = memoryContext(playerId, npcMemoryId, message, plan.eventMemory());
+            memory = memoryContext(playerId, npcMemoryId, message, plan.eventMemory(), analysis.intent());
         }
 
         PreparedRequest prepared = new PreparedRequest(
@@ -322,7 +335,7 @@ public final class AssistantService {
         UUID playerId = UUID.fromString(request.playerId());
         if (memoryService != null && request.settings().toolAllowed("session")
                 && refinedPlan.durableMemory() && memory.isBlank()) {
-            memory = memoryContext(playerId, request.npcMemoryId(), request.message(), refinedPlan.eventMemory());
+            memory = memoryContext(playerId, request.npcMemoryId(), request.message(), refinedPlan.eventMemory(), refinedAnalysis.intent());
         }
         if (relationshipMemory != null && request.settings().toolAllowed("session")
                 && (refinedPlan.durableMemory() || decision.intent() == AssistantIntent.CONTEXT_FOLLOWUP
@@ -482,7 +495,9 @@ public final class AssistantService {
                 || text.contains("correction") || text.contains("actually");
     }
 
-    private String memoryContext(UUID playerId, String npcId, String query, boolean includeEvents) {
+    private String memoryContext(
+            UUID playerId, String npcId, String query, boolean includeEvents, AssistantIntent intent
+    ) {
         Set<MemoryKind> semanticKinds = Set.of(
                 MemoryKind.PREFERENCE, MemoryKind.FACT, MemoryKind.OPINION, MemoryKind.INTEREST,
                 MemoryKind.GOAL, MemoryKind.RELATIONSHIP
@@ -504,12 +519,18 @@ public final class AssistantService {
             }
             output.append("Relevant episodic memory:\n");
             for (MemoryRecord record : events) {
-                output.append("- evidence_id=memory.").append(record.id()).append(' ').append(record.value());
+                output.append("- evidence_id=").append(MemoryEvidenceId.forRecord(record)).append(' ').append(record.value());
                 if (record.occurredAt() > 0L) {
                     output.append(" @").append(Instant.ofEpochMilli(record.occurredAt()));
                 }
                 output.append('\n');
             }
+        }
+        if (output.isEmpty() && intent == AssistantIntent.MEMORY_RECALL) {
+            return "evidence_id=memory.none\nNo relevant scoped player memory matched this recall request.";
+        }
+        if (output.isEmpty() && intent == AssistantIntent.EVENT_RECALL) {
+            return "evidence_id=memory.timeline.none\nNo relevant scoped event memory matched this recall request.";
         }
         return output.toString().trim();
     }
@@ -824,13 +845,19 @@ public final class AssistantService {
             text = "Dat kan ik niet verifiëren of afhandelen. Gebruik /help of neem contact op met de officiële Support.";
         } else if (request.analysis().intent() == AssistantIntent.KNOWLEDGE_DISCOVERY) {
             text = "Ik kon nu geen betrouwbaar serverfeit ophalen; vraag me gerust naar Survival, Creative, events, ranks of commands.";
+        } else if (request.analysis().intent() == AssistantIntent.MEMORY_RECALL) {
+            text = "Dat heb ik nu niet in mijn geheugen teruggevonden.";
+        } else if (request.analysis().intent() == AssistantIntent.EVENT_RECALL) {
+            text = "Dat recente gesprek of moment kan ik nu niet terugvinden.";
+        } else if (request.analysis().intent() == AssistantIntent.LIVE_STATE) {
+            text = "Ik kan die actuele status nu niet betrouwbaar uitlezen.";
         } else if (request.analysis().intent() == AssistantIntent.CONVERSATION
                 || request.analysis().intent() == AssistantIntent.CONTEXT_FOLLOWUP) {
             text = "Sorry, ik kreeg daar geen bruikbaar antwoord op. Kun je het nog eens kort zeggen?";
         } else if ("nl".equals(request.analysis().language())) {
-            text = "Dat kan ik nu niet betrouwbaar verifiëren. Kijk in /help of vraag een stafflid om de actuele info.";
+            text = "Dat serverfeit kan ik nu niet betrouwbaar verifiëren. Kijk eventueel in /help voor actuele serverinformatie.";
         } else {
-            text = "I can't verify that reliably right now. Please check /help or ask staff for current information.";
+            text = "I can't verify that server fact reliably right now. Check /help for current server information if needed.";
         }
         return AssistantReply.fromPlainText(text).withHandoff(reason);
     }

@@ -38,6 +38,49 @@ class RequiredContextPlannerTest {
 
         assertTrue(plan.durableMemory());
         assertFalse(plan.knowledge());
+        assertFalse(plan.eventMemory());
+    }
+
+    @Test
+    void selfMemoryRecallShouldRemainPlayerScoped() {
+        RequiredContextPlanner.Plan plan = planner.plan(
+                AssistantIntent.MEMORY_RECALL,
+                AssistantMode.GROUNDED,
+                "wat weet je over mij?",
+                AssistantSettings.defaults()
+        );
+
+        assertTrue(plan.durableMemory());
+        assertFalse(plan.eventMemory());
+        assertTrue(plan.liveSources().isEmpty());
+    }
+
+    @Test
+    void topicalMemoryRecallShouldNotPullUnrelatedPublicConversations() {
+        RequiredContextPlanner.Plan plan = planner.plan(
+                AssistantIntent.MEMORY_RECALL,
+                AssistantMode.GROUNDED,
+                "wat heb je onthouden over eten?",
+                AssistantSettings.defaults()
+        );
+
+        assertTrue(plan.durableMemory());
+        assertFalse(plan.eventMemory());
+        assertTrue(plan.liveSources().isEmpty());
+    }
+
+    @Test
+    void namedPlayerMemoryRecallShouldIncludePublicNpcObservations() {
+        RequiredContextPlanner.Plan plan = planner.plan(
+                AssistantIntent.MEMORY_RECALL,
+                AssistantMode.GROUNDED,
+                "wat weet je over stuyvert haunty",
+                AssistantSettings.defaults()
+        );
+
+        assertTrue(plan.durableMemory());
+        assertTrue(plan.eventMemory());
+        assertTrue(plan.liveSources().isEmpty());
     }
 
     @Test

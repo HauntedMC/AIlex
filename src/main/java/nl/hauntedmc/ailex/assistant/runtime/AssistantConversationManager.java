@@ -119,6 +119,9 @@ public class AssistantConversationManager {
         if (normalized.length() > 320) {
             return false;
         }
+        if (isSocialReactionFollowUp(normalized)) {
+            return true;
+        }
         if (startsLikeSubstantiveFollowUp(normalized)
                 || correctionLikeFollowUp(normalized)
                 || referencesPriorTurn(normalized)) {
@@ -136,6 +139,11 @@ public class AssistantConversationManager {
                 "eigenlijk", "correctie", "but", "and ", "so ", "why", "how come", "what then", "which one",
                 "where then", "wait", "i mean", "actually", "correction"
         ).stream().anyMatch(text::startsWith);
+    }
+
+    private boolean isSocialReactionFollowUp(String text) {
+        String stripped = text.replaceAll("[?!.,]+$", "").trim();
+        return SetLike.SOCIAL_REACTIONS.contains(stripped);
     }
 
     private boolean previousAssistantAskedQuestion(Snapshot snapshot) {
@@ -316,6 +324,9 @@ public class AssistantConversationManager {
         private static final Set<String> TERSE = Set.of(
                 "ja", "nee", "ok", "oke", "oké", "waarom", "hoezo", "wacht", "huh", "yes", "no", "okay",
                 "why", "wait", "hmm"
+        );
+        private static final Set<String> SOCIAL_REACTIONS = Set.of(
+                "zucht", "pff", "pfff", "ugh", "sigh"
         );
 
         private SetLike() {

@@ -74,6 +74,20 @@ class AssistantConversationManagerTest {
     }
 
     @Test
+    void socialReactionRemainsPartOfTheActiveDialogue() {
+        AssistantConversationManager manager = new AssistantConversationManager(() -> 1_000L);
+        UUID player = UUID.randomUUID();
+        manager.recordUser(player, 3, "remymine", "Haunty onthou dat ik hier al lang speel");
+        manager.recordAssistant(player, 3, "Haunty", "Dat lukte niet.", AssistantIntent.CONVERSATION);
+
+        AssistantConversationManager.Snapshot snapshot = manager.snapshot(player, 3, 60_000L);
+
+        assertTrue(manager.isLikelyFollowUp("zucht", snapshot));
+        assertTrue(manager.isLikelyFollowUp("pfff", snapshot));
+        assertFalse(manager.isLikelyFollowUp("ik ga nu naar de mobfarm", snapshot));
+    }
+
+    @Test
     void terseReplyRemainsNaturalWhenAssistantActuallyAskedAQuestion() {
         AssistantConversationManager manager = new AssistantConversationManager(() -> 1_000L);
         UUID player = UUID.randomUUID();

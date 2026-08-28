@@ -9,6 +9,7 @@ import nl.hauntedmc.ailex.assistant.domain.AssistantSettings;
 import nl.hauntedmc.ailex.assistant.infrastructure.knowledge.LocalKnowledgeIndex;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantExperienceMemoryService;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.AssistantMemoryService;
+import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryEvidenceId;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryKind;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryRecord;
 
@@ -237,7 +238,7 @@ public final class AssistantToolRegistry {
         StringBuilder output = new StringBuilder();
         Set<String> ids = new HashSet<>();
         for (MemoryRecord record : records) {
-            String evidenceId = "memory." + record.id();
+            String evidenceId = MemoryEvidenceId.forRecord(record);
             ids.add(evidenceId);
             output.append("evidence_id=").append(evidenceId)
                     .append(" scope=").append(record.scope().name().toLowerCase(Locale.ROOT))

@@ -1,5 +1,6 @@
 package nl.hauntedmc.ailex.assistant.application.inference;
 
+import nl.hauntedmc.ailex.assistant.application.routing.AssistantIntentClassifier;
 import nl.hauntedmc.ailex.assistant.domain.AssistantIntent;
 import nl.hauntedmc.ailex.assistant.domain.AssistantMode;
 
@@ -42,14 +43,18 @@ public final class AssistantGenerationPolicy {
      */
     public static boolean hasDurableMemorySignal(String message) {
         String normalized = message == null ? "" : message.toLowerCase(Locale.ROOT).trim();
-        return EXPLICIT_FIRST_PERSON_FACT.matcher(normalized).matches()
+        return AssistantIntentClassifier.isMemoryWriteStatement(normalized)
+                || AssistantIntentClassifier.isMemoryForgetStatement(normalized)
+                || EXPLICIT_FIRST_PERSON_FACT.matcher(normalized).matches()
                 || normalized.contains("onthoud")
                 || normalized.contains("remember")
                 || normalized.contains("vergeet")
                 || normalized.contains("forget")
                 || normalized.contains("ik hou van")
+                || normalized.contains("ik houd van")
                 || normalized.contains("ik vind ")
                 || normalized.contains("mijn favoriete")
+                || normalized.contains("mijn lievelings")
                 || normalized.contains("mijn voorkeur")
                 || normalized.contains("ik speel graag")
                 || normalized.contains("ik speel veel")
@@ -65,6 +70,7 @@ public final class AssistantGenerationPolicy {
                 || normalized.contains("i love ")
                 || normalized.contains("i prefer ")
                 || normalized.contains("my favorite")
+                || normalized.contains("my favourite")
                 || normalized.contains("i am a fan")
                 || normalized.contains("i'm interested")
                 || normalized.contains("i am interested")

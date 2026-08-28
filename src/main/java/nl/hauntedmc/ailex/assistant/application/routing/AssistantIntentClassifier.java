@@ -58,7 +58,7 @@ public final class AssistantIntentClassifier {
             "diamonds", "ore", "erts"
     );
     private static final Set<String> MEMORY_WORDS = Set.of(
-            "onthoud", "onthouden", "herinner", "herinneren", "remember", "remembered", "weet", "wist", "vergeet",
+            "onthou", "onthoud", "onthouden", "herinner", "herinneren", "remember", "remembered", "weet", "wist", "vergeet",
             "forget"
     );
     private static final Set<String> EVENT_WORDS = Set.of(
@@ -95,6 +95,15 @@ public final class AssistantIntentClassifier {
         if (isDirectMemoryRecall(normalized)) {
             return new Analysis(AssistantIntent.MEMORY_RECALL, AssistantMode.GROUNDED, language);
         }
+
+        // A player declaring or explicitly changing durable information is not asking us to recall old memory and is not
+        // asking for current live state. This must run before the broad memory/live keyword rules below. In particular,
+        // sentences such as "mijn lievelings block is netherite block" contain both a first-person cue and "block", but
+        // they describe a preference rather than the block currently in front of the player.
+        if (isMemoryWriteStatement(normalized) || isMemoryForgetStatement(normalized)) {
+            return new Analysis(AssistantIntent.CONVERSATION, AssistantMode.FAST, language);
+        }
+
         if (context.active() && containsAny(normalized, MEMORY_WORDS)) {
             return new Analysis(AssistantIntent.MEMORY_RECALL, AssistantMode.GROUNDED, language);
         }
@@ -127,6 +136,55 @@ public final class AssistantIntentClassifier {
             return new Analysis(AssistantIntent.CONTEXT_FOLLOWUP, mode, language);
         }
         return new Analysis(AssistantIntent.CONVERSATION, AssistantMode.FAST, language);
+    }
+
+    /**
+     * Strong, low-risk signal that the current message is a durable self-declaration or explicit remember command.
+     * This is intentionally narrower than generic first-person language so "ik heb een vraag" never becomes memory.
+     */
+    public static boolean isMemoryWriteStatement(String message) {
+        String normalized = cleanForRouting(message);
+        if (normalized.isBlank() || looksLikeQuestion(normalized) || isDirectMemoryRecall(normalized)) {
+            return false;
+        }
+        if (containsAnyPhrase(normalized, "onthou ", "onthou dat ", "onthoud ", "onthoud dat ", "onthouden dat ", "remember ", "remember that ")) {
+            return true;
+        }
+        return containsAnyPhrase(normalized,
+                "mijn favoriete ", "mijn lievelings ", "mijn favoriet ", "mijn voorkeur ",
+                "my favorite ", "my favourite ", "my preference ", "i prefer ",
+                "ik hou van ", "ik houd van ", "ik ben fan van ", "i like ", "i love ", "i am a fan of ",
+                "ik ben geïnteresseerd in ", "ik ben geinteresseerd in ", "i am interested in ", "i'm interested in ",
+                "mijn doel ", "my goal ", "ik werk aan ", "i am working on ", "i'm working on ",
+                "ik spaar voor ", "i am saving for ", "i'm saving for ",
+                "ik speel sinds ", "ik speel hier sinds ", "ik speel al sinds ",
+                "i play since ", "i have played since ", "i've played since ",
+                "ik heb bruin haar", "ik heb blond haar", "ik heb zwart haar", "ik heb rood haar",
+                "i have brown hair", "i have blonde hair", "i have blond hair", "i have black hair", "i have red hair"
+        );
+    }
+
+    public static boolean isMemoryForgetStatement(String message) {
+        String normalized = cleanForRouting(message);
+        return containsAnyPhrase(normalized,
+                "vergeet ", "vergeet dat ", "niet meer onthouden", "forget ", "forget that ", "don't remember ",
+                "do not remember "
+        );
+    }
+
+    private static boolean looksLikeQuestion(String message) {
+        String normalized = cleanForRouting(message);
+        if (normalized.endsWith("?")) {
+            return true;
+        }
+        return containsAnyPhrase(normalized,
+                "wat is ", "wat zijn ", "wat weet ", "wat heb ", "wie ", "waar ", "wanneer ", "hoe ", "waarom ",
+                "what is ", "what are ", "what do ", "what did ", "who ", "where ", "when ", "how ", "why "
+        );
+    }
+
+    private static String cleanForRouting(String message) {
+        return message == null ? "" : message.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
     }
 
     private static boolean isServerFactQuestion(String message) {
@@ -174,7 +232,18 @@ public final class AssistantIntentClassifier {
                 "wat heb je onthouden", "wat onthoud je van mij", "herinner je mij", "herinner je je mij",
                 "what do you remember about me", "what do you know about me", "what have you remembered about me",
                 "what have you saved about me", "do you remember me"
-        );
+        ) || isNamedPlayerMemoryRecall(message);
+    }
+
+    private static boolean isNamedPlayerMemoryRecall(String message) {
+        String normalized = cleanForRouting(message).replaceAll("[?!.,]+$", "").trim();
+        if (containsAny(normalized, GAMEPLAY_WORDS) || containsAny(normalized, SERVER_WORDS)) {
+            return false;
+        }
+        return normalized.matches(".*wat weet je (?:over|van) [a-z0-9_]{3,16}(?: haunty| ailex)?$")
+                || normalized.matches(".*wat herinner je (?:over|van) [a-z0-9_]{3,16}(?: haunty| ailex)?$")
+                || normalized.matches(".*what do you know about [a-z0-9_]{3,16}(?: haunty| ailex)?$")
+                || normalized.matches(".*what do you remember about [a-z0-9_]{3,16}(?: haunty| ailex)?$");
     }
 
     private static boolean isDirectEventRecall(String message) {
@@ -182,7 +251,10 @@ public final class AssistantIntentClassifier {
                 "wat gebeurde er", "wat is er gebeurd", "wat gebeurde vorige keer", "wat gebeurde er vorige keer",
                 "vorige keer gebeurde", "wat gebeurde eerder", "eerder vandaag gebeurde", "weet je nog wat er gebeurde",
                 "what happened", "what happened last time", "what happened earlier", "what happened before",
-                "last time what happened", "do you remember what happened"
+                "last time what happened", "do you remember what happened",
+                "wie vroeg net", "wie vroeg dat", "wie zei net", "wie zei dat", "wat vroeg je net", "wat zei je net",
+                "who just asked", "who asked that", "who just said", "who said that",
+                "what did you just ask", "what did you just say"
         );
     }
 
@@ -199,7 +271,7 @@ public final class AssistantIntentClassifier {
         }
         if (containsAnyPhrase(message,
                 "welk bioom", "welke biome", "welke bioom", "what biome", "which biome",
-                "welk blok", "welke block", "what block", "which block", "waar kijk ik", "what am i looking at",
+                "welk blok", "welk block", "welke block", "what block", "which block", "waar kijk ik", "what am i looking at",
                 "welke kant kijk", "which way am i facing", "what direction am i facing",
                 "welke wereld", "welk world", "what world", "which world", "welke dimensie", "what dimension")) {
             return true;

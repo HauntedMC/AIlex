@@ -10,15 +10,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class MemoryTopicViewTest {
 
     @Test
-    void topicViewKeepsExactEvidenceIdentityWhileCompactingContext() {
+    void topicViewKeepsExactTypedEvidenceIdentityWhileCompactingContext() {
         MemoryRecord project = record("a", MemoryKind.GOAL, "project.castle", "finish castle", Set.of("project"));
         MemoryRecord interest = record("b", MemoryKind.INTEREST, "favorite_build", "medieval", Set.of("build"));
 
         String rendered = new MemoryTopicView().render(List.of(project, interest), 1_000);
 
         assertTrue(rendered.contains("topic=project"));
-        assertTrue(rendered.contains("evidence_id=memory.a"));
-        assertTrue(rendered.contains("evidence_id=memory.b"));
+        assertTrue(rendered.contains("evidence_id=memory.player.a"));
+        assertTrue(rendered.contains("evidence_id=memory.player.b"));
         assertTrue(rendered.contains("project.castle=finish castle"));
     }
 
