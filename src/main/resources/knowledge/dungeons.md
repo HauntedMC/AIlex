@@ -1,17 +1,26 @@
 ---
-id: hauntedmc.survival-dungeons
+id: hauntedmc.dungeons
 title: Survival Dungeons
-aliases: [dungeon, dungeons, /warp dungeons, /dungeon leave, dungeon key, trial chamber, end city, bastion]
+aliases: [dungeon, dungeons, dungeon key, /warp dungeons, trial chamber, end city, bastion]
 category: gamemode-feature
-authority: official
-updated: 2026-08-26
+authority: reviewed
+updated: 2026-08-29
 expires: null
-source: https://www.hauntedmc.nl/threads/dungeon-update.16048/
+source: HauntedMC Dungeon update + current public Dungeons project reviewed 2026-08-29
 ---
 
-- Dungeons are special Survival worlds with separate maps, structures, mobs and loot. Go to the dungeon hub with `/warp dungeons`.
-- Start a dungeon through its matching NPC. A matching Dungeon Key is required; keys can be bought with Tokens or may be obtained through the Dungeon Crate route described in-game.
-- Use `/dungeon leave` to leave. Leaving consumes the key, so a new key is needed to start that dungeon again.
-- On death in a dungeon, players respawn in the dungeon and can retrieve items through the death chest at the death location. Fly and Godmode are disabled there.
-- Some dungeons have a cooldown after completion. Do not promise a particular dungeon, cooldown or reward unless it is currently visible in-game.
-- The official Dungeon update described Trial Chamber, End City and Bastion themes; check the dungeon hub for the currently available selection.
+## What Dungeons are
+Dungeons are a Survival feature built around separate replayable dungeon worlds/maps. Public HauntedMC descriptions explain that players can explore, fight, loot and complete content containing structures, mobs and rewards outside the normal persistent Survival worlds. A major design goal is making structure-style content repeatedly accessible instead of letting finite world structures be exhausted by early players.
+
+The current public Dungeons implementation supports configurable dungeon content with queueing, teams, triggers/functions, difficulty scaling and loot-table rewards. Exact player-facing availability is still determined by the live Survival dungeon hub.
+
+## Starting a dungeon
+The documented player hub is `/warp dungeons`. Dungeon NPCs represent available dungeons. Starting a dungeon requires the matching Dungeon Key or other access requirement shown by the current hub. Keys have been obtainable through HauntedMC reward/store systems including Tokens/Dungeon Crate routes, but exact current acquisition, costs and odds are volatile and must be checked live.
+
+Do not expose administrative dungeon-editor commands as normal player commands. The current player-safe route is the hub/NPC flow unless the live server tells the player otherwise.
+
+## Leaving, death and restrictions
+`/dungeon leave` is the documented leave command; older/current reviewed behaviour says leaving can consume the key, so warn players before suggesting it. Death returns the player through the configured dungeon/death flow and HauntedMC's protected death-item systems may apply. Rank invulnerability/mobility perks such as `/fly` or `/god` can be disabled in dungeon/combat contexts.
+
+## Known dungeon themes
+Reviewed public material has named Trial Chamber, End City and Bastion dungeon content. Treat those as known documented dungeon themes, not a guaranteed exhaustive live list. The dungeon hub or current announcement is the source of truth for which maps and difficulties are available now.

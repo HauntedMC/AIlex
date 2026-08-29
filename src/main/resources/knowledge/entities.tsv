@@ -28,13 +28,13 @@ discord-channel	#sport	sport,sports	Sports.
 discord-channel	#gaming-tech	gaming tech,gaming,technology,technologie	Gaming and technology.
 
 rank	Speler	player,speler	Base public player rank.
-rank	Elite	elite	Public rank.
-rank	Legend	legend	Public rank.
-rank	Supreme	supreme	Public rank.
-rank	Supreme+	supreme+,supreme plus	Highest public rank in the reviewed rank order.
+rank	Elite	elite	Current public rank.
+rank	Legend	legend	Current public rank.
+rank	Supreme	supreme	Current public rank.
+rank	Supreme+	supreme+,supreme plus	Highest current public rank in reviewed order.
 
-game-mode	Survival	survival	Currently active game-mode category.
-game-mode	Creative	creative	Currently active game-mode category.
+game-mode	Survival	survival,smp	Currently active game-mode category.
+game-mode	Creative	creative,plots	Currently active game-mode category.
 game-mode	Minigames	minigames,minigame	Currently active game-mode category.
 
 command	/help	help	In-game help route.
@@ -42,13 +42,26 @@ command	/rules	rules	Server rules route.
 command	/regels	regels	Dutch server rules route.
 command	/ranks	ranks	Current rank information.
 command	/discord	discord	Community Discord route.
-command	/support	support	Support route.
+command	/support	support	Official support route.
 command	/vote	vote,voting	Voting route.
-command	/link	link	HauntyLink account linking.
+command	/link	link,hauntylink	Account linking route.
 command	/lobby	lobby	Network lobby navigation.
 command	/menu	menu,server selector	Server Selector.
 command	/spawn	spawn	Spawn navigation.
+command	/limits	limits,limieten	Current server limits route.
+command	/maps	maps,dynmap	Public map information route.
 command	/autopickup	autopickup	AutoPickup toggle for eligible players.
-command	/lottery buy	lottery buy	Buy a lottery ticket; price and timing must come from current evidence.
+command	/lottery buy	lottery buy	Buy a lottery ticket; price/timing must come from live evidence.
 command	/fly	fly	FairPerks fly command.
 command	/god	god	FairPerks god command.
+command	/claim	claim	Create/manage a Survival land claim.
+command	/trust	trust	Survival claim trust command.
+command	/untrust	untrust	Revoke Survival claim trust.
+command	/sethome	sethome	Set a home.
+command	/tpa	tpa	Request teleport to another player.
+command	/randomtp	randomtp,rtp,wild	Random teleport route.
+command	/plot claim	plot claim	Claim a Creative plot.
+command	/warp dungeons	warp dungeons,dungeon hub	Survival Dungeon hub.
+command	/dungeon leave	dungeon leave	Leave the current dungeon; may consume access/key.
+command	/autoreconnect cancel	autoreconnect cancel	Cancel automatic reconnect after restart.
+command	/queue leave	queue leave	Leave a server queue.

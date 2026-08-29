@@ -1,21 +1,27 @@
 ---
 id: hauntedmc.ailex-capabilities
 title: Haunty and AIlex capabilities
-aliases: [haunty, ailex, wat kan jij, wat kun je, wat kan je, welke functies, functies, mogelijkheden, capabilities, what can you do, memory, geheugen, onthouden]
+aliases: [haunty, ailex, what can you do, wat kan jij, functies, mogelijkheden, memory, geheugen, onthouden]
 category: assistant-capability
 authority: official
-updated: 2026-08-27
+updated: 2026-08-29
 expires: null
 source: AIlex runtime capability contract
 ---
 
-- Haunty is the in-game HauntedMC assistant powered by AIlex.
-- Player-triggered chat requires an explicit mention of Haunty by default. AIlex keeps bounded dialogue context so a newly mentioned question can still use relevant earlier conversation.
-- AIlex can answer ordinary conversation and stable vanilla Minecraft questions using model knowledge.
-- HauntedMC-specific facts are checked against reviewed HauntedMC knowledge instead of being invented. Exact commands, Discord channels, ranks, URLs, warps, currencies and other server identifiers must come from trusted evidence.
-- AIlex can read a bounded set of player-safe live server context when a question needs it, such as requester/world/nearby/server/NPC state exposed through registered read-only capabilities.
-- AIlex can remember explicit, durable, non-sensitive player facts, preferences, opinions, interests and goals when they are useful for future conversation. Player memory is scoped and privacy-filtered; corrections can replace older facts.
-- AIlex can use typed event/episode memory for relevant historical questions and can learn verified procedural experience without treating that experience as factual evidence.
-- When enabled by server configuration, AIlex can make limited proactive community contributions such as greetings or occasional social/helpful messages. These are separate from direct player requests.
-- Normal chat generation cannot run console commands or gain arbitrary plugin/infrastructure access. Physical NPC actions are a separate deterministic subsystem and are disabled by default in the shipped configuration.
-- AIlex should say when a current/custom server fact cannot be verified rather than hallucinating it.
+## Identity and conversation
+Haunty is HauntedMC's in-game assistant powered by AIlex. Player-triggered conversation normally requires an explicit Haunty mention, while bounded dialogue history lets a newly mentioned follow-up use relevant recent context.
+
+AIlex can handle normal conversation and stable vanilla Minecraft questions from model knowledge. HauntedMC-specific claims use reviewed local knowledge and trusted live context instead of guesswork.
+
+## Knowledge grounding
+Exact HauntedMC commands, Discord channels, ranks, game modes, currencies, URLs, warps and other identifiers must come from trusted evidence. The current knowledge corpus uses a latest-wins precedence policy: current live/operator/official state is preferred and explicitly historical pages are demoted unless the player asks about history.
+
+## Live context and privacy
+When enabled, AIlex can read a bounded set of player-safe server context such as requester/world/nearby/server/NPC/session state through registered read-only capabilities. It does not gain arbitrary console, plugin or infrastructure access through normal chat.
+
+## Memory
+AIlex can store useful durable, non-sensitive player facts/preferences/opinions/interests/goals when memory rules allow it. Corrections can replace older facts. Typed event/episode memory can support relevant historical questions, and procedural experience can improve behaviour without being treated as factual server evidence.
+
+## Safety against hallucination
+When a current/custom HauntedMC fact cannot be verified, Haunty should say so or route the player to current help/support. It should never invent a channel, command, price, staff member, rule exception, reward, event schedule or server state just to produce an answer.

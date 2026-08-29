@@ -1,17 +1,31 @@
 ---
-id: hauntedmc.ranks-cosmetics-safety
-title: Ranks, cosmetics, account safety and rules
-aliases: [ranks, elite, legend, supreme, cosmetics, /cosmetics, 2fa, rules, report, support, dynmap]
-category: policy-and-help
-authority: official
-updated: 2026-08-26
+id: hauntedmc.ranks-cosmetics
+title: Current public ranks, cosmetics and perk safety
+aliases: [rank, ranks, speler, elite, legend, supreme, supreme+, cosmetics, pets, disguises, balloons, glow, particles]
+category: server-feature
+authority: operator-confirmed
+updated: 2026-08-29
 expires: null
-source: https://www.hauntedmc.nl/help/ | https://www.hauntedmc.nl/regels/
+source: HauntedMC operator-confirmed rank identifiers + public help/store review
 ---
 
-- The public rank order is Speler, Elite, Legend, Supreme and Supreme+. Rank benefits, limits, packages and prices can change, so use `/ranks` or the official Store for a current answer.
-- Cosmetics include Disguises, Pets, Particles, Balloons and Glow Effects. Use `/cosmetics`; related routes include `/pets`, `/disguises`, `/balloons`, `/glow` and `/pp`. Check the live menu for availability and cost.
-- Use `/2fa` in the hub to configure account two-factor authentication. Never ask a player for an authenticator or recovery code; lost-phone recovery belongs with Support.
-- Use `/dynmap hide` and `/dynmap show` to control Dynmap visibility. The official Help covers Dynmap, entity limits, HauntyLink, voting, privacy, terms, Store conditions and rules.
-- Core rules include respectful chat, no advertising, spam, harassment, cheats, hacked clients, X-ray, dupes, exploit abuse, griefing, death traps, spawn killing, chunk loaders, 0-tick farms or external-value trading. Report bugs to staff rather than using them.
-- AIlex is not staff. It must not decide reports, appeals, punishments, rollbacks, unbans, compensation, purchases, refunds or account recovery. Direct those matters to `/support`, staff or the official site.
+## Current public rank order
+The current verified public rank sequence is:
+1. `Speler`
+2. `Elite`
+3. `Legend`
+4. `Supreme`
+5. `Supreme+`
+
+This canonical list is exhaustive for current public player ranks in reviewed knowledge. Old store/history material may contain names such as `God`; do not resurrect an old rank from a historical purchase record. For current perks and limits use `/ranks` or the current Store.
+
+## Cosmetics
+HauntedMC has documented cosmetic families including Disguises, Pets, Particles, Balloons and Glow Effects. Player routes include `/cosmetics`, `/pets`, `/disguises`, `/balloons`, `/glow` and `/pp` where currently enabled.
+
+Cosmetic inventory, unlock method, fragment costs, store products, event exclusives and rank requirements change. Avoid inventing a cosmetic or its price.
+
+## Rank perks
+Documented rank-related systems include conveniences such as AutoPickup and FairPerks (`/fly`, `/god`) and variable capacity/limits for systems such as homes, claims, plots, WorldEdit or shop capacity. Always prefer `/ranks` for the current matrix. A perk can also be temporarily disabled by gameplay safety logic such as CombatTag or dungeon restrictions.
+
+## Security clarification
+The current public website uses email-based MFA under Account > Security. Older HauntedMC material mentioned an in-game `/2fa` system; do not conflate that legacy command with current website MFA unless current in-game help separately confirms it.
