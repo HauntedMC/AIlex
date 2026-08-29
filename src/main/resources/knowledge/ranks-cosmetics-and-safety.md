@@ -1,38 +1,29 @@
 ---
 id: hauntedmc.ranks-cosmetics
-title: Current rank tags, cosmetics and perk safety
+title: Rank tags, cosmetics and in-game 2FA
 aliases: [rank, ranks, gast, speler, elite, legend, supreme, supreme+, cosmetics, pets, disguises, balloons, glow, particles, fragments, refer, 2fa]
 category: server-feature
 authority: operator-confirmed
 updated: 2026-08-29
 expires: null
-source: operator-provided HauntedMC public rank/cosmetics/2FA documentation 2026-08-29
+source: operator-provided HauntedMC rank/cosmetics/2FA documentation 2026-08-29
 ---
 
-## Current rank tags and progression
-Current public documentation contains these rank tags/statuses: `Gast`, `Speler`, `Elite`, `Legend`, `Supreme` and `Supreme+`.
-
-`Gast` is a basic guest tag/status rather than a purchasable progression tier. The normal public player progression is `Speler` → `Elite` → `Legend` → `Supreme` → `Supreme+`. Do not resurrect historical rank/product names such as `God` as a current tier.
+## Ranks
+Current tags/statuses: `Gast`, `Speler`, `Elite`, `Legend`, `Supreme`, `Supreme+`. `Gast` is a guest/basic status, not a purchasable progression tier. Progression: **Speler → Elite → Legend → Supreme → Supreme+**. Historical names such as `God` are not current ranks.
 
 ## Cosmetics
-Cosmetic families are Disguises, Pets, Particle Effects/Styles, Balloons and Glow Effects. Use `/cosmetics` as the main selector; documented related routes include `/pets`, `/disguises`, `/balloons`, `/glow` and `/pp`.
+Families: Disguises, Pets, Particle Effects/Styles, Balloons, Glow Effects. Main route `/cosmetics`; related `/pets`, `/disguises`, `/balloons`, `/glow`, `/pp`. Four crate tiers (1–4); keys can use Cosmetic Fragments and may also be sold in the Store.
 
-The public cosmetics help documents four crate tiers: Tier 1 through Tier 4. Keys can be obtained with Cosmetic Fragments, while cosmetic keys may also be sold through the official Store.
+| Fragment source | Reward |
+|---|---:|
+| Vote | 10 |
+| Online | 25/hour |
+| Successful `/refer` | referrer 200; new player 400 |
 
-## Cosmetic Fragments and referrals
-The current operator-provided public help documents these fragment rewards:
-- voting: 10 Cosmetic Fragments;
-- online time: 25 Cosmetic Fragments per hour;
-- successful referral: 200 fragments to the referring player and 400 to the new player.
+Public help snapshot: 313 cosmetics; 49,150 fragments combined documented key cost. Live cosmetics menu overrides these counts if changed.
 
-The referral flow uses `/refer`. The same help snapshot documents 313 cosmetics in total and 49,150 fragments as the combined key cost across the documented cosmetic collection. If the live cosmetics menu has changed, the live menu wins over these counts.
+## In-game 2FA
+Current global docs list `/2fa` and `/2fa <code>`. In the hub, `/2fa` gives a one-time QR-code map for Google Authenticator or another authenticator; `/2fa <code>` verifies it. Re-authentication is documented after IP change or 30 days. Lost device: Support reset. Never request a live authenticator code in chat.
 
-## Rank perks
-Rank-dependent systems include `/skin`, `/nickname`, full-server access, `/ping`, poses, `/fly`, `/god`, AutoPickup, home/claim/plot/shop capacity, backpacks and WorldEdit limits. Exact current quantities are in the dedicated rank-features knowledge and `/ranks` remains the strongest live player-facing source.
-
-## In-game 2FA is separate from website MFA
-The current global command documentation still lists `/2fa` and `/2fa <code>`. In-game 2FA uses an authenticator app and is configured in the hub: `/2fa` provides a one-time QR-code map to scan, then `/2fa <code>` verifies the authenticator code.
-
-The documented in-game session requires a fresh code after an IP change or after 30 days. Lost-device resets go through Support. Never ask a player to reveal a live authenticator code in normal chat.
-
-Website email MFA is a separate website-account security mechanism. Do not treat the two systems as interchangeable.
+Website email MFA is separate; do not conflate the systems.
