@@ -14,6 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class KnowledgeCorpusBudgetRegressionTest {
 
+    private static final int COMPACT_KNOWLEDGE_TARGET_CHARACTERS = 80_000;
+
     @Test
     void bundledManagedKnowledgeMustFitDefaultExternalCorpusBudget() throws IOException {
         List<String> files;
@@ -41,6 +43,8 @@ class KnowledgeCorpusBudgetRegressionTest {
                 "Managed knowledge exceeds default corpus budget: " + characters);
         assertTrue(characters <= defaults.maxEvidenceCharacters(),
                 "Managed knowledge exceeds deliberate evidence window: " + characters);
+        assertTrue(characters <= COMPACT_KNOWLEDGE_TARGET_CHARACTERS,
+                "Managed knowledge lost its compact fact-dense shape: " + characters);
     }
 
     @Test
