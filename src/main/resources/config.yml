@@ -38,6 +38,7 @@ openai:
     retrieval:
       # Hybrid retrieval fuses lexical/BM25 precision with learned semantic recall and diversity suppression.
       # These are ceilings: ordinary questions still receive only the most relevant chunks.
+      hybrid_enabled: true
       max_chunks: 64
       max_evidence_characters: 140000
       query_cache_seconds: 300
