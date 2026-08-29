@@ -25,6 +25,9 @@ public interface NPC {
      */
     boolean despawn(DespawnReason reason);
 
+    /** Permanently removes this NPC from its Citizens registry. */
+    void destroy();
+
     /** @return the current Bukkit entity, or null while despawned */
     Entity getEntity();
 
