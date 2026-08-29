@@ -1,33 +1,31 @@
 ---
 id: hauntedmc.general-commands
 title: General HauntedMC player commands and navigation
-aliases: [/help, /rules, /regels, /ranks, /discord, /vote, /support, /msg, /reply, /link, /lobby, /menu, /spawn]
+aliases: [/help, /rules, /regels, /ranks, /discord, /vote, /support, /msg, /reply, /link, /lobby, /hub, /menu, /spawn, /lang, /2fa]
 category: commands
-authority: official
+authority: operator-confirmed
 updated: 2026-08-29
 expires: null
-source: HauntedMC public help corpus reviewed 2026-08-29
+source: operator-provided HauntedMC global rank/functions documentation + current changelogs
 ---
 
 ## Help and public information
-- `/help` — in-game help route.
-- `/regels` or `/rules` — server rules.
-- `/ranks` — current rank information and current rank-dependent limits.
-- `/discord` — HauntedMC Discord route.
-- `/support` — official support route.
-- `/vote` — voting information.
-- `/website`, `/forum`, `/winkel`, `/buy` or `/store` — public HauntedMC web surfaces where configured.
-- `/staff` — current staff/team information where available.
-- `/leaderboard`, `/maps`, `/limits`, `/claimtutorial` and `/kleurcodes` — public information utilities documented by HauntedMC. If one has been renamed or temporarily disabled, use `/help` rather than inventing a replacement.
+Documented public routes include `/help`, `/regels` or `/rules`, `/ranks`, `/discord`, `/support`, `/vote`, `/website`, `/forum`, `/winkel`, `/buy`, `/store`, `/vacatures`, `/limits`, `/leaderboard`, `/report`, `/shoptutorial`, `/hex`, `/claimtutorial`, `/kleurcodes`, `/staff`, `/maps` and `/flaghelp`.
 
 ## Messaging and social
-Private-message basics include `/msg <name> <message>`, `/r` or `/reply`, `/msg toggle`, `/msg block <name>`, `/msg unblock <name>` and `/msg mode`. `/friends` manages the friends system. Never expose private messages belonging to other players.
+Private-message routes include `/msg <name> <message>`, `/msg toggle`, `/msg block <name>`, `/msg unblock <name>`, `/r` or `/reply` and `/msg mode`. Friend routes include `/friends`, `/friends add <name>` and `/friends remove <name>`. `/chatreport <name>` is the documented chat-report route.
 
 ## Player stats and rewards
-Public player-oriented routes include `/rewards`, `/playtime [name]`, `/playtop` and `/afktop`. Exact rewards and leaderboard state are dynamic.
+Public player-oriented routes include `/rewards`, `/playtime`, `/playtime <name>`, `/playtop` and `/afktop`. Exact leaderboard/reward values are dynamic.
 
-## Account linking
-`/link` is the documented HauntyLink entry point for connecting Minecraft with HauntedMC services. Follow the official linking flow. Never ask a player to post passwords, authentication codes, recovery codes or other secrets in chat.
+## Account and platform linking
+`/link` is the Minecraft-to-HauntedMC account-link route and `/register` is also listed in current global documentation. `/linkbedrock` is the documented Bedrock-link route. Follow the official generated link flow rather than asking players for passwords or codes in chat.
+
+## Security
+Current global command documentation includes `/2fa` and `/2fa <code>` for in-game authenticator-based 2FA. Website email MFA is a separate system. Never ask a player to reveal a current MFA/authenticator code.
 
 ## Network navigation
-Use `/lobby` for the lobby, `/limbo` for limbo when applicable, `/server` for server navigation, `/glist` and `/list <gamemode>` for network/player-list utilities where available, `/menu` for the Server Selector and `/spawn` for spawn. Do not guess hidden backend server names.
+`/lobby` and `/hub` both route to an available lobby. Other documented network routes include `/limbo`, `/server`, `/glist`, `/list <gamemode>`, `/<gamemode>`, `/menu` for the Server Selector and `/spawn`.
+
+## Language
+HauntedMC supports player language preferences. Use `/lang <language>` to change language and `/language` or `/taal` to inspect the current language. The documented supported language codes are `nl`, `de` and `en`. The first-join language group can be selected automatically from location and can always be changed afterwards.
