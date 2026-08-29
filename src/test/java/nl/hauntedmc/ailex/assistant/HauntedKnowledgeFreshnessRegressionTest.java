@@ -23,17 +23,18 @@ class HauntedKnowledgeFreshnessRegressionTest {
     @Test
     void currentLimitsMustNotRestoreSupersededHundredSpawnerRule() throws IOException {
         String limits = resource("/knowledge/dynmap-and-limits.md");
-        assertTrue(limits.contains("`Speler`: 2 spawners"));
-        assertTrue(limits.contains("`Supreme`: 25 spawners"));
-        assertTrue(limits.contains("100 spawners per base is superseded"));
+        assertTrue(limits.contains("| Speler | 2 |"));
+        assertTrue(limits.contains("| Supreme | 25 |"));
+        assertTrue(limits.contains("old 100-spawners/base value is superseded"));
     }
 
     @Test
     void accountKnowledgeMustKeepWebsiteMfaAndInGameTwoFactorSeparate() throws IOException {
         String accounts = resource("/knowledge/website-accounts-and-mfa.md");
-        assertTrue(accounts.contains("Website email MFA"));
-        assertTrue(accounts.contains("In-game authenticator 2FA"));
+        assertTrue(accounts.contains("## Website account/MFA"));
+        assertTrue(accounts.contains("## In-game 2FA"));
         assertTrue(accounts.contains("`/2fa <code>`"));
+        assertTrue(accounts.contains("not interchangeable"));
     }
 
     @Test
@@ -41,7 +42,8 @@ class HauntedKnowledgeFreshnessRegressionTest {
         String dungeons = resource("/knowledge/dungeons.md");
         assertTrue(dungeons.contains("Ancient City"));
         assertTrue(dungeons.contains("`/dungeons team`"));
-        assertTrue(dungeons.contains("announced future dungeons"));
+        assertTrue(dungeons.contains("future work"));
+        assertTrue(dungeons.contains("do **not** call them live"));
     }
 
     private String resource(String path) throws IOException {
