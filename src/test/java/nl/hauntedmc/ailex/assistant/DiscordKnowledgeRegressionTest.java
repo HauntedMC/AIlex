@@ -20,8 +20,8 @@ class DiscordKnowledgeRegressionTest {
             assertTrue(knowledge.contains("`#announcements`"));
             assertTrue(knowledge.contains("`#changelogs`"));
             assertTrue(knowledge.contains("`#support`"));
-            assertTrue(knowledge.contains("There is no verified channel named `#aankondigingen`"));
-            assertTrue(knowledge.contains("never translate them"));
+            assertTrue(knowledge.contains("`#aankondigingen` is **not** a verified channel"));
+            assertTrue(knowledge.contains("never translate"));
         }
     }
 

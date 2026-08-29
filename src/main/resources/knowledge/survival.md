@@ -1,17 +1,26 @@
 ---
 id: hauntedmc.survival
-title: Survival essentials, claims and commands
-aliases: [survival, /claim, claims, homes, /home, /warp, randomtp, mcmmo, shops]
+title: HauntedMC Survival overview
+aliases: [survival, smp, claims, homes, shops, mcmmo, dungeons, deathchest, randomtp, rtp, chatgames, health bars]
 category: gamemode
-authority: official
-updated: 2026-08-26
+authority: operator-confirmed
+updated: 2026-08-29
 expires: null
-source: https://www.hauntedmc.nl/help/
+source: operator-provided HauntedMC Survival help/changelogs through 2026-08-17
 ---
 
-- Protect a Survival build with `/claim`, `/newclaim` or `/makeclaim`. Manage trusted players with `/trust`, `/containertrust`, `/accesstrust`, `/permissiontrust`, `/untrust`, `/trustlist` and `/claimslist`. Use `/trapped` if stuck in a claim.
-- Manage homes with `/homes`, `/sethome <name>` and `/delhome <name>`. The exact home limit depends on rank, so direct rank-limit questions to `/ranks` when needed.
-- Money commands include `/money` (or `/balance`), `/pay`, `/paytoggle` and `/payconfirmtoggle`. Teleport basics are `/tpa`, `/tpaccept`, `/tpdeny`, `/tptoggle`, `/tpahere`, `/back` and `/spawn`.
-- Use `/warp` or `/warps` to view available warps. Use `/randomtp`, `/rtp` or `/wild` for RandomTP. Do not promise a specific warp or reward unless it is visible in-game.
-- Vote with `/vote`; check current crate and vote rewards in-game because they can change. McMMO help includes `/mcstats`, `/mctop <skill>`, `/mcrank`, `/mcmmo help`, `/mcinfo`, `/party` and `/redeem`.
-- Survival has player shops and protected death chests. Rent a shop by right-clicking at `/warp mall`. Trust only people you know with a shop, claim or inventory access.
+Survival systems: claims, homes/teleports, economy/player shops, voting/rewards, McMMO, DeathChests, AutoPickup, Dungeons, rank perks, chatgames and events.
+
+## Core commands
+Claims: `/claim`/`/newclaim`/`/makeclaim`, `/trust`, `/containertrust`, `/accesstrust`, `/permissiontrust`, `/untrust`, `/trustlist`, `/claimslist`, `/trapped`. Homes: `/homes`, `/sethome <name>`, `/delhome <name>`; quantities are rank-dependent.
+
+Travel: `/tpa`, `/tpaccept` (`/tpyes`), `/tpdeny` (`/tpno`), `/tptoggle`, `/tpahere`, `/back`, `/spawn`, `/warp`/`/warps`, `/randomtp`/`/rtp`/`/wild`.
+
+McMMO: `/mcstats`, `/mctop <skill>`, `/mcrank`, `/mcmmo help`, `/mcinfo`, `/party`, `/redeem`. Shops center on `/warp mall`; `/finditem` searches indexed shops.
+
+## Current gameplay additions
+29 Jul 2026 chatgames: block-break, eat-food, trivia, hangman, mob-kill, speed-typing, math, block-place. Same update refreshed mob health bars to two-decimal health display.
+
+`/god`/`/godmacro` preserve current health/hunger instead of healing when toggled. Rank perks may be disabled in combat, dungeons or restricted worlds.
+
+Current rules prohibit griefing, scamming, exploits, unfair automation, lag machines, prohibited PvP/deathtraps and abusive structure/resource behavior; current rules/`/limits` override old numeric articles.

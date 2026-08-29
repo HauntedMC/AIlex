@@ -1,17 +1,24 @@
 ---
 id: hauntedmc.general-commands
-title: General player commands and navigation
-aliases: [/help, /rules, /regels, /ranks, /discord, /vote, /support, /msg, /reply, /link, /lobby]
+title: General HauntedMC commands and navigation
+aliases: [/help, /rules, /regels, /ranks, /discord, /vote, /support, /msg, /reply, /link, /lobby, /hub, /menu, /spawn, /lang, /2fa]
 category: commands
-authority: official
-updated: 2026-08-26
+authority: operator-confirmed
+updated: 2026-08-29
 expires: null
-source: https://www.hauntedmc.nl/help/
+source: operator-provided HauntedMC global functions documentation + current changelogs
 ---
 
-- Use `/help` for the in-game help route, `/regels` or `/rules` for server rules, `/ranks` for current rank information, `/discord` for the community Discord, and `/support` for support.
-- Public information routes include `/website`, `/winkel` (also `/buy` or `/store`), `/forum`, `/vote`, `/staff`, `/leaderboard`, `/maps`, `/limits`, `/claimtutorial` and `/kleurcodes`.
-- Private-message basics are `/msg <name> <message>`, `/r` (or `/reply`), `/msg toggle`, `/msg block <name>` and `/msg unblock <name>`. `/friends` manages the friends system.
-- Player statistics and rewards can be viewed with `/rewards`, `/playtime [name]`, `/playtop` and `/afktop`.
-- HauntyLink connects Minecraft with HauntedMC services. Use `/link` and follow the official link flow; never request a password or a verification code in chat.
-- Network navigation includes `/lobby`, `/limbo`, `/server`, `/glist`, `/list <gamemode>` and the relevant game-mode command. Use `/menu` for the Server Selector and `/spawn` for spawn.
+## Information
+`/help`; `/regels`/`/rules`; `/ranks`; `/discord`; `/support`; `/vote`; `/website`; `/forum`; `/winkel`/`/buy`/`/store`; `/vacatures`; `/limits`; `/leaderboard`; `/report`; `/shoptutorial`; `/hex`; `/claimtutorial`; `/kleurcodes`; `/staff`; `/maps`; `/flaghelp`.
+
+## Social/reporting
+`/msg <name> <message>`, `/msg toggle`, `/msg block <name>`, `/msg unblock <name>`, `/r`/`/reply`, `/msg mode`; `/friends`, `/friends add <name>`, `/friends remove <name>`; `/chatreport <name>`.
+
+## Stats/account/security
+Stats: `/rewards`, `/playtime [name]`, `/playtop`, `/afktop`. Linking: `/link`, `/register`, `/linkbedrock`. In-game authenticator security: `/2fa`, `/2fa <code>`; website email MFA is separate. Never request credentials/codes in chat.
+
+## Navigation/language
+Network: `/lobby`/`/hub`, `/limbo`, `/server`, `/glist`, `/list <gamemode>`, `/<gamemode>`, `/menu`, `/spawn`. `/hub` selects an available lobby.
+
+Language: `/lang <language>`; `/language`/`/taal` shows current preference. Codes: `nl`, `de`, `en`; first-join language may be location-derived and can be changed later.

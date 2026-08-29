@@ -17,8 +17,8 @@ import java.util.stream.Stream;
 public class KnowledgeRepository {
 
     private static final String KNOWLEDGE_PATH = "openai.knowledge";
-    private static final int DEFAULT_MAX_FILES = 20;
-    private static final int DEFAULT_MAX_CHARACTERS = 30000;
+    private static final int DEFAULT_MAX_FILES = 192;
+    private static final int DEFAULT_MAX_CHARACTERS = 500_000;
 
     private final JavaPlugin plugin;
 
@@ -47,11 +47,11 @@ public class KnowledgeRepository {
             return "";
         }
 
-        int maxFiles = Math.clamp(config.getInt(KNOWLEDGE_PATH + ".external.max_files", DEFAULT_MAX_FILES), 1, 100);
+        int maxFiles = Math.clamp(config.getInt(KNOWLEDGE_PATH + ".external.max_files", DEFAULT_MAX_FILES), 1, 256);
         int maxCharacters = Math.clamp(
                 config.getInt(KNOWLEDGE_PATH + ".external.max_characters", DEFAULT_MAX_CHARACTERS),
                 1,
-                120000
+                1_000_000
         );
         StringBuilder knowledge = new StringBuilder();
         try (Stream<Path> paths = Files.list(knowledgeDirectory)) {

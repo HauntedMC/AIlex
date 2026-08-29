@@ -223,11 +223,11 @@ class AssistantIntentClassifierTest {
     void shouldUseRicherBoundedDefaultsWithoutMakingFastChatUnbounded() {
         AssistantSettings settings = AssistantSettings.defaults();
 
-        assertEquals(4_000, settings.maxInputTokens(AssistantMode.FAST));
-        assertEquals(12_000, settings.maxInputTokens(AssistantMode.GROUNDED));
-        assertEquals(24_000, settings.maxInputTokens(AssistantMode.DELIBERATE));
-        assertEquals(12, settings.maxChunks());
-        assertEquals(32_000, settings.maxEvidenceCharacters());
+        assertEquals(8_000, settings.maxInputTokens(AssistantMode.FAST));
+        assertEquals(32_000, settings.maxInputTokens(AssistantMode.GROUNDED));
+        assertEquals(64_000, settings.maxInputTokens(AssistantMode.DELIBERATE));
+        assertEquals(64, settings.maxChunks());
+        assertEquals(140_000, settings.maxEvidenceCharacters());
         assertEquals("gpt-5.6-terra", settings.profileFor(AssistantMode.FAST).model());
         assertEquals(400, settings.profileFor(AssistantMode.FAST).maxOutputTokens());
         assertEquals(640, settings.profileFor(AssistantMode.GROUNDED).maxOutputTokens());

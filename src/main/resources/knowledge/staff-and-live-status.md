@@ -1,15 +1,18 @@
 ---
-id: hauntedmc.staff-and-live-status
-title: Staff and live player status
-aliases: [staff, staffleden, team, owner, admin, manager, moderator, online, spelers online, active players]
-category: current-community
+id: hauntedmc.staff-live-status
+title: Staff snapshots and live player status
+aliases: [staff, staffleden, team, owner, admin, manager, moderator, online players, spelers online]
+category: current-status
 authority: official
 updated: 2026-08-26
-expires: null
+expires: 2026-09-30
 source: https://www.hauntedmc.nl/leden/?key=staff_members
 ---
 
-- The official Haunted Team page listed these staff members on 26 August 2026: remymine (Owner), Stuyvert (Admin), AFlyingMedic (Manager) and ChicChinouk (Moderator).
-- Staff roles can change. For a current list, use `/staff` or the official Haunted Team page rather than relying only on this snapshot.
-- The number of active in-game players is live information. AIlex must use the current Paper server snapshot for player-count questions, not this knowledge file or the website's visitor count.
-- Do not reveal names, locations or activity of other currently online players unless the server's privacy configuration explicitly permits it.
+## Reviewed staff snapshot
+The official Haunted Team page listed the following on 26 August 2026: `remymine` (Owner), `Stuyvert` (Admin), `AFlyingMedic` (Manager) and `ChicChinouk` (Moderator).
+
+This is a dated snapshot, not a permanent roster. Use `/staff` or the current official team page for “who is staff now?” when live/current evidence is available. Do not infer that a person remains staff after this snapshot expires.
+
+## Online players
+Online player count and who is currently present are live facts. Use trusted server context for a current count rather than a website visitor count or an old server-listing snapshot. Respect configured player privacy: do not reveal another player's hidden location, private activity, messages or other non-public state.

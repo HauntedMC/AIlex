@@ -12,7 +12,7 @@ openai:
     enabled: true
     # Adaptive keeps ordinary chat responsive while factual/current-state work gets stronger grounding and reasoning.
     mode: "adaptive"
-    # 18s was too aggressive for grounded structured responses and caused healthy requests to be killed locally.
+    # Grounded structured responses need room for retrieval and verification without being killed locally.
     total_deadline_seconds: 30
     # Two read/planning calls + answer + one evidence-driven escalation remain inside this hard request budget.
     max_model_calls: 4
@@ -30,15 +30,17 @@ openai:
         minimum_similarity: 0.42
         minimum_margin: 0.025
     context:
-      # Hard ceilings, not targets. Do not increase these just because the underlying model supports a huge context window.
-      max_input_tokens_fast: 4000
-      max_input_tokens_grounded: 12000
-      max_input_tokens_deliberate: 24000
+      # Hard ceilings, not targets. Fast chat stays compact; grounded/deliberate modes can carry a much larger
+      # reviewed corpus. The deliberate evidence partition is large enough for the complete managed corpus.
+      max_input_tokens_fast: 8000
+      max_input_tokens_grounded: 32000
+      max_input_tokens_deliberate: 64000
     retrieval:
       # Hybrid retrieval fuses lexical/BM25 precision with learned semantic recall and diversity suppression.
+      # These are ceilings: ordinary questions still receive only the most relevant chunks.
       hybrid_enabled: true
-      max_chunks: 12
-      max_evidence_characters: 32000
+      max_chunks: 64
+      max_evidence_characters: 140000
       query_cache_seconds: 300
       exclude_expired: true
       semantic_embeddings:
@@ -203,20 +205,25 @@ openai:
       message: "Je hebt de AI-limiet bereikt. Probeer het over {remaining_seconds} seconden opnieuw."
   knowledge:
     enabled: true
-    max_characters: 32000
+    # Legacy aggregate ceiling retained for compatibility. The local index uses the external corpus limits below.
+    max_characters: 500000
     # Reviewed knowledge articles are indexed locally. Never put secrets, staff notes, reports, API keys,
-    # IP addresses, sanctions or personal data here because retrieved evidence can be sent to the model.
+    # private infrastructure, sanctions or personal data here because retrieved evidence can be sent to the model.
     external:
       enabled: true
       directory: "knowledge"
-      max_files: 64
-      max_characters: 120000
+      max_files: 192
+      max_characters: 500000
     prompt: |-
       Gebruik de gereviewde bestanden in knowledge/ als bron voor HauntedMC-specifieke feiten.
-      Geef live Paper-state voor actuele toestand voorrang en verzin nooit ontbrekende commands, prijzen,
-      rewards, warps, ranks, resetdatums, Discord-kanalen of beschikbaarheid. Kopieer server-identifiers exact uit bewijs;
-      vertaal of lokaliseer kanaalnamen, commands, URLs, ranks, roles, warps of menu-namen nooit.
-      Bij onvoldoende bewijs: verifieer of onthoud je.
+      Voor conflicterende informatie geldt: live server-state > operator-confirmed current knowledge > nieuwste officiële
+      HauntedMC-pagina/changelog/help > oudere officiële informatie > reviewed third-party evidence > historical/legacy.
+      Een nieuwere specifieke bron overschrijft een oudere bron over hetzelfde onderwerp. Gebruik historical/legacy alleen
+      voor expliciet historische vragen en presenteer die informatie in de verleden tijd.
+      Verzin nooit ontbrekende commands, prijzen, rewards, warps, ranks, resetdatums, eventtijden, Discord-kanalen,
+      staffleden, versies of beschikbaarheid. Kopieer server-identifiers exact uit bewijs; vertaal of lokaliseer
+      kanaalnamen, commands, URLs, ranks, roles, warps of menu-namen nooit. Bij onvoldoende bewijs: zeg dat je het niet
+      actueel kunt verifiëren en verwijs waar nuttig naar /help, /ranks, /vote, /staff, /menu of /support.
   chat_context:
     enabled: true
     # Ambient/raw chat is short-lived context only. Durable knowledge belongs in typed semantic/episodic memory.

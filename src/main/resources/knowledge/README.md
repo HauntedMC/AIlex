@@ -1,50 +1,44 @@
-# AIlex knowledge base
+# AIlex reviewed HauntedMC knowledge
 
-AIlex ships with reviewed HauntedMC guides for core server topics. Every managed file listed in `index.txt` is refreshed
-from the plugin JAR on startup so the runtime uses the bundled reviewed source of truth. Add your own durable local
-documentation as separate Markdown files; files not listed in `index.txt` are never overwritten by the built-in knowledge
-synchronizer.
+This directory is the player-facing, reviewed HauntedMC knowledge corpus used by Haunty. It is intentionally much more detailed than the runtime system prompt: factual server questions are answered by retrieving the relevant chunks from this corpus.
 
-Keep each item concise, factual, dated where it can change, and sourced from an approved HauntedMC document or live system.
+## Source and freshness policy
 
-For larger articles, use front matter so AIlex can retrieve and audit a source precisely:
+Use sources in this order when facts conflict:
 
-```md
----
-id: survival.claims
-title: Survival claims
-aliases: [/claim, claims, protect build]
-category: server-fact
-authority: official
-updated: 2026-08-25
-expires: null
----
-Use /claim to protect a Survival build.
-```
+1. trusted live Paper/Velocity state exposed by AIlex for facts that are inherently live;
+2. operator-confirmed current facts;
+3. the newest official HauntedMC page, rule, help page, changelog or announcement;
+4. older official HauntedMC documentation that has not been contradicted;
+5. reviewed third-party observations only for corroboration;
+6. historical/legacy material only for historical questions.
 
-`expires` is optional. Set it for temporary events, rotations, prices, or other facts which must not be used after a date.
+A newer specific statement overrides an older statement about the same subject. Historical articles remain searchable so Haunty can answer questions about the server's past, but they must not be used to describe current availability, rules, ranks, prices, schedules or versions.
 
-## Canonical identifiers
+## Managed resources
 
-`entities.tsv` is the reviewed source of truth for exact HauntedMC identifiers such as Discord channels, public ranks,
-active game-mode names and known commands. The plugin deterministically renders it to
-`canonical-identifiers.generated.md` before the knowledge index starts. Do not edit the generated Markdown file.
+Files listed in `index.txt` are bundled and overwritten from the plugin JAR on every AIlex startup. Operator-authored extra knowledge must use a filename that is not listed in the manifest. `entities.tsv` contains reviewed canonical identifiers and is also managed by the manifest.
 
-The TSV format is:
+Each Markdown article uses front matter with `id`, `title`, `aliases`, `category`, `authority`, `updated`, `expires` and `source`. `##` headings become independent retrieval chunks, so long subjects should be split into useful factual sections instead of one giant passage.
 
-```text
-kind<TAB>canonical<TAB>comma-separated query aliases<TAB>description
-```
+Recommended authority values:
 
-A line such as `@complete<TAB>discord-channel` declares that the listed identifiers for that kind are exhaustive. AIlex may
-therefore use absence from that reviewed set as negative evidence. Do this only when the operator-maintained set really is
-complete. Commands are deliberately not marked complete because HauntedMC has more commands than the small player-help set
-included here.
+- `operator-confirmed`: current fact explicitly verified by HauntedMC operators;
+- `official`: current HauntedMC public documentation;
+- `reviewed`: fact reconciled from older official material and current evidence;
+- `trusted`: useful corroborating source;
+- `historical`: superseded or time-bound HauntedMC history.
 
-Aliases are retrieval phrases, not alternate identifiers. For example, the Dutch word `aankondigingen` may retrieve the
-canonical Discord entry `#announcements`, but `#aankondigingen` itself is not thereby made into a valid channel name.
+## What belongs here
 
-- Do not add passwords, API keys, player reports, ticket contents, IP addresses, staff-only procedures, sanctions, or any other personal or confidential data. Everything in this directory may be sent to the language model.
-- Use one topic per bullet and include the player-facing command or official support route where useful.
-- Treat exact commands, Discord channels, URLs, ranks, roles, warps and menu names as identifiers: store the canonical spelling and do not add translated aliases as if they were real identifiers.
-- Remove or update time-sensitive facts (events, prices, rotations, queues, staff lists, availability) as soon as they change.
+Include information a normal player may safely know: commands, gameplay systems, rules, public account/store/help information, public community identifiers, current game-mode state, public update details, and historical server facts where clearly marked.
+
+Never include passwords, API keys, tokens, IPs for private infrastructure, database details, internal staff notes, reports, sanctions, private player data, anti-cheat internals, exploit instructions, or unpublished operational information.
+
+## Volatile facts
+
+Do not hard-code volatile values such as online player count, current queue size, current jackpot, exact store prices, limited-time discounts, temporary event times, current staff activity or exact current server version unless the article is explicitly a short-lived snapshot with an expiry date. Prefer live server state, `/ranks`, `/vote`, `/staff`, the current store, the current event announcement, or support.
+
+## Maintenance
+
+When updating knowledge, review old pages too. Do not simply append a new article that contradicts an old one: either update the old managed file, recategorize the older statement as historical, or remove the obsolete current claim. After changes run the knowledge regression tests and `/ailex ai rebuild-index` (or restart AIlex) so the local hybrid index and embeddings are rebuilt.

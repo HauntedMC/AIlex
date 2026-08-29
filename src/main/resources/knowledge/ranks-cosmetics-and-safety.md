@@ -1,17 +1,29 @@
 ---
-id: hauntedmc.ranks-cosmetics-safety
-title: Ranks, cosmetics, account safety and rules
-aliases: [ranks, elite, legend, supreme, cosmetics, /cosmetics, 2fa, rules, report, support, dynmap]
-category: policy-and-help
-authority: official
-updated: 2026-08-26
+id: hauntedmc.ranks-cosmetics
+title: Rank tags, cosmetics and in-game 2FA
+aliases: [rank, ranks, gast, speler, elite, legend, supreme, supreme+, cosmetics, pets, disguises, balloons, glow, particles, fragments, refer, 2fa]
+category: server-feature
+authority: operator-confirmed
+updated: 2026-08-29
 expires: null
-source: https://www.hauntedmc.nl/help/ | https://www.hauntedmc.nl/regels/
+source: operator-provided HauntedMC rank/cosmetics/2FA documentation 2026-08-29
 ---
 
-- The public rank order is Speler, Elite, Legend, Supreme and Supreme+. Rank benefits, limits, packages and prices can change, so use `/ranks` or the official Store for a current answer.
-- Cosmetics include Disguises, Pets, Particles, Balloons and Glow Effects. Use `/cosmetics`; related routes include `/pets`, `/disguises`, `/balloons`, `/glow` and `/pp`. Check the live menu for availability and cost.
-- Use `/2fa` in the hub to configure account two-factor authentication. Never ask a player for an authenticator or recovery code; lost-phone recovery belongs with Support.
-- Use `/dynmap hide` and `/dynmap show` to control Dynmap visibility. The official Help covers Dynmap, entity limits, HauntyLink, voting, privacy, terms, Store conditions and rules.
-- Core rules include respectful chat, no advertising, spam, harassment, cheats, hacked clients, X-ray, dupes, exploit abuse, griefing, death traps, spawn killing, chunk loaders, 0-tick farms or external-value trading. Report bugs to staff rather than using them.
-- AIlex is not staff. It must not decide reports, appeals, punishments, rollbacks, unbans, compensation, purchases, refunds or account recovery. Direct those matters to `/support`, staff or the official site.
+## Ranks
+Current tags/statuses: `Gast`, `Speler`, `Elite`, `Legend`, `Supreme`, `Supreme+`. `Gast` is a guest/basic status, not a purchasable progression tier. Progression: **Speler → Elite → Legend → Supreme → Supreme+**. Historical names such as `God` are not current ranks.
+
+## Cosmetics
+Families: Disguises, Pets, Particle Effects/Styles, Balloons, Glow Effects. Main route `/cosmetics`; related `/pets`, `/disguises`, `/balloons`, `/glow`, `/pp`. Four crate tiers (1–4); keys can use Cosmetic Fragments and may also be sold in the Store.
+
+| Fragment source | Reward |
+|---|---:|
+| Vote | 10 |
+| Online | 25/hour |
+| Successful `/refer` | referrer 200; new player 400 |
+
+Public help snapshot: 313 cosmetics; 49,150 fragments combined documented key cost. Live cosmetics menu overrides these counts if changed.
+
+## In-game 2FA
+Current global docs list `/2fa` and `/2fa <code>`. In the hub, `/2fa` gives a one-time QR-code map for Google Authenticator or another authenticator; `/2fa <code>` verifies it. Re-authentication is documented after IP change or 30 days. Lost device: Support reset. Never request a live authenticator code in chat.
+
+Website email MFA is separate; do not conflate the systems.

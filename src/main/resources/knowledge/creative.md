@@ -1,17 +1,23 @@
 ---
 id: hauntedmc.creative
-title: Creative plots and building tools
-aliases: [creative, plot, plots, /plot, worldedit, //wand, haunted city]
+title: HauntedMC Creative plots, building and WorldEdit
+aliases: [creative, plots, plot, worldedit, //wand, build, city, roleplay, plot limit, worldedit limit]
 category: gamemode
-authority: official
-updated: 2026-08-26
+authority: operator-confirmed
+updated: 2026-08-29
 expires: null
-source: https://www.hauntedmc.nl/help/
+source: operator-provided HauntedMC Creative rank/functions documentation 2026-08-29
 ---
 
-- Start or manage a Creative plot with `/plot claim`, `/plot auto`, `/plot home`, `/plot visit` (or `/plot tp`), `/plot list`, `/plot info`, `/plot delete` and `/plot clear`.
-- Manage plot access with `/plot trust <name>`, `/plot add <name>`, `/plot remove <name>`, `/plot deny <name>` and `/plot kick <name>`. Only trust players you know.
-- Plot customization includes `/plot sethome`, `/plot setbiome <biome>`, `/plot setdescription <text>`, `/plot flag`, `/plot music`, `/plot middle`, `/plot rate` and `/plot comment`.
-- `/plot help` is the safe next step when a player needs syntax or a feature that is not listed here.
-- Building limits and advanced WorldEdit features depend on rank. Basic WorldEdit tools include `//wand`, `//pos1`, `//pos2`, `//set`, `//replace`, `//copy`, `//paste`, `//undo` and `//redo` for eligible ranks.
-- `/warp city` leads to Haunted City. Do not promise plot, WorldEdit, home or warp limits without checking `/ranks` or the live menu.
+## Plots
+Core: `/plot claim`, `/plot auto`, `/plot home`, `/plot visit`, `/plot tp`, `/plot list`, `/plot info`, `/plot sethome`, `/plot delete`, `/plot clear`, `/plot help`. Delete/clear are destructive.
+
+Access: `/plot trust <name>`, `/plot add <name>`, `/plot remove <name>`, `/plot deny <name>`, `/plot kick <name>`. Customize: `/plot setbiome`, `/plot setdescription`, `/plot flag`, `/plot music`, `/plot middle`, `/plot rate`, `/plot comment`, `/plot inbox`, `/plot target`, `/plot toggle titles`.
+
+Plots: Speler 2; Elite 6; Legend 8; Supreme 20; no separate Supreme+ count stated. Merging starts at Legend, max 4 plots/cluster; documented merge routes include auto/all/directional/removeroads plus `/plot unlink`.
+
+## WorldEdit
+Available from Elite. Max blocks/action: Elite 50,000; Legend 100,000; Supreme 500,000; Supreme+ 1,000,000. Core families: selection (`//wand`, `//pos1`, `//pos2`), editing (`//set`, `//replace`, `//cut`, `//copy`, `//paste`, `//move`, `//stack`), history (`//undo`, `//redo`), shapes/brushes. Legend adds terrain/biome/generation; Supreme adds advanced brushes/editing. Use live help for exact syntax.
+
+## Other
+Creative also has normal home/economy/teleport/pose utilities, higher-rank personal warps and documented `/warp city`. Use `/warps`/`/ranks` for current availability.
