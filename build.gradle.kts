@@ -17,28 +17,17 @@ group = "nl.hauntedmc.ailex"
 version = "1.9.2"
 description = "AIlex"
 
-val citizensVersion = "2.0.43-b4239"
-
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
-    // Citizens' Maven snapshot endpoint can reject GitHub-hosted runners with HTTP 403. Resolve the exact official
-    // Jenkins distribution used for compilation instead; Citizens itself remains server-provided and is never shaded.
-    ivy {
-        name = "CitizensJenkins"
-        url = uri("https://ci.citizensnpcs.co/job/Citizens2/4239/artifact/dist/target/")
-        patternLayout {
-            artifact("[artifact]-[revision].[ext]")
-        }
-        metadataSources {
-            artifact()
-        }
-        content {
-            includeModule("net.citizensnpcs", "Citizens")
-        }
-    }
     maven("https://repo.alessiodp.com/releases/")
     maven("https://repo.codemc.io/repository/maven-releases/")
+}
+
+// Citizens is supplied by the server. Small binary-signature-compatible compile stubs live in a separate source
+// directory so builds never depend on Citizens' intermittently blocked Maven/Jenkins hosts. They are excluded from jars.
+sourceSets.main {
+    java.srcDir("src/citizens-stubs/java")
 }
 
 // Only dependencies in this configuration are embedded in AIlex.jar. Paper/Citizens remain server-provided.
@@ -47,9 +36,6 @@ val bundled by configurations.creating
 dependencies {
     paperweight.paperDevBundle("26.2.build.118-stable")
     implementation("net.kyori:adventure-api:5.2.0")
-    compileOnly("net.citizensnpcs:Citizens:$citizensVersion") {
-        isTransitive = false
-    }
     compileOnly("com.github.retrooper:packetevents-spigot:2.13.0")
 
     // Local durable memory uses SQLite/WAL. Shared network memory can use MySQL; bundle both JDBC drivers only.
@@ -67,9 +53,6 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("org.mockito:mockito-junit-jupiter:5.23.0")
     testImplementation("org.mockito:mockito-inline:5.2.0")
-    testImplementation("net.citizensnpcs:Citizens:$citizensVersion") {
-        isTransitive = false
-    }
     testImplementation("com.github.retrooper:packetevents-spigot:2.13.0")
     testImplementation("org.xerial:sqlite-jdbc:3.53.2.1")
     testImplementation("com.mysql:mysql-connector-j:26.7.0")
@@ -143,6 +126,11 @@ tasks.jar {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from(bundled.map { dependency -> if (dependency.isDirectory) dependency else zipTree(dependency) })
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
+    exclude("net/citizensnpcs/**")
+}
+
+tasks.named<org.gradle.jvm.tasks.Jar>("sourcesJar") {
+    exclude("net/citizensnpcs/**")
 }
 
 tasks.test {
@@ -158,6 +146,10 @@ tasks.withType<Checkstyle>().configureEach {
         xml.required.set(true)
         html.required.set(true)
     }
+}
+
+tasks.named<Checkstyle>("checkstyleMain") {
+    exclude("net/citizensnpcs/**")
 }
 
 tasks.withType<JacocoReport>().configureEach {
