@@ -39,6 +39,8 @@ class KnowledgeCorpusBudgetRegressionTest {
                 "Managed knowledge file count exceeds default corpus budget: " + files.size());
         assertTrue(characters <= defaults.externalMaxCharacters(),
                 "Managed knowledge exceeds default corpus budget: " + characters);
+        assertTrue(characters <= defaults.maxEvidenceCharacters(),
+                "Managed knowledge exceeds deliberate evidence window: " + characters);
     }
 
     @Test
