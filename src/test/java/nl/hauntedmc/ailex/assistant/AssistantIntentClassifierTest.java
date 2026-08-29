@@ -1,12 +1,10 @@
 package nl.hauntedmc.ailex.assistant;
 
-import nl.hauntedmc.ailex.assistant.application.AssistantIntentClassifier;
-import nl.hauntedmc.ailex.assistant.application.RequiredContextPlanner;
+import nl.hauntedmc.ailex.assistant.application.routing.AssistantIntentClassifier;
+import nl.hauntedmc.ailex.assistant.domain.AssistantDialogueContext;
 import nl.hauntedmc.ailex.assistant.domain.AssistantIntent;
 import nl.hauntedmc.ailex.assistant.domain.AssistantMode;
-import nl.hauntedmc.ailex.assistant.domain.AssistantRoute;
 import nl.hauntedmc.ailex.assistant.domain.AssistantSettings;
-import nl.hauntedmc.ailex.assistant.domain.AssistantSource;
 
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.Test;
@@ -19,170 +17,191 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AssistantIntentClassifierTest {
 
-    private final AssistantIntentClassifier classifier = new AssistantIntentClassifier();
-    private final RequiredContextPlanner planner = new RequiredContextPlanner();
-
-    @Test
-    void shouldKeepCasualConversationFast() {
-        AssistantRoute route = classifier.classify("hoe gaat het?", false, false, false, false);
-
-        assertEquals(AssistantIntent.CONVERSATION, route.intent());
-        assertEquals(AssistantMode.FAST, route.mode());
-        assertFalse(route.retrievalRequired());
-    }
-
     @Test
     void shouldRouteServerCommandsToGroundedEvidence() {
-        AssistantRoute route = classifier.classify("wat doet /back op HauntedMC?", false, false, false, false);
+        AssistantIntentClassifier.Analysis analysis = AssistantIntentClassifier.analyze(
+                "Hoe werkt /plot claim op HauntedMC?"
+        );
 
-        assertEquals(AssistantIntent.SERVER_FACT, route.intent());
-        assertEquals(AssistantMode.GROUNDED, route.mode());
-        assertTrue(route.retrievalRequired());
-    }
-
-    @Test
-    void shouldRouteLiveQuestionsToGroundedEvidenceWithoutSpendingDeliberateReasoning() {
-        AssistantRoute route = classifier.classify("hoeveel spelers zijn nu online?", false, false, false, false);
-
-        assertEquals(AssistantIntent.LIVE_STATE, route.intent());
-        assertEquals(AssistantMode.GROUNDED, route.mode());
-        assertTrue(route.liveDataRequired());
-    }
-
-    @Test
-    void shouldRouteActualPlayerStateQuestionsAsLive() {
-        AssistantRoute route = classifier.classify("wat heb ik vast?", false, false, false, false);
-
-        assertEquals(AssistantIntent.LIVE_STATE, route.intent());
-        assertTrue(route.liveDataRequired());
-    }
-
-    @Test
-    void shouldNotMistakeOrdinaryGameplayQuestionsForLiveState() {
-        AssistantRoute route = classifier.classify("hoe maak ik een diamond sword?", false, false, false, false);
-
-        assertEquals(AssistantIntent.GAMEPLAY_HELP, route.intent());
-        assertFalse(route.liveDataRequired());
-    }
-
-    @Test
-    void shouldRouteWorldAndDimensionQuestionsAsLive() {
-        AssistantRoute route = classifier.classify("in welke wereld ben ik?", false, false, false, false);
-
-        assertEquals(AssistantIntent.LIVE_STATE, route.intent());
-        assertTrue(route.liveDataRequired());
-    }
-
-    @Test
-    void shouldRouteCurrentHauntedMcFeatureStateToLiveProviders() {
-        AssistantRoute route = classifier.classify("welke HauntedMC servers zijn nu online?", false, false, false, false);
-
-        assertEquals(AssistantIntent.LIVE_STATE, route.intent());
-        assertEquals(AssistantMode.GROUNDED, route.mode());
-        assertTrue(route.liveDataRequired());
-    }
-
-    @Test
-    void shouldRouteVanillaMobQuestionsToGameplayHelp() {
-        AssistantRoute route = classifier.classify("wat eet een axolotl?", false, false, false, false);
-
-        assertEquals(AssistantIntent.GAMEPLAY_HELP, route.intent());
-        assertFalse(route.retrievalRequired());
+        assertEquals(AssistantIntent.SERVER_FACT, analysis.intent());
+        assertEquals(AssistantMode.GROUNDED, analysis.mode());
     }
 
     @Test
     void shouldRouteDiscordAndAiReleaseQuestionsToGroundedServerEvidence() {
-        AssistantRoute discord = classifier.classify("welke discord kanalen heeft HauntedMC?", false, false, false, false);
-        AssistantRoute release = classifier.classify("welke versie draait AIlex?", false, false, false, false);
+        AssistantIntentClassifier.Analysis discord = AssistantIntentClassifier.analyze(
+                "In welk Discord kanaal staan de aankondigingen?"
+        );
+        AssistantIntentClassifier.Analysis release = AssistantIntentClassifier.analyze(
+                "Is de nieuwe Haunty versie al live?"
+        );
 
         assertEquals(AssistantIntent.SERVER_FACT, discord.intent());
-        assertTrue(discord.retrievalRequired());
+        assertEquals(AssistantMode.GROUNDED, discord.mode());
         assertEquals(AssistantIntent.SERVER_FACT, release.intent());
-        assertTrue(release.retrievalRequired());
+        assertEquals(AssistantMode.GROUNDED, release.mode());
     }
 
     @Test
-    void shouldNotConfuseOrdinaryKnowledgeWithPersonalMemoryRecall() {
-        AssistantRoute route = classifier.classify("wat is combat tag?", false, false, false, false);
+    void shouldRouteLiveQuestionsToGroundedEvidenceWithoutSpendingDeliberateReasoning() {
+        AssistantIntentClassifier.Analysis analysis = AssistantIntentClassifier.analyze(
+                "Welk biome is hier dichtbij?"
+        );
 
-        assertEquals(AssistantIntent.SERVER_FACT, route.intent());
-        assertTrue(route.retrievalRequired());
+        assertEquals(AssistantIntent.LIVE_STATE, analysis.intent());
+        assertEquals(AssistantMode.GROUNDED, analysis.mode());
+    }
+
+    @Test
+    void shouldRouteActualPlayerStateQuestionsAsLive() {
+        AssistantIntentClassifier.Analysis heldItem = AssistantIntentClassifier.analyze(
+                "Wat houd ik in mijn hand?"
+        );
+        AssistantIntentClassifier.Analysis ping = AssistantIntentClassifier.analyze("Wat is mijn ping?");
+
+        assertEquals(AssistantIntent.LIVE_STATE, heldItem.intent());
+        assertEquals(AssistantMode.GROUNDED, heldItem.mode());
+        assertEquals(AssistantIntent.LIVE_STATE, ping.intent());
+    }
+
+    @Test
+    void shouldRouteWorldAndDimensionQuestionsAsLive() {
+        assertEquals(AssistantIntent.LIVE_STATE,
+                AssistantIntentClassifier.analyze("In welke world ben ik?").intent());
+        assertEquals(AssistantIntent.LIVE_STATE,
+                AssistantIntentClassifier.analyze("What dimension am I in?").intent());
+    }
+
+    @Test
+    void shouldRouteCurrentHauntedMcFeatureStateToLiveProviders() {
+        assertEquals(AssistantIntent.LIVE_STATE,
+                AssistantIntentClassifier.analyze("Wat is mijn rank?").intent());
+        assertEquals(AssistantIntent.LIVE_STATE,
+                AssistantIntentClassifier.analyze("Hoeveel geld heb ik?").intent());
+        assertEquals(AssistantIntent.LIVE_STATE,
+                AssistantIntentClassifier.analyze("Ben ik combat tagged?").intent());
+        assertEquals(AssistantIntent.LIVE_STATE,
+                AssistantIntentClassifier.analyze("Staat mijn AutoPickup aan?").intent());
     }
 
     @Test
     void shouldRouteFreshSemanticMemoryRecallToGroundedMemory() {
-        AssistantRoute route = classifier.classify("wat weet je nog over mijn favoriete block?", false, false, false, false);
+        AssistantIntentClassifier.Analysis dutch = AssistantIntentClassifier.analyze("Wat weet je van mij?");
+        AssistantIntentClassifier.Analysis english = AssistantIntentClassifier.analyze(
+                "What do you remember about me?"
+        );
 
-        assertEquals(AssistantIntent.MEMORY_RECALL, route.intent());
-        assertTrue(route.memoryRequired());
-        assertEquals(AssistantMode.GROUNDED, route.mode());
+        assertEquals(AssistantIntent.MEMORY_RECALL, dutch.intent());
+        assertEquals(AssistantMode.GROUNDED, dutch.mode());
+        assertEquals(AssistantIntent.MEMORY_RECALL, english.intent());
     }
 
     @Test
     void shouldRouteFreshEventRecallToEpisodicMemory() {
-        AssistantRoute route = classifier.classify("wie vroeg dat gisteren?", false, false, false, false);
+        AssistantIntentClassifier.Analysis dutch = AssistantIntentClassifier.analyze(
+                "Wat gebeurde er vorige keer?"
+        );
+        AssistantIntentClassifier.Analysis english = AssistantIntentClassifier.analyze(
+                "What happened last time?"
+        );
 
-        assertEquals(AssistantIntent.EVENT_RECALL, route.intent());
-        assertTrue(route.memoryRequired());
+        assertEquals(AssistantIntent.EVENT_RECALL, dutch.intent());
+        assertEquals(AssistantMode.GROUNDED, dutch.mode());
+        assertEquals(AssistantIntent.EVENT_RECALL, english.intent());
     }
 
     @Test
-    void shouldRouteEventDiagnosticQuestionsInsideActiveDialogue() {
-        AssistantRoute route = classifier.classify("wie zei dat net?", false, false, false, true);
+    void shouldNotConfuseOrdinaryKnowledgeWithPersonalMemoryRecall() {
+        AssistantIntentClassifier.Analysis analysis = AssistantIntentClassifier.analyze(
+                "Weet je hoe ik een wolf tem in Minecraft?"
+        );
 
-        assertEquals(AssistantIntent.EVENT_RECALL, route.intent());
-        assertTrue(route.memoryRequired());
+        assertEquals(AssistantIntent.GAMEPLAY_HELP, analysis.intent());
+        assertEquals(AssistantMode.GROUNDED, analysis.mode());
+    }
+
+    @Test
+    void shouldNotMistakeOrdinaryGameplayQuestionsForLiveState() {
+        AssistantIntentClassifier.Analysis crafting = AssistantIntentClassifier.analyze(
+                "Hoe craft ik dit item?"
+        );
+        AssistantIntentClassifier.Analysis diamonds = AssistantIntentClassifier.analyze(
+                "Waar vind ik diamonds?"
+        );
+
+        assertEquals(AssistantIntent.GAMEPLAY_HELP, crafting.intent());
+        assertEquals(AssistantMode.GROUNDED, crafting.mode());
+        assertEquals(AssistantIntent.GAMEPLAY_HELP, diamonds.intent());
+        assertEquals(AssistantMode.GROUNDED, diamonds.mode());
+    }
+
+    @Test
+    void shouldKeepCasualConversationFast() {
+        AssistantIntentClassifier.Analysis analysis = AssistantIntentClassifier.analyze("hey bot, alles goed?");
+
+        assertEquals(AssistantIntent.CONVERSATION, analysis.intent());
+        assertEquals(AssistantMode.FAST, analysis.mode());
+    }
+
+    @Test
+    void shouldRouteVanillaMobQuestionsToGameplayHelp() {
+        AssistantIntentClassifier.Analysis camel = AssistantIntentClassifier.analyze(
+                "ik wil weten hoe je een kameel temt"
+        );
+        AssistantIntentClassifier.Analysis wolf = AssistantIntentClassifier.analyze(
+                "Hoe tem je een wolf in Minecraft?"
+        );
+
+        assertEquals(AssistantIntent.GAMEPLAY_HELP, camel.intent());
+        assertEquals(AssistantMode.GROUNDED, camel.mode());
+        assertEquals(AssistantIntent.GAMEPLAY_HELP, wolf.intent());
+        assertEquals(AssistantMode.GROUNDED, wolf.mode());
     }
 
     @Test
     void shouldUseActiveDialogueToRouteAShortFollowUp() {
-        AssistantRoute route = classifier.classify("en waarom?", false, false, false, true);
+        AssistantDialogueContext dialogue = new AssistantDialogueContext(
+                true,
+                false,
+                AssistantIntent.EVENT_RECALL,
+                "wat gaat er mis haunty",
+                "De chatgame lijkt vastgelopen.",
+                ""
+        );
 
-        assertEquals(AssistantIntent.CONVERSATION, route.intent());
-        assertEquals(AssistantMode.FAST, route.mode());
+        AssistantIntentClassifier.Analysis analysis = AssistantIntentClassifier.analyze("haunty?", dialogue);
+
+        assertEquals(AssistantIntent.CONTEXT_FOLLOWUP, analysis.intent());
+        assertEquals(AssistantMode.GROUNDED, analysis.mode());
     }
 
     @Test
-    void shouldNormalizeConfiguredLanguageListAndKeepDutchFallback() {
-        YamlConfiguration config = new YamlConfiguration();
-        config.set("openai.assistant.routing.allowed_languages", java.util.List.of("EN", "de", "xx"));
-        config.set("openai.assistant.routing.default_language", "xx");
+    void shouldRouteEventDiagnosticQuestionsInsideActiveDialogue() {
+        AssistantDialogueContext dialogue = new AssistantDialogueContext(
+                true,
+                true,
+                AssistantIntent.CONVERSATION,
+                "haunty?",
+                "",
+                ""
+        );
 
-        AssistantSettings settings = AssistantSettings.from(config);
+        AssistantIntentClassifier.Analysis analysis = AssistantIntentClassifier.analyze("wat gaat er mis", dialogue);
 
-        assertEquals(Set.of("nl", "en", "de"), settings.allowedLanguages());
-        assertEquals("nl", settings.defaultLanguage());
-    }
-
-    @Test
-    void shouldDefaultUnknownLanguageToDutchAndAllowOnlyConfiguredEnglishDetection() {
-        AssistantSettings settings = AssistantSettings.defaults();
-
-        assertTrue(settings.languageAllowed("nl"));
-        assertTrue(settings.languageAllowed("en"));
-        assertFalse(settings.languageAllowed("de"));
-        assertEquals("nl", settings.normalizeOutputLanguage("xx"));
-    }
-
-    @Test
-    void shouldDetectGermanOnlyWhenConfigured() {
-        YamlConfiguration config = new YamlConfiguration();
-        config.set("openai.assistant.routing.allowed_languages", java.util.List.of("nl", "en", "de"));
-        AssistantSettings settings = AssistantSettings.from(config);
-
-        assertTrue(settings.languageAllowed("de"));
+        assertEquals(AssistantIntent.EVENT_RECALL, analysis.intent());
+        assertEquals(AssistantMode.GROUNDED, analysis.mode());
     }
 
     @Test
     void shouldUseIndependentModelProfilesForEachAssistantLayer() {
         YamlConfiguration config = new YamlConfiguration();
         config.set("openai.model", "gpt-5.6-luna");
-        config.set("openai.assistant.profiles.fast.model", "gpt-5.6-luna");
-        config.set("openai.assistant.profiles.grounded.model", "gpt-5.6-terra");
-        config.set("openai.assistant.profiles.grounded.reasoning_effort", "medium");
-        config.set("openai.assistant.profiles.grounded.max_output_tokens", 320);
-        config.set("openai.assistant.profiles.deliberate.model", "gpt-5.6-sol");
-        config.set("openai.assistant.profiles.deliberate.reasoning_effort", "high");
+        config.set("openai.reasoning_effort", "low");
+        config.set("openai.assistant.models.grounded.model", "gpt-5.6-terra");
+        config.set("openai.assistant.models.grounded.reasoning_effort", "medium");
+        config.set("openai.assistant.models.grounded.max_output_tokens", 320);
+        config.set("openai.assistant.models.deliberate.model", "gpt-5.6-sol");
+        config.set("openai.assistant.models.deliberate.reasoning_effort", "high");
         config.set("openai.assistant.observability.enabled", true);
         config.set("openai.assistant.observability.include_response_preview", true);
         config.set("openai.assistant.observability.max_response_preview_characters", 120);
@@ -219,11 +238,38 @@ class AssistantIntentClassifierTest {
     }
 
     @Test
-    void shouldRouteFreshSemanticMemoryRecallToGroundedMemory() {
-        AssistantRoute route = classifier.classify("wat weet je nog over mijn favoriete block?", false, false, false, false);
+    void shouldDefaultUnknownLanguageToDutchAndAllowOnlyConfiguredEnglishDetection() {
+        assertEquals("nl", AssistantIntentClassifier.detectLanguage(
+                "bonjour, comment ça va?", "nl", Set.of("nl", "en")
+        ));
+        assertEquals("en", AssistantIntentClassifier.detectLanguage(
+                "How do I claim this plot?", "nl", Set.of("nl", "en")
+        ));
+        assertEquals("nl", AssistantIntentClassifier.detectLanguage(
+                "How do I claim this plot?", "nl", Set.of("nl")
+        ));
+    }
 
-        assertEquals(AssistantIntent.MEMORY_RECALL, route.intent());
-        assertTrue(route.memoryRequired());
-        assertEquals(AssistantMode.GROUNDED, route.mode());
+    @Test
+    void shouldDetectGermanOnlyWhenConfigured() {
+        assertEquals("de", AssistantIntentClassifier.detectLanguage(
+                "Wie baue ich eine Farm?", "nl", Set.of("nl", "en", "de")
+        ));
+        assertEquals("nl", AssistantIntentClassifier.detectLanguage(
+                "Wie baue ich eine Farm?", "nl", Set.of("nl", "en")
+        ));
+    }
+
+    @Test
+    void shouldNormalizeConfiguredLanguageListAndKeepDutchFallback() {
+        YamlConfiguration config = new YamlConfiguration();
+        config.set("openai.assistant.routing.default_language", "English");
+        config.set("openai.assistant.routing.allowed_languages", java.util.List.of("english", "french"));
+
+        AssistantSettings settings = AssistantSettings.from(config);
+
+        assertEquals("en", settings.defaultLanguage());
+        assertEquals(Set.of("nl", "en"), settings.allowedLanguages());
+        assertFalse(settings.languageAllowed("fr"));
     }
 }
