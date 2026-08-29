@@ -1,0 +1,9 @@
+{
+  "note": "Copy this file to benchmark/local/pricing.json and fill in current provider prices before using --max-cost. Rates are deliberately not shipped as current truth because provider pricing changes independently from AIlex.",
+  "models": {
+    "example-model": {
+      "input_per_million": 0.0,
+      "output_per_million": 0.0
+    }
+  }
+}

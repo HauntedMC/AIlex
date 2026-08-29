@@ -60,6 +60,49 @@ java {
     withSourcesJar()
 }
 
+// Live/model benchmarks are a separate local-only source set. They are not attached to test, check, build or CI.
+val benchmarkSourceSet = sourceSets.create("benchmark") {
+    java.srcDir("src/benchmark/java")
+    resources.srcDir("src/benchmark/resources")
+    compileClasspath += sourceSets.main.get().output + configurations.testRuntimeClasspath.get()
+    runtimeClasspath += output + compileClasspath
+}
+configurations[benchmarkSourceSet.implementationConfigurationName].extendsFrom(configurations.testImplementation.get())
+configurations[benchmarkSourceSet.runtimeOnlyConfigurationName].extendsFrom(configurations.testRuntimeOnly.get())
+
+val benchmarkRequest = providers.gradleProperty("benchmarkRequest")
+tasks.register<JavaExec>("benchmarkRun") {
+    group = "verification"
+    description = "Runs the local paid/model AIlex benchmark harness. Never used by CI."
+    classpath = benchmarkSourceSet.runtimeClasspath
+    mainClass.set("nl.hauntedmc.ailex.benchmark.BenchmarkMain")
+    doFirst {
+        val requestFile = benchmarkRequest.orNull
+            ?: throw GradleException("Pass -PbenchmarkRequest=/absolute/path/to/request.json")
+        args(requestFile)
+    }
+}
+
+val benchmarkBridgeWorkspace = providers.gradleProperty("benchmarkBridgeWorkspace")
+tasks.register<JavaExec>("benchmarkV2Bridge") {
+    group = "verification"
+    description = "Runs the local AIlex text-memory bridge used by LongMemEval-V2."
+    classpath = benchmarkSourceSet.runtimeClasspath
+    mainClass.set("nl.hauntedmc.ailex.benchmark.V2MemoryBridgeMain")
+    standardInput = System.`in`
+    doFirst {
+        val workspace = benchmarkBridgeWorkspace.orNull
+            ?: throw GradleException("Pass -PbenchmarkBridgeWorkspace=/absolute/path")
+        args(project.projectDir.absolutePath, workspace)
+    }
+}
+
+tasks.register("benchmarkCheck") {
+    group = "verification"
+    description = "Compiles the local benchmark harness without making model calls."
+    dependsOn(tasks.named(benchmarkSourceSet.classesTaskName))
+}
+
 checkstyle {
     toolVersion = "10.26.1"
     configFile = file("config/checkstyle/checkstyle.xml")

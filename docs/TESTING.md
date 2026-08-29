@@ -22,6 +22,24 @@ The two CI gates can also be reproduced directly:
 
 JaCoCo currently enforces the repository regression floor of 55% line coverage and 40% branch coverage.
 
+## Local live-model evaluation
+
+The separate benchmark source set and `./bench` runner are intentionally outside normal CI. Compile the headless harness without provider calls with:
+
+```bash
+./bench selftest
+```
+
+For real model evaluation, set `OPENAI_API_KEY` locally and start with:
+
+```bash
+./bench run smoke
+```
+
+Use `./bench run standard` for the normal mixed HauntedMC + published-memory evaluation, or the individual `haunted`, `longmemeval` and `memoryagentbench` suites when diagnosing one subsystem. LongMemEval-V2 has a separate upstream-harness path through `./bench v2-setup` and `./bench v2-run`.
+
+See [AIlex local benchmark system](../benchmark/README.md) for dataset provenance, cost guards, private holdouts, upstream scorers and result interpretation. Published benchmark scores remain separate from HauntedMC product metrics.
+
 ## What must be deterministic
 
 The following behavior belongs in normal JUnit/AIlexBench coverage and must not call an external model:
@@ -66,7 +84,7 @@ The benchmark categories are informed by long-term-agent research but are adapte
 - staying silent in likely player-to-player conversation;
 - privacy and capability-boundary violations.
 
-Do not invent retrospective “1.6 scores.” Release comparisons are only meaningful once a scenario and scoring rule existed at the time of measurement or can be replayed reproducibly against the older code.
+Do not invent retrospective benchmark scores. Release comparisons are meaningful only when the same scenario and scoring rule can be replayed reproducibly against both code states.
 
 ## Prompt tests
 

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON="$ROOT/benchmark/.venv/bin/python"
+if [[ ! -x "$PYTHON" ]]; then
+  PYTHON="${PYTHON:-python3}"
+fi
+export PYTHONPATH="$ROOT/benchmark${PYTHONPATH:+:$PYTHONPATH}"
+exec "$PYTHON" -m ailex_bench.cli "$@"
