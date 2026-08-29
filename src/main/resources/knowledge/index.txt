@@ -26,4 +26,5 @@ store-and-purchases.md
 survival.md
 survival-claims-and-trust.md
 survival-economy-and-shops.md
+survival-player-capabilities.md
 website-accounts-and-mfa.md
