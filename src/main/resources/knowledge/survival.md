@@ -1,25 +1,35 @@
 ---
 id: hauntedmc.survival
 title: HauntedMC Survival overview
-aliases: [survival, smp, claims, homes, shops, mcmmo, dungeons, deathchest, randomtp, rtp]
+aliases: [survival, smp, claims, homes, shops, mcmmo, dungeons, deathchest, randomtp, rtp, chatgames, health bars]
 category: gamemode
-authority: official
+authority: operator-confirmed
 updated: 2026-08-29
 expires: null
-source: HauntedMC public help and update corpus reviewed 2026-08-29
+source: operator-provided HauntedMC Survival help and changelogs through 2026-08-17
 ---
 
 ## Core loop
-Survival is HauntedMC's long-running community survival mode. Current documented systems include protected land claims, homes and teleport utilities, an economy and player shops, voting/rewards, McMMO-style progression utilities, DeathChests, AutoPickup for eligible players, Dungeons, rank perks and community events.
+Survival is HauntedMC's long-running community survival mode. Current documented systems include protected claims, homes/teleports, an economy and player shops, voting/rewards, McMMO, DeathChests, AutoPickup, Dungeons, rank perks, chatgames and scheduled/community events.
 
 ## Claims and homes
-Protect builds with the documented claim system and only trust people you know. Common commands include `/claim`, `/newclaim`, `/makeclaim`, `/trust`, `/containertrust`, `/accesstrust`, `/permissiontrust`, `/untrust`, `/trustlist`, `/claimslist` and `/trapped`. Home commands include `/homes`, `/sethome <name>` and `/delhome <name>`. Exact home/claim limits are rank- and configuration-dependent; use `/ranks` or `/limits` for the current value.
+Common claim routes include `/claim`, `/newclaim`, `/makeclaim`, `/trust`, `/containertrust`, `/accesstrust`, `/permissiontrust`, `/untrust`, `/trustlist`, `/claimslist` and `/trapped`. Home routes include `/homes`, `/sethome <name>` and `/delhome <name>`.
+
+Exact claim/home quantities are rank-dependent and are documented in the dedicated rank-features article; live `/ranks` or `/limits` overrides the stored table if configuration changes.
 
 ## Travel
-Teleport utilities include `/tpa`, `/tpaccept`, `/tpdeny`, `/tptoggle`, `/tpahere`, `/back`, `/spawn`, `/warp` or `/warps`, and RandomTP via `/randomtp`, `/rtp` or `/wild`. Never promise that a named warp still exists without current evidence.
+Teleport utilities include `/tpa`, `/tpaccept`, `/tpdeny`, `/tptoggle`, `/tpahere`, `/back`, `/spawn`, `/warp`/`/warps`, and RandomTP via `/randomtp`, `/rtp` or `/wild`. `/tpyes` is an alias for `/tpaccept` and `/tpno` for `/tpdeny` in the documented Survival command set.
 
 ## Progression and community systems
-Voting is available through `/vote`. McMMO help routes include `/mcstats`, `/mctop <skill>`, `/mcrank`, `/mcmmo help`, `/mcinfo`, `/party` and `/redeem`. Player shops are documented around the Survival mall (`/warp mall`) but shop availability/rental details can change.
+Voting is available through `/vote`. McMMO routes include `/mcstats`, `/mctop <skill>`, `/mcrank`, `/mcmmo help`, `/mcinfo`, `/party` and `/redeem`. Survival player shops center on `/warp mall`; use `/finditem` for current indexed shop discovery.
+
+## Current chatgames
+The 29 July 2026 Survival changelog documents the renewed chatgame system with block-break challenges, eat-food challenges, trivia questions, hangman, mob-kill challenges, speed typing, math questions and block-place challenges. These are current Survival micro-challenges, not separate permanent game modes.
+
+The same update introduced refreshed mob health bars showing health with two decimal places for more accurate damage indication.
+
+## Utility/perk safety
+`/god` and `/godmacro` preserve health/hunger state rather than healing when toggled. Rank perks can be restricted by world: documented examples include disabling god/fly behavior in dungeon worlds and other restricted worlds. Use live behavior if a newer update changes a restriction.
 
 ## Safety
-Current rules prohibit griefing, scamming, exploits, unfair automation, lag machines, most chunk-loader bypasses, prohibited PvP/deathtraps and large-scale structure looting. See the dedicated current rules articles for the exact modern policy; do not use old numeric farm limits as current unless `/limits` or a current gamemode rule confirms them.
+Current server rules prohibit griefing, scamming, exploits, unfair automation, lag machines, prohibited PvP/deathtraps and abusive structure/resource behavior. Newer current rules and `/limits` override old numeric rule articles.
