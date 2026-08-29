@@ -1,26 +1,34 @@
 ---
 id: hauntedmc.server-overview
 title: HauntedMC network overview and joining
-aliases: [hauntedmc, server, join, verbinden, ip, play.hauntedmc.nl, survival, creative, minigames, nederlands, english]
+aliases: [hauntedmc, server, join, verbinden, ip, play.hauntedmc.nl, survival, creative, minigames, 26.2, bedrock, resource pack, language]
 category: current-server-state
-authority: official
+authority: operator-confirmed
 updated: 2026-08-29
 expires: null
-source: https://hauntedmc.nl/ | https://store.hauntedmc.nl/ | current public server listings reviewed 2026-08-29
+source: current HauntedMC changelogs + operator-provided public documentation 2026-08-29
 ---
 
 ## Identity and joining
-HauntedMC is a Dutch Minecraft community/network active since 2013. The canonical player-facing server address is `play.hauntedmc.nl`. The public website is `https://hauntedmc.nl` and the store is `https://store.hauntedmc.nl`.
-
-HauntedMC is not an official Mojang or Microsoft service. A normal player can join through Minecraft multiplayer with the canonical server address; do not expose private backend addresses or infrastructure details.
+HauntedMC is a Dutch Minecraft community/network founded on 5 April 2013. The canonical player-facing address is `play.hauntedmc.nl`. Public sites include `https://hauntedmc.nl` and `https://store.hauntedmc.nl`.
 
 ## Current game-mode family
-The current public network identity is **Survival, Minigames and Creative**. This is corroborated by the currently advertised MOTD and operator-reviewed state. Do not claim that Skyblock, Factions, Prison, KitPvP or another old mode is currently playable merely because an old article or third-party tag mentions it.
+The current verified game-mode categories are **Survival, Minigames and Creative**. Do not claim that Skyblock, Factions, Prison, KitPvP or another old mode is currently playable because an old article or server-listing tag mentions it.
 
-Exact minigames can change. For “what can I play right now?” prefer the live Server Selector (`/menu`), live server state or a current official announcement.
+For exact current server/minigame availability, prefer `/menu` or trusted live server state.
 
-## Language and community
-Dutch is the main language. English is also allowed. Current rules require public chat to use language that staff can reasonably moderate, and staff may ask players to use Dutch or English. Old statements that German is automatically tolerated are historical and no longer the current rule text.
+## Current recommended client version
+The latest supplied general changelog states that all HauntedMC servers run on client/server version **26.2** and that 26.2 is the recommended version to play with. Older 1.21.x and 26.1 changelog entries are historical and must not override 26.2.
+
+The network also advertises join support for the newest Bedrock versions. `/linkbedrock` is the documented Bedrock account-link route. Do not invent an exact Bedrock patch number when the public changelog only says the newest versions are supported.
+
+## Language
+HauntedMC's localization system supports `nl`, `de` and `en`. Players can use `/lang <language>` to change preference and `/language` or `/taal` to inspect it. The first-join preference can be selected automatically from location and later changed.
+
+This localization capability is distinct from the public-chat moderation rule: Dutch is the main public-chat language, English is allowed, and staff may ask players to use Dutch or English so chat can be moderated.
+
+## Resource pack
+HauntedMC has a global server resource pack. New players are prompted to accept it and the client downloads the current pack on login. The pack is used for HauntedMC interface/theme content, and the architecture supports extra game-mode-specific resources. Do not promise a specific custom item/menu that was only described as future work in an older changelog.
 
 ## Public information routes
-Use `/help` for in-game help, `/rules` or `/regels` for rules, `/ranks` for current rank information, `/discord` for Discord, `/vote` for voting, `/staff` for the current team where available, and `/support` for matters that require staff.
+Use `/help`, `/rules` or `/regels`, `/ranks`, `/discord`, `/vote`, `/staff`, `/maps`, `/limits` and `/support` for the corresponding current player-facing information.
