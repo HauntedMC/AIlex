@@ -14,6 +14,7 @@ network-and-voting.md
 news-and-update-history.md
 player-systems.md
 privacy-and-data.md
+rank-features-and-limits.md
 ranks-cosmetics-and-safety.md
 rules-afk-pvp-economy-events.md
 rules-community-and-content.md
