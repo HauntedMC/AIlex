@@ -36,9 +36,9 @@ class KnowledgeCorpusBudgetRegressionTest {
 
         AssistantSettings defaults = AssistantSettings.defaults();
         assertTrue(files.size() <= defaults.externalMaxFiles(),
-                () -> "Managed knowledge file count exceeds default corpus budget: " + files.size());
+                "Managed knowledge file count exceeds default corpus budget: " + files.size());
         assertTrue(characters <= defaults.externalMaxCharacters(),
-                () -> "Managed knowledge exceeds default corpus budget: " + characters);
+                "Managed knowledge exceeds default corpus budget: " + characters);
     }
 
     @Test
