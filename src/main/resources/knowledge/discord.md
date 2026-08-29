@@ -9,35 +9,12 @@ expires: null
 source: HauntedMC operator-provided Discord channel overview
 ---
 
-The following channel identifiers are current verified HauntedMC Discord names. They are proper names: copy them exactly and never translate them.
+Verified exact channel identifiers; never translate them.
 
-## News and information
-- `#announcements` — official announcements and important news.
-- `#welcome` — welcome/join information.
-- `#notification-roles` — notification-role selection.
-- `#link-account` — account linking.
-- `#changelogs` — published changes and update notes.
-- `#links` — official links.
-- `#rules` — Discord/community rules.
-- `#support` — support/help route.
+**News/info:** `#announcements` (official news), `#welcome`, `#notification-roles`, `#link-account`, `#changelogs`, `#links`, `#rules`, `#support`.
 
-## Events and community
-- `#build-showcase` — community build showcases.
-- `#polls` — community polls.
-- `#rate-my-build` — build feedback/rating.
+**Community/events:** `#build-showcase`, `#polls`, `#rate-my-build`.
 
-## General chats
-- `#chat`
-- `#bot-chat`
-- `#movies-series`
-- `#food`
-- `#pets`
-- `#memes`
-- `#music`
-- `#off-topic`
-- `#show-room`
-- `#sport`
-- `#gaming-tech`
+**Chats:** `#chat`, `#bot-chat`, `#movies-series`, `#food`, `#pets`, `#memes`, `#music`, `#off-topic`, `#show-room`, `#sport`, `#gaming-tech`.
 
-## Grounding rule
-There is no verified channel named `#aankondigingen`. Even in a Dutch answer, the actual channel remains `#announcements`. For update information, `#announcements` and `#changelogs` are verified routes. If a requested channel is absent from verified evidence, say it cannot be verified instead of translating or inventing one.
+`#aankondigingen` is **not** a verified channel; Dutch answers must still use `#announcements`. For updates, use `#announcements`/`#changelogs`. If an identifier is absent from verified evidence, do not invent a translation.
