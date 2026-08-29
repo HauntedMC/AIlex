@@ -2,16 +2,12 @@ package nl.hauntedmc.ailex.assistant.infrastructure.knowledge;
 
 import java.util.Locale;
 
-/**
- * Chooses a second-stage evidence budget from query specificity and first-stage ranking confidence.
- *
- * <p>This intentionally does not invoke another model. Clear exact queries keep a small high-precision evidence set;
- * ambiguous or weakly separated rankings retain more candidates so the generator does not lose recall.</p>
- */
+/** Chooses a bounded second-stage evidence budget without another model call. */
 public final class AdaptiveEvidencePolicy {
 
     private static final int MINIMUM_CHARACTER_BUDGET = 4_000;
     private static final int CHARACTERS_PER_SELECTED_CHUNK = 5_000;
+    private static final int BROAD_QUERY_CHUNKS = 20;
 
     private AdaptiveEvidencePolicy() {
     }
@@ -32,7 +28,9 @@ public final class AdaptiveEvidencePolicy {
                 && (secondScore <= 0.0D || topScore >= secondScore * 1.35D);
 
         int targetChunks;
-        if (exactIdentifier && clearlySeparated) {
+        if (isBroadQuery(normalized)) {
+            targetChunks = BROAD_QUERY_CHUNKS;
+        } else if (exactIdentifier && clearlySeparated) {
             targetChunks = 4;
         } else if (clearlySeparated && usefulTerms >= 3) {
             targetChunks = 5;
@@ -47,6 +45,23 @@ public final class AdaptiveEvidencePolicy {
                 Math.max(MINIMUM_CHARACTER_BUDGET, selectedChunks * CHARACTERS_PER_SELECTED_CHUNK)
         );
         return new Budget(selectedChunks, selectedCharacters);
+    }
+
+    private static boolean isBroadQuery(String query) {
+        return query.contains("alles")
+                || query.contains("alle functies")
+                || query.contains("alle commands")
+                || query.contains("alle commando")
+                || query.contains("volledig overzicht")
+                || query.contains("compleet overzicht")
+                || query.contains("wat kan ik allemaal")
+                || query.contains("welke functies")
+                || query.contains("everything")
+                || query.contains("all features")
+                || query.contains("all commands")
+                || query.contains("full overview")
+                || query.contains("complete overview")
+                || query.contains("what can i do");
     }
 
     private static int usefulTermCount(String query) {
