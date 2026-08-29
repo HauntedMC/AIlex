@@ -1,30 +1,21 @@
 ---
 id: hauntedmc.survival-economy-shops
-title: Survival economy, trading, shops and virtual value
+title: Survival economy, trading and shops
 aliases: [money, balance, saldo, economy, economie, shop, player shop, chest shop, mall, tokens, trade, scamming, /pay, /finditem]
 category: gamemode-feature
 authority: operator-confirmed
 updated: 2026-08-29
 expires: null
-source: HauntedMC current rules + operator-provided Survival changelog through 2026-08-17
+source: current HauntedMC rules + operator-provided Survival changelog through 2026-08-17
 ---
 
-## Money commands
-Documented economy commands include `/money` or `/balance`, `/money <name>`, `/pay <name>`, `/paytoggle` and `/payconfirmtoggle`. Exact balances are live state and must not be guessed.
+Money: `/money`/`/balance`, `/money <name>`, `/pay <name>`, `/paytoggle`, `/payconfirmtoggle`. Balances are live state.
 
-## Player shops and mall
-Survival has player shops/chest shops and the current mall route `/warp mall`. Shop capacity depends on rank. Rental prices, stock and individual availability are dynamic and should not be copied from old changelogs as permanent values.
+Player/chest shops use the Survival mall (`/warp mall`); shop capacity is rank-dependent. Rental price, stock and stall availability are dynamic.
 
-## FindItem — latest 17 August 2026 behavior
-`/finditem` searches the indexed Survival shops. The latest changelog states that the shop scanner includes all shops again, command terminology now uses **inkoop** and **verkoop**, players can teleport to every listed shop including claim shops, and shop visit counts are tracked/displayed in the menu.
+## FindItem — 17 Aug 2026
+`/finditem` indexes all shops again, uses **inkoop**/**verkoop** terminology, can teleport to every listed shop including claim shops, and tracks/displays shop visits. Older `kopen|verkopen` wording is superseded; use live tab/help for exact arguments.
 
-Do not answer with the older `kopen|verkopen` wording when giving the current syntax. If exact argument completion is needed, let the live command help/tab completion provide it.
+Other documented tools: `/shop history` (sales history), `/shop list` (owned-shop locations). Price suggestions, shared revenue and sign-material customization exist in prior public updates; use live `/shop` help for exact syntax.
 
-## Useful shop tools
-Public Survival changelogs also document `/shop history` for a shop's sales history and `/shop list` for locating owned shops. Older shop-management additions include price suggestions, shared shop revenue and sign-material customization; use live `/shop` help if a player needs exact syntax because these are more configuration-sensitive than the core shop flow.
-
-## Trading rules
-Trading must be honest and clear. Scamming and misleading another player about price, contents, value or an agreement are prohibited. Bugs, exploits, alt accounts and bots may not be used to manipulate the economy.
-
-## Real-world value
-In-game items, currencies, accounts, ranks and benefits may not be sold outside official systems for real money or external value. HauntedMC virtual value cannot be redeemed for cash.
+Rules: trading must be honest; scamming/misrepresentation and economy manipulation via bugs, exploits, alts or bots are prohibited. In-game currencies/items/accounts/ranks/benefits may not be traded for real money, gift cards, crypto or other external value and cannot be redeemed for cash.
