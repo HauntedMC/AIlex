@@ -1,6 +1,6 @@
 ---
 id: hauntedmc.rank-features-limits
-title: Current rank features and documented capacity limits
+title: Current rank features and capacity limits
 aliases: [rank perks, rank features, homes, claimblocks, player shops, backpack, plot limit, worldedit limit, elite perks, legend perks, supreme perks, supreme+ perks]
 category: server-feature
 authority: operator-confirmed
@@ -9,84 +9,43 @@ expires: null
 source: operator-provided HauntedMC global, Survival and Creative rank/functions documentation 2026-08-29
 ---
 
-## How to read rank requirements
-Rank requirements are cumulative: a feature marked for `Elite` or higher is intended for that tier and higher, similarly for `Legend` and `Supreme`. `Supreme+` is the highest current progression rank. `/ranks` and live permissions override this reference if the server configuration changes later.
+Rank gates are cumulative; `/ranks`/live permissions override this snapshot. `Supreme+` is the highest progression tier.
 
-## Global rank-gated features
-Current global public documentation includes:
-- `/skin <name>` and `/skin remove` from `Elite`;
-- `/nickname <nick>` and `/nickname remove` from `Elite`;
-- joining otherwise full servers from `Elite`;
-- `/ping` from `Elite`;
-- colored chat and the special join-message feature at `Supreme+`.
+## Global/Lobby gates
+| From rank | Documented features |
+|---|---|
+| Elite | `/skin`, `/nickname`, join otherwise-full servers, `/ping`; sit on players; `/lay`, `/bellyflop`, `/crawl` |
+| Legend | `/spin`, `/fly`, Safe Fly Login |
+| Supreme+ | colored chat, special join message |
 
-General social, information, linking, report, cosmetics, server-navigation and statistics commands are available independently of these premium rank gates unless a specific command says otherwise.
+General information/social/link/report/cosmetic/navigation/stat commands are not premium-gated unless explicitly stated.
 
-## Lobby poses and movement
-Current Lobby documentation includes sitting on blocks for everyone and sitting on another player from `Elite`. `/lay`, `/bellyflop` and `/crawl` are documented from `Elite`; `/spin` from `Legend`; `/fly` from `Legend`. Safe-fly-login behavior is also documented for `Legend` and higher.
+## Survival capacities
+| Capacity | Speler | Elite | Legend | Supreme | Supreme+ |
+|---|---:|---:|---:|---:|---:|
+| Homes | 2 | 10 | 15 | 40 | not separately stated |
+| Tokens / 20 min online | 30 | 50 | 60 | 100 | 150 |
+| Backpack slots | — | 27 | 36 | 54 | not separately stated |
+| Player shops | 5 | 25 | 35 | 100 | not separately stated |
 
-## Survival home limits
-The supplied current public table documents:
-- `Speler`: 2 homes;
-- `Elite`: 10 homes;
-- `Legend`: 15 homes;
-- `Supreme`: 40 homes.
-
-No separate Supreme+ home count is stated in that table; do not invent one.
-
-## Survival online-token income
-The documented online reward is paid per 20 minutes:
-- `Speler`: 30 Tokens;
-- `Elite`: 50 Tokens;
-- `Legend`: 60 Tokens;
-- `Supreme`: 100 Tokens;
-- `Supreme+`: 150 Tokens.
-
-## Survival utility perks
-Selected current documented rank perks include:
-- `Elite`: `/tp`, convenience workstations/utilities, item/head utilities and other basic donor conveniences;
-- `Legend`: `/fly`, `/treeassist toggle`, `/autopickup`, safe-fly-login and Silk Touch spawner mining;
-- `Supreme`: `/god`, `/godmacro`, `/veinminer`, `/condense`/`/blocks`, movement-speed controls and advanced convenience features.
-
-Gameplay safety can disable a perk in combat, dungeon or restricted-world contexts.
-
-## Survival backpacks and shop capacity
-Backpack sizes:
-- `Elite`: 27 slots;
-- `Legend`: 36 slots;
-- `Supreme`: 54 slots.
-
-Player-shop capacity:
-- `Speler`: 5 shops;
-- `Elite`: 25 shops;
-- `Legend`: 35 shops;
-- `Supreme`: 100 shops.
+Selected perks: Elite includes `/tp` and convenience/workstation/head utilities; Legend includes `/fly`, `/treeassist toggle`, `/autopickup`, Safe Fly Login and Silk Touch spawner mining; Supreme includes `/god`, `/godmacro`, `/veinminer`, `/condense`/`/blocks` and movement-speed controls. Combat/dungeon/world safety may disable perks.
 
 ## Survival claims
-The supplied current public rank table documents 25 claim regions, 3,000 starting claimblocks and 40 claimblocks earned per online hour up to a 10,000 earned-block cap.
+Base: 25 claim regions; 3,000 starting claimblocks; +40 claimblocks/online hour, with 10,000 maximum earned through that hourly mechanism.
 
-Rank bonuses are documented as:
-- `Elite`: +20,000 bonus claimblocks;
-- `Legend`: +40,000 bonus claimblocks;
-- `Supreme`: +80,000 bonus claimblocks;
-- `Supreme+`: +15,000 bonus claimblocks per month.
+| Rank | Bonus claimblocks |
+|---|---:|
+| Elite | +20,000 |
+| Legend | +40,000 |
+| Supreme | +80,000 |
+| Supreme+ | +15,000/month |
 
-These are distinct from the newer compact-region spawner limits in `dynmap-and-limits.md`.
+Spawner limits are separate; see `dynmap-and-limits.md`.
 
-## Creative plot limits
-The current supplied Creative table documents:
-- `Speler`: 2 plots;
-- `Elite`: 6 plots;
-- `Legend`: 8 plots;
-- `Supreme`: 20 plots.
+## Creative
+| Capacity | Speler | Elite | Legend | Supreme | Supreme+ |
+|---|---:|---:|---:|---:|---:|
+| Plots | 2 | 6 | 8 | 20 | not separately stated |
+| WorldEdit blocks/action | — | 50,000 | 100,000 | 500,000 | 1,000,000 |
 
-Plot merging is available from `Legend`, with a maximum of 4 plots per merged cluster in the supplied documentation.
-
-## Creative WorldEdit limits
-WorldEdit is available from `Elite`. The documented maximum blocks per action are:
-- `Elite`: 50,000;
-- `Legend`: 100,000;
-- `Supreme`: 500,000;
-- `Supreme+`: 1,000,000.
-
-Legend adds broader terrain/biome/generation tools and Supreme adds advanced brush/editing capabilities. Exact command syntax is better answered from live WorldEdit help than by reproducing the full historical command catalogue in every response.
+WorldEdit starts at Elite. Plot merging starts at Legend, max 4 plots per merged cluster. Legend adds broader terrain/biome/generation tools; Supreme adds advanced brush/editing tools. Use live WorldEdit help for exact syntax.
