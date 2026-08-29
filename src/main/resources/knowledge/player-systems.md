@@ -1,29 +1,29 @@
 ---
 id: hauntedmc.player-systems
-title: Current player systems: DeathChests, AutoPickup, messages, lottery, CombatTag and rank perks
+title: Current player systems: DeathChests, AutoPickup, messages, lottery and CombatTag
 aliases: [deathchest, grave, graveyard, autopickup, drop2inventory, /msg mode, lottery, combattag, fly, god]
 category: server-feature
 authority: official
-updated: 2026-08-26
+updated: 2026-08-29
 expires: null
-source: https://www.hauntedmc.nl/threads/grote-hauntedmc-update.16064/
+source: HauntedMC major network update 2026-08-04 + current public rank documentation
 ---
 
-## DeathChests
-After death, items are protected through HauntedMC's death-chest/virtual-grave system rather than simply being left as ordinary ground drops. The grave is associated with the death location. Interacting with it recovers available items and experience; if inventory space is insufficient, remaining contents stay protected instead of being silently overwritten.
+## DeathChests / Graveyards
+After death, HauntedMC stores the player's items in a packet-based virtual grave at the death location instead of leaving ordinary item entities on the ground. The grave shows the player name and a remaining-time indicator.
 
-Do not promise an exact grave lifetime, cross-world behaviour or recovery fee unless current live/help evidence provides it.
+The current documented default claim time is **10 minutes**. The grave stores the amount of experience Minecraft would normally drop on death. Partial claiming is safe: if the inventory is full, remaining items stay in the grave instead of being overwritten.
 
 ## AutoPickup
-AutoPickup replaced the older Drop2Inventory naming/system. Eligible players can toggle it with `/autopickup`. The reviewed August 2026 update explicitly documents AutoPickup for eligible Legend-rank players and blocks they personally break. It does not overwrite an inventory: excess drops fall normally when there is no room.
+AutoPickup replaced Drop2Inventory. It is available from the `Legend` rank and is toggled with `/autopickup`.
 
-Rank eligibility can change, so `/ranks` is stronger evidence for the current perk matrix than an old update post.
+It only applies to blocks the player directly breaks. When inventory space is exhausted, existing items are not overwritten and remaining drops fall normally; a free offhand slot can be used where possible. The setting is stored across HauntedMC servers.
 
 ## Private-message mode
-`/msg mode` controls who may send a player private messages. Reviewed current choices are `FRIENDS` and `ALL`, with `FRIENDS` documented as the default for new players. Other message controls include toggle/block/unblock routes documented in general commands.
+`/msg mode` controls who may send private messages. Current choices are `FRIENDS` and `ALL`, and `FRIENDS` is the default for new players. Staff can still reach players when necessary. Blocked players and vanished staff are handled without exposing hidden staff presence.
 
 ## Lottery
-The modernized Lottery revolves around tickets, a jackpot, donations, statistics and displayed win chance. `/lottery buy` is the documented purchase route. Ticket price, jackpot amount, draw time, odds and current entries are live/volatile: never invent or cache those values as permanent knowledge.
+The modernized Lottery revolves around tickets, a jackpot, donations, statistics and displayed win chance. `/lottery buy` is the documented purchase route. Ticket price, jackpot amount, draw time, odds and current entries are live values and must not be invented.
 
 ## FairPerks and CombatTag
-FairPerks provides rank-dependent `/fly` and `/god`. Receiving CombatTag disables flight, and CombatTag exposes remaining combat time to the player. Do not promise a fixed tag duration without current evidence. Server/game-mode safety logic can disable perks in contexts such as combat or dungeon gameplay.
+Rank-dependent perks include `/fly` and `/god`. Flight is disabled when a player receives CombatTag. Server/game-mode safety logic can also disable these perks in contexts such as dungeon worlds or restricted worlds.
