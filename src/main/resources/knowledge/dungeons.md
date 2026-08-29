@@ -1,26 +1,27 @@
 ---
 id: hauntedmc.dungeons
 title: Survival Dungeons
-aliases: [dungeon, dungeons, dungeon key, /warp dungeons, trial chamber, end city, bastion]
+aliases: [dungeon, dungeons, dungeon key, /warp dungeons, /dungeons team, trial chamber, ancient city]
 category: gamemode-feature
-authority: reviewed
+authority: operator-confirmed
 updated: 2026-08-29
 expires: null
-source: HauntedMC Dungeon update + current public Dungeons project reviewed 2026-08-29
+source: HauntedMC Survival changelog 2026-04-29 + operator-provided public documentation 2026-08-29
 ---
 
-## What Dungeons are
-Dungeons are a Survival feature built around separate replayable dungeon worlds/maps. Public HauntedMC descriptions explain that players can explore, fight, loot and complete content containing structures, mobs and rewards outside the normal persistent Survival worlds. A major design goal is making structure-style content repeatedly accessible instead of letting finite world structures be exhausted by early players.
+## Current dungeon system
+Dungeons are replayable Survival instances with their own maps, mobs, structures and rewards. The current dungeon hub is `/warp dungeons`.
 
-The current public Dungeons implementation supports configurable dungeon content with queueing, teams, triggers/functions, difficulty scaling and loot-table rewards. Exact player-facing availability is still determined by the live Survival dungeon hub.
+The dungeon system was comprehensively renewed on 29 April 2026. The newest verified dungeon-specific state includes the renewed Trial Chamber dungeon with multiple possible variants and the added Ancient City dungeon.
 
-## Starting a dungeon
-The documented player hub is `/warp dungeons`. Dungeon NPCs represent available dungeons. Starting a dungeon requires the matching Dungeon Key or other access requirement shown by the current hub. Keys have been obtainable through HauntedMC reward/store systems including Tokens/Dungeon Crate routes, but exact current acquisition, costs and odds are volatile and must be checked live.
+## Teams
+Use `/dungeons team` for the documented team mode. Dungeon teams are temporary and expire after playing the dungeon. Every team member needs their own Dungeon Key. Some dungeons scale difficulty with the number of participating players.
 
-Do not expose administrative dungeon-editor commands as normal player commands. The current player-safe route is the hub/NPC flow unless the live server tells the player otherwise.
+## Access and keys
+A dungeon requires the relevant Dungeon Key or other requirement shown by the live dungeon hub. Exact key prices, crate odds and acquisition routes can change and should come from current in-game information rather than old articles.
 
-## Leaving, death and restrictions
-`/dungeon leave` is the documented leave command; older/current reviewed behaviour says leaving can consume the key, so warn players before suggesting it. Death returns the player through the configured dungeon/death flow and HauntedMC's protected death-item systems may apply. Rank invulnerability/mobility perks such as `/fly` or `/god` can be disabled in dungeon/combat contexts.
+## Leaving and restrictions
+`/dungeon leave` is the documented leave route from earlier official dungeon documentation and can consume dungeon access/key state; warn the player before suggesting it. Gameplay perks such as `/god` and `/fly` may be disabled in dungeon worlds.
 
-## Known dungeon themes
-Reviewed public material has named Trial Chamber, End City and Bastion dungeon content. Treat those as known documented dungeon themes, not a guaranteed exhaustive live list. The dungeon hub or current announcement is the source of truth for which maps and difficulties are available now.
+## Announced versus live content
+Older announcements named other dungeon themes and the April 2026 update announced Ocean Monument, Enderdragon, Nether Fortress, Stronghold and PvP Dungeons as future work. Do not present announced future dungeons as live unless the current dungeon hub or a newer changelog confirms them.
