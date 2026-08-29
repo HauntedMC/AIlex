@@ -11,7 +11,7 @@ class AdaptiveEvidencePolicyTest {
     @Test
     void shouldUseSmallEvidenceSetForClearExactIdentifierQuery() {
         AdaptiveEvidencePolicy.Budget budget = AdaptiveEvidencePolicy.select(
-                "Hoe gebruik ik /plot claim?", 12, 32_000, 12.0D, 4.0D
+                "Hoe gebruik ik /plot claim?", 64, 140_000, 12.0D, 4.0D
         );
 
         assertEquals(4, budget.maxChunks());
@@ -19,17 +19,31 @@ class AdaptiveEvidencePolicyTest {
     }
 
     @Test
-    void shouldRetainMoreRecallForBroadOrAmbiguousQueries() {
-        AdaptiveEvidencePolicy.Budget broad = AdaptiveEvidencePolicy.select(
-                "ranks", 12, 32_000, 4.0D, 3.8D
+    void shouldRetainModerateRecallForShortOrAmbiguousQueries() {
+        AdaptiveEvidencePolicy.Budget shortQuery = AdaptiveEvidencePolicy.select(
+                "ranks", 64, 140_000, 4.0D, 3.8D
         );
         AdaptiveEvidencePolicy.Budget ambiguous = AdaptiveEvidencePolicy.select(
-                "hoe werkt het systeem met ranks perks economy rewards", 12, 32_000, 5.0D, 4.8D
+                "hoe werkt het systeem met ranks perks economy rewards", 64, 140_000, 5.0D, 4.8D
         );
 
-        assertEquals(8, broad.maxChunks());
+        assertEquals(8, shortQuery.maxChunks());
         assertEquals(6, ambiguous.maxChunks());
-        assertTrue(broad.maxCharacters() >= ambiguous.maxCharacters());
+    }
+
+    @Test
+    void shouldUseMuchMoreEvidenceForExplicitOverviewQuestions() {
+        AdaptiveEvidencePolicy.Budget dutch = AdaptiveEvidencePolicy.select(
+                "wat kan ik allemaal op survival, geef een volledig overzicht van alle functies", 64, 140_000,
+                5.0D, 4.8D
+        );
+        AdaptiveEvidencePolicy.Budget english = AdaptiveEvidencePolicy.select(
+                "give me a complete overview of all features on survival", 64, 140_000, 5.0D, 4.8D
+        );
+
+        assertEquals(20, dutch.maxChunks());
+        assertEquals(100_000, dutch.maxCharacters());
+        assertEquals(20, english.maxChunks());
     }
 
     @Test
