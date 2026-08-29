@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -71,6 +72,25 @@ class AssistantMemoryTemporalAndSharedSyncTest {
 
             assertEquals(beforeSync + 2, repository.changeReads.get());
             assertEquals(2_050, service.activeSnapshot().size());
+        }
+    }
+
+    @Test
+    void ephemeralEvaluationMemoryClearsBetweenFixtures() {
+        try (AssistantMemoryService service = AssistantMemoryService.forEphemeralEvaluation(plugin())) {
+            UUID player = UUID.randomUUID();
+            service.rememberTrusted(
+                    MemoryScope.PLAYER, player.toString(), "benchmark", MemoryKind.EVENT,
+                    "fixture", "Player visited the benchmark spawn", 1.0D, 0.9D,
+                    "benchmark-fixture", "test", System.currentTimeMillis(), java.time.Duration.ZERO, Set.of("benchmark")
+            );
+            service.flush();
+
+            assertFalse(service.search(player, "benchmark", "visited spawn", Set.of(MemoryKind.EVENT), 4).isEmpty());
+            service.resetEphemeralEvaluation();
+
+            assertTrue(service.activeSnapshot().isEmpty());
+            assertTrue(service.search(player, "benchmark", "visited spawn", Set.of(MemoryKind.EVENT), 4).isEmpty());
         }
     }
 

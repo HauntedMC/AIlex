@@ -73,6 +73,14 @@ public final class AssistantMemoryService implements AutoCloseable {
         this(plugin, null);
     }
 
+    /**
+     * Creates an isolated non-persistent memory service for local evaluations. Retrieval, ranking and memory shaping
+     * remain identical to the production service; only restart durability is intentionally omitted.
+     */
+    public static AssistantMemoryService forEphemeralEvaluation(JavaPlugin plugin) {
+        return new AssistantMemoryService(plugin, new InMemoryMemoryRepository());
+    }
+
     /** Test seam for deterministic storage/synchronization verification. */
     AssistantMemoryService(JavaPlugin plugin, MemoryRepository suppliedRepository) {
         this.plugin = plugin;
@@ -497,6 +505,18 @@ public final class AssistantMemoryService implements AutoCloseable {
         } catch (Exception exception) {
             warn("Could not flush assistant memory writer: " + exception.getMessage());
         }
+    }
+
+    /** Clears one isolated evaluation fixture after its result has been collected. */
+    public void resetEphemeralEvaluation() {
+        if (!(repository instanceof InMemoryMemoryRepository ephemeralRepository)) {
+            throw new IllegalStateException("Ephemeral evaluation reset requires ephemeral memory storage");
+        }
+        flush();
+        activeRecords.clear();
+        audienceIndex.clear();
+        recentTopicTerms.clear();
+        ephemeralRepository.clear();
     }
 
     @Override

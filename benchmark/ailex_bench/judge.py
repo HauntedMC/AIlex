@@ -7,6 +7,7 @@ import urllib.request
 from typing import Any
 
 RESPONSES_URL = "https://api.openai.com/v1/responses"
+JUDGE_MAX_OUTPUT_TOKENS = 600
 
 
 def judge_result(result: dict[str, Any], model: str | None = None) -> dict[str, Any]:
@@ -45,11 +46,14 @@ def judge_result(result: dict[str, Any], model: str | None = None) -> dict[str, 
     payload = {
         "model": judge_model,
         "store": False,
-        "reasoning": {"effort": "medium"},
-        "instructions": "Return only the requested JSON judgment. Be strict and concise.",
+        "reasoning": {"effort": "low"},
+        "instructions": (
+            "Return only the requested JSON judgment. Be strict and concise. "
+            "Keep the reason to one sentence of at most 160 characters."
+        ),
         "input": [{"role": "user", "content": [{"type": "input_text", "text": prompt}]}],
         "text": {"format": schema},
-        "max_output_tokens": 250,
+        "max_output_tokens": JUDGE_MAX_OUTPUT_TOKENS,
     }
     request = urllib.request.Request(
         RESPONSES_URL,
@@ -67,7 +71,12 @@ def judge_result(result: dict[str, Any], model: str | None = None) -> dict[str, 
     try:
         judgment = json.loads(text)
     except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Judge returned invalid JSON: {text[:500]}") from exc
+        status = str(body.get("status") or "unknown")
+        incomplete = body.get("incomplete_details") or {}
+        reason = str(incomplete.get("reason") or "") if isinstance(incomplete, dict) else ""
+        raise RuntimeError(
+            f"Judge returned invalid JSON (status={status}, reason={reason or 'none'}): {text[:500]}"
+        ) from exc
     usage = body.get("usage") or {}
     judgment.update({
         "judged": True,

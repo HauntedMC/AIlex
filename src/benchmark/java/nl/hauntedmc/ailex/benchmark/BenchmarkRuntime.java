@@ -84,7 +84,8 @@ final class BenchmarkRuntime implements AutoCloseable {
         configuration.set("openai.store_responses", false);
         configuration.set("openai.assistant.observability.enabled", false);
         configuration.set("openai.assistant.reliability.cache_static_answers", false);
-        configuration.set("openai.assistant.memory.storage.backend", "sqlite");
+        configuration.set("openai.assistant.memory.consolidation.enabled", false);
+        configuration.set("openai.assistant.memory.retention.enabled", false);
         applyOverrides(overrides);
 
         this.plugin = mock(AIlexPlugin.class);
@@ -96,7 +97,7 @@ final class BenchmarkRuntime implements AutoCloseable {
         this.pluginStatic = mockStatic(AIlexPlugin.class);
         pluginStatic.when(AIlexPlugin::getPlugin).thenReturn(plugin);
 
-        this.memoryService = new AssistantMemoryService(plugin);
+        this.memoryService = AssistantMemoryService.forEphemeralEvaluation(plugin);
         when(plugin.getAssistantMemoryService()).thenReturn(memoryService);
         this.openAiClient = new OpenAiResponsesClient(plugin);
         when(plugin.getOpenAiResponsesClient()).thenReturn(openAiClient);
@@ -169,7 +170,7 @@ final class BenchmarkRuntime implements AutoCloseable {
             );
             String userPrompt = userPrompt(playerName, content);
             String memory = plan.durableMemory()
-                    ? memoryContext(playerId, content, plan.eventMemory()) : "";
+                    ? memoryContext(playerId, content, plan.eventMemory(), analysis.intent()) : "";
             AssistantService.PreparedRequest prepared = new AssistantService.PreparedRequest(
                     playerId.toString(), playerName, "AIlex", BENCHMARK_NPC_MEMORY_ID,
                     content, systemPrompt, userPrompt, analysis, settings, plan, plan.knowledge(), liveSnapshot, memory,
@@ -242,8 +243,13 @@ final class BenchmarkRuntime implements AutoCloseable {
         result.addProperty(
                 "latency_ms", TimeUnit.NANOSECONDS.toMillis(Math.max(0L, System.nanoTime() - caseStarted))
         );
-        result.add("metadata", benchmarkCase.has("metadata")
-                ? benchmarkCase.get("metadata").deepCopy() : new JsonObject());
+        JsonObject metadata = benchmarkCase.has("metadata") && benchmarkCase.get("metadata").isJsonObject()
+                ? benchmarkCase.getAsJsonObject("metadata").deepCopy() : new JsonObject();
+        metadata.addProperty("fixture_memory_storage", "ephemeral");
+        metadata.addProperty("fixture_memory_reset_per_case", true);
+        metadata.addProperty("routing_policy", "native unless fixture intent_override is set");
+        result.add("metadata", metadata);
+        memoryService.resetEphemeralEvaluation();
         return result;
     }
 
@@ -338,10 +344,10 @@ final class BenchmarkRuntime implements AutoCloseable {
         return knowledgeIndex.search(request.message(), request.settings());
     }
 
-    private String memoryContext(UUID playerId, String query, boolean includeEvents) {
+    private String memoryContext(UUID playerId, String query, boolean includeEvents, AssistantIntent intent) {
         try {
             return (String) memoryContextMethod.invoke(
-                    assistantService, playerId, BENCHMARK_NPC_MEMORY_ID, query, includeEvents
+                    assistantService, playerId, BENCHMARK_NPC_MEMORY_ID, query, includeEvents, intent
             );
         } catch (ReflectiveOperationException exception) {
             throw new IllegalStateException("Could not build production AIlex memory context for benchmark turn", exception);
@@ -453,7 +459,7 @@ final class BenchmarkRuntime implements AutoCloseable {
     private Method memoryContextMethod() {
         try {
             Method method = AssistantService.class.getDeclaredMethod(
-                    "memoryContext", UUID.class, String.class, String.class, boolean.class
+                    "memoryContext", UUID.class, String.class, String.class, boolean.class, AssistantIntent.class
             );
             method.setAccessible(true);
             return method;

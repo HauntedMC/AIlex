@@ -53,6 +53,10 @@ final class InMemoryMemoryRepository implements MemoryRepository {
 
     @Override
     public void close() {
+        clear();
+    }
+
+    void clear() {
         records.clear();
     }
 

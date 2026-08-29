@@ -29,14 +29,18 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     latencies = [int(row.get("latency_ms") or 0) for row in rows]
     usage = Counter()
     official = defaultdict(lambda: [0, 0])
-    categories = defaultdict(lambda: {"cases": 0, "hard_pass": 0, "judged": 0, "judge_score": 0})
+    categories = defaultdict(lambda: {
+        "cases": 0, "hard_evaluated": 0, "hard_pass": 0, "judged": 0, "judge_score": 0
+    })
     failures = Counter()
 
     for row in rows:
         category = str(row.get("category") or "uncategorized")
         categories[category]["cases"] += 1
-        if row.get("hard_pass"):
-            categories[category]["hard_pass"] += 1
+        if int(row.get("hard_checks_total") or 0) > 0:
+            categories[category]["hard_evaluated"] += 1
+            if row.get("hard_pass"):
+                categories[category]["hard_pass"] += 1
         judge = row.get("judge") or {}
         if judge.get("judged"):
             categories[category]["judged"] += 1
@@ -119,14 +123,14 @@ def write_report(run_dir: Path, rows: list[dict[str, Any]]) -> dict[str, Any]:
         "<h2>Cases</h2><table><thead><tr><th>Case</th><th>Category</th><th>Hard</th><th>Judge</th><th>Latency</th><th>Answer</th></tr></thead><tbody>",
     ]
     for row in rows:
-        hard = "PASS" if row.get("hard_pass") else "FAIL"
+        hard = "N/A" if int(row.get("hard_checks_total") or 0) == 0 else "PASS" if row.get("hard_pass") else "FAIL"
         judge = row.get("judge") or {}
         judge_text = "-" if not judge.get("judged") else f"{judge.get('score')}/4 {'✓' if judge.get('correct') else '✗'}"
         report.append(
             "<tr>"
             f"<td>{html.escape(str(row.get('id') or ''))}</td>"
             f"<td>{html.escape(str(row.get('category') or ''))}</td>"
-            f"<td class={'pass' if hard == 'PASS' else 'fail'}>{hard}</td>"
+                f"<td class={'pass' if hard == 'PASS' else 'fail' if hard == 'FAIL' else ''}>{hard}</td>"
             f"<td>{html.escape(judge_text)}</td>"
             f"<td>{int(row.get('latency_ms') or 0)} ms</td>"
             f"<td>{html.escape(str(row.get('answer') or ''))}</td>"

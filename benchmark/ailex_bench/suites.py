@@ -260,7 +260,6 @@ def longmemeval_cases(name: str, cache: Path) -> list[dict[str, Any]]:
             "id": f"longmemeval-{safe_id(question_id)}",
             "suite": "longmemeval",
             "category": str(item.get("question_type", "memory")),
-            "intent_override": "EVENT_RECALL",
             "seed_events_file": str(fixture_path),
             "turns": [{"role": "user", "content": str(item.get("question", ""))}],
             "expect": {"answer": str(item.get("answer", ""))},
@@ -273,7 +272,7 @@ def longmemeval_cases(name: str, cache: Path) -> list[dict[str, Any]]:
                 "answer_session_ids": item.get("answer_session_ids", []),
                 "history_fixture_sha256": fixture_hash,
                 "official_metric": "official_llm_judge",
-                "adapter_protocol": "trusted timestamped event ingestion into AIlex memory; retrieval/reasoning evaluation",
+                "adapter_protocol": "trusted timestamped event ingestion into AIlex memory; native routing, retrieval and reasoning evaluation",
             },
         })
     return cases
@@ -348,7 +347,6 @@ def memoryagentbench_cases(cache: Path) -> list[dict[str, Any]]:
                     "id": f"memoryagentbench-{safe_id(split_name)}-{safe_id(qa_id)}",
                     "suite": "memoryagentbench",
                     "category": split_name,
-                    "intent_override": "EVENT_RECALL",
                     "seed_events_file": str(fixture_path),
                     "turns": [{"role": "user", "content": str(question)}],
                     "expect": expect,
@@ -360,7 +358,7 @@ def memoryagentbench_cases(cache: Path) -> list[dict[str, Any]]:
                         "acceptable_answers": list(accepted),
                         "history_fixture_sha256": fixture_hash,
                         "official_metric": metric,
-                        "adapter_protocol": "trusted incremental-context ingestion into AIlex memory; retrieval/reasoning evaluation",
+                        "adapter_protocol": "trusted incremental-context ingestion into AIlex memory; native routing, retrieval and reasoning evaluation",
                     },
                 })
     return cases

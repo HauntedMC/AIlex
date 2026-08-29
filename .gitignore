@@ -17,6 +17,11 @@ benchmark/local/
 benchmark/.env
 benchmark/.env.*
 benchmark/**/*.eval
+benchmark/**/__pycache__/
+benchmark/**/*.py[cod]
+benchmark/**/*.egg-info/
+benchmark/.pytest_cache/
+benchmark/.mypy_cache/
 
 *.class
 *.jar

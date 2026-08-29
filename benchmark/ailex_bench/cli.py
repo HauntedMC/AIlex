@@ -222,7 +222,7 @@ def list_suites() -> None:
         "holdout": "private gitignored local holdout cases",
         "replays": "sanitized gitignored production regressions",
         "longmemeval": "LongMemEval-S cleaned, adapted to AIlex memory retrieval/reasoning",
-        "longmemeval-oracle": "LongMemEval oracle evidence sessions, retrieval/reasoning upper bound",
+        "longmemeval-oracle": "LongMemEval oracle evidence sessions, native-routing diagnostic",
         "memoryagentbench": "official exact/substr core MemoryAgentBench subsets",
         "standard": "HauntedMC + LongMemEval-S + relevant MemoryAgentBench",
         "extended": "HauntedMC + LongMemEval-M + relevant MemoryAgentBench; potentially very large",
@@ -382,7 +382,12 @@ def judge_rows(rows: list[dict[str, Any]], mode: str, model: str | None) -> list
         )
         if should_judge:
             print(f"judge [{index}/{len(rows)}] {row.get('id')}")
-            row["judge"] = judge_result(row, model)
+            try:
+                row["judge"] = judge_result(row, model)
+            except RuntimeError as exception:
+                # Semantic judges are diagnostic supplements; retain the completed live result when one is unavailable.
+                row["judge"] = {"judged": False, "error": str(exception)}
+                print(f"judge [{index}/{len(rows)}] unavailable: {exception}")
         judged_rows.append(row)
     return judged_rows
 

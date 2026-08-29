@@ -93,33 +93,131 @@ Use `--limit`, `--sample`, `--category`, and `--case` to reduce a run before spe
 
 ### `smoke`
 
-A small real-model subset covering normal conversation, memory, live state, knowledge, canonical identifiers and abstention. This is the normal development feedback loop.
+A small real-model subset covering normal conversation, memory, live state, knowledge, canonical identifiers and abstention.
+
+```bash
+./bench run smoke
+```
+
+```bash
+./bench run smoke --repeat 3
+```
+
+Use this after a prompt, retrieval, memory or model-configuration change. It tells you whether the most important AIlex product paths still work with a real provider call; hard failures identify broken canonical IDs, evidence, abstention or memory behavior, while the report exposes the route and retrieved context.
+
+It is good for a fast development loop because it is small and product-specific. It is not a release-quality score: it has only 24 cases, model outputs vary, and its HauntedMC facts are visible in this repository. Run critical cases repeatedly and use holdouts/replays before treating an improvement as robust.
 
 ### `haunted`
 
 Full-product scenarios. Most exact-identifier cases are generated from `src/main/resources/knowledge/entities.tsv`, so benchmark truth is not duplicated. Authored cases cover conversation continuity, durable memory formation/correction/forgetting, live state, abstention and multilingual identifier preservation.
 
-### `holdout` and `replays`
+```bash
+./bench run haunted
+```
 
-These load gitignored `benchmark/local/holdout.jsonl` and `benchmark/local/replays.jsonl`. Holdout cases provide a small private set that should not drive prompt tuning. Replays are sanitized real production failures that should become permanent regression scenarios without retaining private player data.
+```bash
+./bench run haunted --category identifiers --repeat 3
+```
+
+```bash
+./bench run haunted --case missing-server-evidence
+```
+
+This is the main product-regression suite. It tells you whether AIlex preserves exact server identifiers, attaches required evidence, respects current player memory, and abstains where server knowledge is missing. Category and case commands are useful while diagnosing one failure; use the full suite before accepting a product change.
+
+It is good because its invariants are directly tied to HauntedMC’s user-facing contract. It is not independent external validation: generated cases derive from the same reviewed registry AIlex uses, and authored cases can be overfit. Pair it with private holdout/replay cases and published suites.
+
+### `holdout`
+
+```bash
+./bench run holdout
+```
+
+Holdout loads the gitignored `benchmark/local/holdout.jsonl`. It tells you whether a change generalizes to product cases that prompt/code authors do not routinely inspect.
+
+It is the best guard against tuning to `smoke` and `haunted`, provided it stays private and is refreshed occasionally. It is not useful if it is too small, stale, or exposed to the people optimizing prompts; never use private player data unredacted.
+
+### `replays`
+
+```bash
+./bench run replays
+```
+
+Replays load sanitized failures from `benchmark/local/replays.jsonl`. They tell you whether known production incidents remain fixed under the real assistant pipeline.
+
+They are excellent permanent regression tests because they are based on real failure modes. They are not a representative quality sample: replay-heavy changes can solve yesterday’s incidents while regressing unseen conversations. Keep private holdouts alongside them.
 
 ### LongMemEval
 
-The runner downloads the official cleaned LongMemEval data. The default `longmemeval` suite uses the cleaned S variant; `longmemeval-oracle` uses evidence sessions only and is useful as a retrieval/reasoning upper bound.
+The runner downloads the official cleaned LongMemEval data. The default `longmemeval` suite uses the cleaned S variant; `longmemeval-oracle` uses evidence sessions only as a diagnostic. It still uses native routing, so it is not presented as an end-to-end upper bound.
 
-The adapter inserts the timestamped benchmark history into AIlex as trusted benchmark event memory, then asks the original question through the real AIlex memory retrieval, reasoning and grounding path. Relative timestamps are aligned to the local benchmark clock so phrases such as `yesterday` and `last week` retain their intended relationship to the benchmark question date. The adapter deliberately does **not** claim to measure AIlex's memory-formation extractor, because re-generating every historical assistant turn would change the published interaction and multiply model cost.
+The adapter inserts the timestamped benchmark history into AIlex as trusted benchmark event memory, then asks the original question through **native AIlex routing**, memory retrieval, reasoning and grounding. Relative timestamps are aligned to the local benchmark clock so phrases such as `yesterday` and `last week` retain their intended relationship to the benchmark question date. The adapter deliberately does **not** claim to measure AIlex's memory-formation extractor, because re-generating every historical assistant turn would change the published interaction and multiply model cost.
+
+Fixture memory is ephemeral and cleared after every case. This prevents one published question's synthetic history from leaking into another and avoids measuring SQLite write throughput rather than retrieval. It does not bypass AIlex's memory search, ranking, temporal resolution or grounding. Each run records this boundary and its routing policy in `run.json` and every result row.
+
+The console prints `hard=N/A` when a published case has no deterministic hard check. A LongMemEval result is not an official score until `./bench score-longmemeval <run>` has invoked the upstream scorer; do not treat console PASS/N/A labels as that score.
 
 Large histories are written once to content-addressed JSONL fixtures under `benchmark/.cache/fixtures/` and referenced by the materialized cases instead of duplicating megabytes of history for every question.
 
 `./bench score-longmemeval` writes the official `{question_id, hypothesis}` JSONL and invokes the upstream LongMemEval scorer rather than copying its scoring implementation into AIlex.
 
+```bash
+./bench run longmemeval --limit 20
+```
+
+```bash
+./bench run longmemeval
+```
+
+```bash
+./bench score-longmemeval <run-id>
+```
+
+```bash
+./bench run longmemeval-oracle --limit 20
+```
+
+`longmemeval` tells you how well native AIlex routing, temporal memory retrieval and answer generation work on a published long-history benchmark. Score a completed run with the upstream scorer before comparing it to other LongMemEval results. `longmemeval-oracle` is a diagnostic with evidence-only sessions; it is useful for separating distractor-context difficulty from the rest of the task, but it is not an end-to-end upper bound.
+
+This is good external evidence for long-context memory and relative-time handling. It is not a test of AIlex memory formation, Bukkit live state, or HauntedMC knowledge. The fixture is deliberately injected as trusted event memory, and the default report has `hard=N/A` for these rows. For example, the linked four-case report records `hard.evaluated: 0` and no semantic or official score: it confirms the run completed and provides traces, but it does **not** establish accuracy.
+
 Upstream: <https://github.com/xiaowu0162/LongMemEval> (MIT).
 
 ### MemoryAgentBench
 
-The runner loads `ai-hyz/MemoryAgentBench` through Hugging Face Datasets. The standard adapter uses the published exact-match and substring-exact-match subsets whose official metrics can be reproduced deterministically. Context is materialized once per upstream row and shared by all of its questions, preserving the benchmark's inject-once/query-many structure without creating multi-gigabyte duplicate fixtures.
+The runner loads `ai-hyz/MemoryAgentBench` through Hugging Face Datasets. The standard adapter uses the published exact-match and substring-exact-match subsets whose official metrics can be reproduced deterministically. Context is materialized once per upstream row and shared by all of its questions, preserving the benchmark's inject-once/query-many structure without creating multi-gigabyte duplicate fixtures. Questions use native AIlex routing; they are not forced onto a memory route.
 
 Recommendation, duplicate LongMemEval and LLM-F1 subsets are not relabeled with home-grown scores; they can be added later only through their corresponding upstream metric protocol.
+
+```bash
+./bench run memoryagentbench --limit 20
+```
+
+```bash
+./bench run memoryagentbench
+```
+
+This tells you how native AIlex routing and memory retrieval perform on the published exact-match and substring-exact-match subsets. Their deterministic metrics are calculated from the saved answers, so the report can reveal a genuine exact-answer regression without a model judge.
+
+It is useful coverage beyond HauntedMC because its contexts and questions are externally authored. It is not a complete MemoryAgentBench leaderboard result: recommendation, duplicated LongMemEval and LLM-F1 subsets remain excluded until their official protocols are integrated. Its flattened text context also does not exercise AIlex live tools or multimodal input.
+
+### `standard` and `extended`
+
+```bash
+./bench run standard --sample 100
+```
+
+```bash
+./bench run standard
+```
+
+```bash
+./bench run extended --sample 100
+```
+
+`standard` combines HauntedMC, cleaned LongMemEval-S and supported MemoryAgentBench cases; `extended` swaps in the larger LongMemEval-M set. They tell you whether a candidate change trades product behavior against published-memory behavior.
+
+They are good pre-release comparison runs because they expose trade-offs across distinct capabilities. They are expensive and heterogeneous, so do not average their outcomes into one “intelligence” number. Compare hard invariants, upstream published scores, semantic judgments and latency separately, using the same materialized suite and configuration.
 
 Upstream: <https://github.com/HUST-AI-HYZ/MemoryAgentBench> and <https://huggingface.co/datasets/ai-hyz/MemoryAgentBench> (MIT).
 
@@ -153,6 +251,8 @@ Or point the OpenAI-compatible reader at OpenAI while continuing to use the loca
 ```
 
 The current adapter is deliberately **text-only**: screenshot fields and query images are ignored. Every V2 output directory therefore contains `AILEX_ADAPTER.json` with `text_only=true`, `screenshots_ignored=true` and `leaderboard_comparable=false`. The resulting score is useful for evaluating AIlex's memory on the published V2 tasks, but it must not be presented as a multimodal official-leaderboard score.
+
+This is the strongest protocol check in the repository because the official harness owns the questions, reader, evaluator, latency collection and aggregated metrics. It is still not a multimodal leaderboard evaluation, and its reader/evaluator model choices can materially affect results; record those settings when comparing runs.
 
 Upstream: <https://github.com/xiaowu0162/LongMemEval-V2> (Apache-2.0).
 

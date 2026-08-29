@@ -58,6 +58,7 @@ public final class BenchmarkMain {
 
         Path resultsPath = outputDirectory.resolve("results.jsonl");
         int completed = 0;
+        int hardEvaluated = 0;
         int hardPassed = 0;
         long startedAt = System.currentTimeMillis();
         try (BenchmarkRuntime runtime = new BenchmarkRuntime(repositoryRoot, workDirectory, overrides);
@@ -70,16 +71,22 @@ public final class BenchmarkMain {
                     writer.newLine();
                     writer.flush();
                     completed++;
-                    if (result.get("hard_pass").getAsBoolean()) {
+                    int hardChecks = result.get("hard_checks_total").getAsInt();
+                    if (hardChecks > 0) {
+                        hardEvaluated++;
+                    }
+                    if (hardChecks > 0 && result.get("hard_pass").getAsBoolean()) {
                         hardPassed++;
                     }
+                    String hardStatus = hardChecks == 0 ? "N/A"
+                            : result.get("hard_pass").getAsBoolean() ? "PASS" : "FAIL";
                     System.out.printf(
                             Locale.ROOT,
                             "[%d/%d] %s hard=%s latency=%dms%n",
                             completed,
                             cases.size() * repeat,
                             result.get("id").getAsString(),
-                            result.get("hard_pass").getAsBoolean() ? "PASS" : "FAIL",
+                            hardStatus,
                             result.get("latency_ms").getAsLong()
                     );
                 }
@@ -90,8 +97,12 @@ public final class BenchmarkMain {
             run.addProperty("started_at", Instant.ofEpochMilli(startedAt).toString());
             run.addProperty("completed_at", Instant.now().toString());
             run.addProperty("cases", completed);
+            run.addProperty("hard_evaluated", hardEvaluated);
             run.addProperty("hard_passed", hardPassed);
-            run.addProperty("hard_failed", completed - hardPassed);
+            run.addProperty("hard_failed", hardEvaluated - hardPassed);
+            run.addProperty("fixture_memory_storage", "ephemeral");
+            run.addProperty("fixture_memory_reset_per_case", true);
+            run.addProperty("routing_policy", "native unless a fixture explicitly declares intent_override");
             run.addProperty("git_sha", gitSha(repositoryRoot));
             run.addProperty("config_sha256", runtime.configurationHash());
             run.addProperty("knowledge_sha256", runtime.knowledgeHash());
