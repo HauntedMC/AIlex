@@ -26,6 +26,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 /** Main plugin entrypoint and composition root. */
 public class AIlexPlugin extends JavaPlugin {
@@ -102,6 +104,7 @@ public class AIlexPlugin extends JavaPlugin {
      * resources; operator-authored knowledge must use separate filenames and is left untouched by this synchronization.
      */
     private void saveBuiltInKnowledge() {
+        removeRetiredBuiltInKnowledge();
         try (InputStream resource = getResource("knowledge/index.txt")) {
             if (resource == null) {
                 throw new IllegalStateException("The bundled knowledge manifest is missing");
@@ -113,6 +116,35 @@ public class AIlexPlugin extends JavaPlugin {
             }
         } catch (IOException exception) {
             throw new IllegalStateException("Could not load the bundled knowledge manifest", exception);
+        }
+    }
+
+    /** Removes only filenames explicitly retired by this bundled knowledge migration. */
+    private void removeRetiredBuiltInKnowledge() {
+        try (InputStream resource = getResource("knowledge/retired.txt")) {
+            if (resource == null) {
+                return;
+            }
+            Path knowledgeDirectory = getDataFolder().toPath().resolve("knowledge").normalize();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(resource, StandardCharsets.UTF_8))) {
+                reader.lines().map(String::trim)
+                        .filter(file -> file.matches("[a-z0-9-]+\\.md"))
+                        .forEach(file -> deleteRetiredKnowledgeFile(knowledgeDirectory, file));
+            }
+        } catch (IOException exception) {
+            throw new IllegalStateException("Could not remove retired bundled knowledge", exception);
+        }
+    }
+
+    private void deleteRetiredKnowledgeFile(Path knowledgeDirectory, String file) {
+        Path target = knowledgeDirectory.resolve(file).normalize();
+        if (!target.startsWith(knowledgeDirectory)) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(target);
+        } catch (IOException exception) {
+            LoggerUtils.logWarning("Could not remove retired AI knowledge file " + file + ": " + exception.getMessage());
         }
     }
 

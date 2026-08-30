@@ -1,20 +1,15 @@
 ---
 id: hauntedmc.dungeons
 title: Survival Dungeons
-aliases: [dungeon, dungeons, dungeon key, /warp dungeons, /dungeons team, trial chamber, ancient city]
-category: gamemode-feature
-authority: operator-confirmed
+aliases: [dungeon, dungeons, dungeon key, dungeon team, /warp dungeons, /dungeon leave, /dungeons team]
+category: survival
+authority: implementation-confirmed
 updated: 2026-08-29
-expires: null
-source: HauntedMC Survival changelog 2026-04-29 + operator-provided public documentation 2026-08-29
+source: https://www.hauntedmc.nl/threads/survival-changelogs.15888/post-120008 | https://www.hauntedmc.nl/threads/dungeon-update.16048/ | ServerFeatures 3.7.1: docs/features/graveyard.md
 ---
 
-Dungeons are replayable separate Survival instances with maps, mobs, structures and rewards. Hub: `/warp dungeons`.
+The Dungeon system is live on Survival. Open the rebuilt hub with `/warp dungeons`; the live hub is authoritative for access, keys, costs, rewards, and cooldowns. The current changelog confirms renewed Trial Chamber variants and the added Ancient City Dungeon. `/god` is disabled in Dungeons.
 
-Current verified state from the 29 Apr 2026 renewal: renewed Trial Chamber with multiple possible variants + added Ancient City dungeon.
+Use `/dungeons team` for a temporary Dungeon team. Each member needs a Dungeon Key, teams expire after playing, and some Dungeons increase in difficulty with more participants.
 
-`/dungeons team`: temporary team, expires after playing; every member needs their own Dungeon Key; some dungeons scale difficulty by participant count.
-
-Access requires the matching key/requirement shown by the live hub; exact key costs/crate odds/acquisition are volatile. `/dungeon leave` is the documented leave route and can consume access/key state, so warn before suggesting it. `/god`/`/fly` may be disabled in dungeon worlds.
-
-Older announcements also named other themes. Ocean Monument, Enderdragon, Nether Fortress, Stronghold and PvP Dungeons were announced as future work in Apr 2026: do **not** call them live unless a newer hub/changelog confirms them.
+Use `/dungeon leave` to leave a Dungeon. Leaving consumes the key, so a new key is needed to start again. If you die, recover items through the current virtual-grave system at the death location.

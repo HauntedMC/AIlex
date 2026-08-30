@@ -490,6 +490,7 @@ public final class LocalKnowledgeIndex {
     private double authorityWeight(String authority) {
         return switch (authority == null ? "" : authority.toLowerCase(Locale.ROOT)) {
             case "operator-confirmed" -> 1.32D;
+            case "implementation-confirmed" -> 1.30D;
             case "official" -> 1.25D;
             case "reviewed" -> 1.15D;
             case "trusted" -> 1.08D;

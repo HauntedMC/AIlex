@@ -12,16 +12,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class DiscordKnowledgeRegressionTest {
 
     @Test
-    void bundledDiscordKnowledgeMustExposeCanonicalChannelNames() throws IOException {
-        try (InputStream stream = getClass().getResourceAsStream("/knowledge/discord.md")) {
+    void bundledDiscordKnowledgeMustRoutePlayersToTheOfficialLiveServer() throws IOException {
+        try (InputStream stream = getClass().getResourceAsStream("/knowledge/community-discord.md")) {
             assertNotNull(stream);
             String knowledge = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
 
-            assertTrue(knowledge.contains("`#announcements`"));
-            assertTrue(knowledge.contains("`#changelogs`"));
-            assertTrue(knowledge.contains("`#support`"));
-            assertTrue(knowledge.contains("`#aankondigingen` is **not** a verified channel"));
-            assertTrue(knowledge.contains("never translate"));
+            assertTrue(knowledge.contains("`/discord`"));
+            assertTrue(knowledge.contains("https://www.hauntedmc.nl/discord"));
+            assertTrue(knowledge.contains("live Discord server"));
         }
     }
 
@@ -30,7 +28,7 @@ class DiscordKnowledgeRegressionTest {
         try (InputStream stream = getClass().getResourceAsStream("/knowledge/index.txt")) {
             assertNotNull(stream);
             String manifest = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
-            assertTrue(manifest.lines().anyMatch("discord.md"::equals));
+            assertTrue(manifest.lines().anyMatch("community-discord.md"::equals));
         }
     }
 }

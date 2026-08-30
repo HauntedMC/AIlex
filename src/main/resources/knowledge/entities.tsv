@@ -1,82 +1,202 @@
 # Reviewed canonical HauntedMC identifiers. Format: kind<TAB>canonical<TAB>aliases<TAB>description
-# @complete marks an identifier kind whose canonical list is exhaustive for safe negative answers.
-@complete	discord-channel
-@complete	rank
-@complete	game-mode
+# Commands are not marked complete: this registry records only player commands verified by official public resources
+# or reviewed current ServerFeatures/ProxyFeatures documentation.
 
-discord-channel	#announcements	announcements,aankondigingen,announcement channel,aankondigingen kanaal	Official announcements and important news.
-discord-channel	#welcome	welcome,welkom	Welcome and join information.
-discord-channel	#notification-roles	notification roles,notifications	Notification role selection.
-discord-channel	#link-account	link account,account linking,account koppelen	Minecraft/account linking.
-discord-channel	#changelogs	changelogs,changes,updates	Published changes and update notes.
-discord-channel	#links	links,official links	Official links.
-discord-channel	#rules	rules,regels	Discord/community rules.
-discord-channel	#support	support,help	Support/help route.
-discord-channel	#build-showcase	build showcase,showcase	Community build showcases.
-discord-channel	#polls	polls,peilingen	Community polls.
-discord-channel	#rate-my-build	rate my build,build feedback	Build feedback and rating.
-discord-channel	#chat	chat,general chat,algemene chat	General community chat.
-discord-channel	#bot-chat	bot chat,bots	Bot-related chat.
-discord-channel	#movies-series	movies series,movies,series,films	Movies and series.
-discord-channel	#food	food,eten	Food chat.
-discord-channel	#pets	pets,huisdieren	Pets chat.
-discord-channel	#memes	memes	Memes.
-discord-channel	#music	music,muziek	Music.
-discord-channel	#off-topic	off topic,off-topic	Off-topic chat.
-discord-channel	#show-room	show room,showroom	Show-room channel.
-discord-channel	#sport	sport,sports	Sports.
-discord-channel	#gaming-tech	gaming tech,gaming,technology,technologie	Gaming and technology.
-
-rank	Gast	guest,gast	Basic guest rank/tag; not a purchasable progression tier.
-rank	Speler	player,speler	Base public player rank.
-rank	Elite	elite	Current public rank.
-rank	Legend	legend	Current public rank.
-rank	Supreme	supreme	Current public rank.
-rank	Supreme+	supreme+,supreme plus	Highest current public progression rank.
-
-game-mode	Survival	survival,smp	Currently active game-mode category.
-game-mode	Creative	creative,plots	Currently active game-mode category.
-game-mode	Minigames	minigames,minigame	Currently active game-mode category.
-
-command	/help	help	In-game help route.
-command	/rules	rules	Server rules route.
-command	/regels	regels	Dutch server rules route.
-command	/ranks	ranks	Current rank information.
-command	/discord	discord	Community Discord route.
-command	/support	support	Official support route.
-command	/vote	vote,voting	Voting route.
-command	/vote links	vote links	Current vote links.
-command	/vote leaderboard	vote leaderboard	Vote leaderboard web route.
-command	/vote top	vote top	In-game vote ranking.
-command	/vote stats	vote stats	Vote statistics.
-command	/vote winners	vote winners	Top-three finish history.
-command	/vote remind	vote remind	Vote reminder preference.
-command	/link	link,hauntylink	Minecraft account linking route.
-command	/linkbedrock	link bedrock,bedrock link	Bedrock linking route.
-command	/2fa	2fa,two factor	In-game authenticator 2FA setup/verification route.
-command	/lang	lang,language setting	Set player language.
-command	/language	language	Show current language.
-command	/taal	taal	Dutch alias for current language.
-command	/lobby	lobby	Network lobby navigation.
-command	/hub	hub	Alias that routes to an available lobby.
-command	/menu	menu,server selector	Server Selector.
-command	/spawn	spawn	Spawn navigation.
-command	/limits	limits,limieten	Current server limits route.
-command	/maps	maps,dynmap	Public map information route.
-command	/autopickup	autopickup	AutoPickup toggle from Legend.
-command	/lottery buy	lottery buy	Buy a lottery ticket; price/timing must come from live evidence.
-command	/fly	fly	Rank-based fly command.
-command	/god	god	Rank-based god mode command.
-command	/claim	claim	Create/manage a Survival land claim.
-command	/trust	trust	Survival claim trust command.
-command	/untrust	untrust	Revoke Survival claim trust.
-command	/sethome	sethome	Set a home.
-command	/tpa	tpa	Request teleport to another player.
-command	/randomtp	randomtp,rtp,wild	Random teleport route.
-command	/plot claim	plot claim	Claim a Creative plot.
-command	/warp dungeons	warp dungeons,dungeon hub	Survival Dungeon hub.
-command	/dungeons team	dungeons team,dungeon team	Temporary Dungeon team mode.
-command	/dungeon leave	dungeon leave	Leave the current dungeon; may consume access/key.
-command	/finditem	finditem,shop finder	Find Survival shops/items; uses inkoop/verkoop terminology.
-command	/autoreconnect cancel	autoreconnect cancel	Cancel automatic reconnect after restart.
-command	/queue leave	queue leave	Leave a server queue.
+command	/2fa	2fa,two factor	Set up or verify in-game two-factor authentication.
+command	/link	link,hauntylink	Link a Minecraft account to the HauntedMC website.
+command	/register	register	Start the Minecraft-to-website registration flow.
+command	/dynmap hide	dynmap hide	Hide yourself on Dynmap.
+command	/dynmap show	dynmap show	Show yourself on Dynmap.
+command	/warp dungeons	warp dungeons,dungeon hub	Open the Survival Dungeon hub.
+command	/dungeon leave	dungeon leave,leave dungeon	Leave a Dungeon; the key is consumed.
+command	/autopickup	autopickup	Toggle AutoPickup for eligible players.
+command	/autopickup status	autopickup status	Show the current AutoPickup setting.
+command	/grave	grave,death grave	Show your nearest active virtual grave.
+command	/grave list	grave list	List your active virtual graves.
+command	/grave locate	grave locate	Show a selected grave's coordinates.
+command	/grave track	grave track	Track a selected grave.
+command	/grave claim	grave claim	Remotely claim a selected grave when available.
+command	/autoreconnect cancel	autoreconnect cancel	Opt out of automatic return after a restart.
+command	/queue	queue,q	Show queue status.
+command	/queue leave	queue leave	Leave a full-server queue.
+command	/msg	msg,message player	Send an online private message.
+command	/msg reply	msg reply	Reply to the latest message partner.
+command	/msg toggle	msg toggle	Enable or disable incoming private messages.
+command	/msg mode	msg mode,message privacy	Set private-message privacy to FRIENDS or ALL.
+command	/msg block	msg block	Block private messages from a player.
+command	/msg unblock	msg unblock	Remove a private-message block.
+command	/reply	reply	Reply to the latest message partner.
+command	/r	r	Reply to the latest message partner.
+command	/friend	friend,friends,fr	Manage friends, requests, and friend blocks.
+command	/friend add	friend add	Send a friend request.
+command	/friend accept	friend accept	Accept a friend request.
+command	/friend server	friend server	Join an accepted visible friend's server.
+command	/language	language,lang,taal	View or set AUTO, NL, or EN language preference.
+command	/playtime	playtime,speeltijd	Show your visible game-mode playtime and total.
+command	/playtime total	playtime total	Show total playtime.
+command	/playtime top	playtime top	Show a playtime leaderboard.
+command	/hub	hub	Move to the configured network hub.
+command	/list	list	Show visible players on your current server.
+command	/glist	glist	Show visible network player counts.
+command	/vote	vote	Open the official vote page.
+command	/vote links	vote links	Show official vote links.
+command	/vote leaderboard	vote leaderboard	Show the vote leaderboard.
+command	/vote remind	vote remind	Control vote reminders.
+command	/voicechat	voicechat,voice chat,proximity chat	Open Simple Voice Chat help when the client mod and player access are available.
+command	/emf	emf,even more fish,fishing help	Open EvenMoreFish help when the fishing feature is available.
+command	/pp	pp,particles,player particles	Open PlayerParticles controls when the feature is available to you.
+command	/hdb	hdb,headdb,head database	Open HeadDatabase help when the feature is available to you.
+command	/fly	fly	Rank-related flight perk; disabled in combat.
+command	/god	god	Rank-related god-mode perk.
+command	/randomtp	randomtp,rtp	Randomly teleport in the current world.
+command	/rtp	rtp,randomtp	Alias for random teleport.
+command	/tppos	tppos,teleport coordinates	Teleport to whole-number coordinates in the current world.
+command	/spawn	spawn	Teleport to the local normal spawn.
+command	/spawn cancel	spawn cancel	Cancel a pending spawn warmup.
+command	/combattag status	combattag status,combat tag status	Show your combat-tag state when available.
+command	/lottery	lottery	Show the current lottery.
+command	/lottery buy	lottery buy	Buy lottery tickets.
+command	/lottery donate	lottery donate	Donate to the lottery pot.
+command	/lottery claim	lottery claim	Claim a pending lottery payout.
+command	/phantomtoggle	phantomtoggle	Manage the phantom-spawn preference.
+command	/nightvision	nightvision	Toggle the temporary Night Vision perk.
+command	/parcour	parcour,parkour	Start, leave, or return to a parkour checkpoint.
+command	/afk	afk	Toggle AFK state.
+command	/nametag selfview	nametag selfview	Control whether you see your own nametag.
+command	/nickname	nickname	Set or remove a nickname.
+command	/glow	glow	Open glow selection.
+command	/balloons	balloons	Open balloon selection.
+command	/skin	skin	Temporarily change to another account's skin.
+command	/ping	ping	Show current proxy latency when ConnectionInfo is enabled and access is granted.
+command	/clientinfo recommend	clientinfo recommend	Show client-setting recommendations.
+command	/chatplaceholders	chatplaceholders	List enabled chat mentions and preview options.
+command	/homes	homes,home list	List your Survival or Creative homes.
+command	/sethome	sethome,set home	Create a named Survival or Creative home.
+command	/delhome	delhome,delete home	Remove a named Survival or Creative home.
+command	/money	money,balance	Show your balance, or a player's balance when that use is allowed.
+command	/balance	balance,money	Show your balance.
+command	/pay	pay	Pay another player when payments are enabled.
+command	/paytoggle	paytoggle	Control whether you can receive payments.
+command	/payconfirmtoggle	payconfirmtoggle	Control payment confirmation preference.
+command	/tpa	tpa	Request teleporting to another player.
+command	/tpaccept	tpaccept	Accept a pending teleport request.
+command	/tpdeny	tpdeny	Deny a pending teleport request.
+command	/tptoggle	tptoggle	Control whether you receive teleport requests.
+command	/tpahere	tpahere	Ask another player to teleport to you.
+command	/back	back	Return to the last location saved by the server when permitted.
+command	/tp	tp	Teleport to another player when the Elite Survival perk is available.
+command	/kits	kits	List current Survival kits.
+command	/kit	kit	Claim an available Survival kit.
+command	/backpack	backpack	Open the Survival rank backpack when available.
+command	/warps	warps	Browse the live Survival or Creative warp list.
+command	/warp	warp	Travel to a named published or player warp.
+command	/warp farm	warp farm	Visit the Survival farm warp when the Elite perk is available.
+command	/setwarp	setwarp	Create a Creative player warp when the rank perk is available.
+command	/mctop	mctop	Show a McMMO skill leaderboard.
+command	/mcrank	mcrank	Show your McMMO ranking.
+command	/mcstats	mcstats	Show your McMMO stats.
+command	/mcinfo	mcinfo	Show McMMO help for skills and abilities.
+command	/mcmmo help	mcmmo help	Show McMMO help.
+command	/party	party	Manage a McMMO party.
+command	/redeem	redeem	Redeem available McMMO credits.
+command	/sit	sit	Sit when the current location permits it.
+command	/sit toggle	sit toggle	Toggle the sitting preference.
+command	/sit playertoggle	sit playertoggle	Toggle whether you may sit on players.
+command	/lay	lay	Use the Elite laying pose.
+command	/bellyflop	bellyflop	Use the Elite bellyflop pose.
+command	/crawl	crawl	Use the Elite crawl pose.
+command	/spin	spin	Use the Legend spin pose.
+command	/treeassist toggle	treeassist toggle	Toggle the Legend TreeAssist perk.
+command	/compass	compass	Use the Elite utility compass.
+command	/getpos	getpos	Show your position.
+command	/near	near	Show nearby players.
+command	/ptime	ptime	Set your personal time when permitted.
+command	/pweather	pweather	Set your personal weather when permitted.
+command	/skull	skull,heads	Get a player skull when permitted.
+command	/heads	heads,skull	Browse available skulls when permitted.
+command	/top	top	Teleport to the highest safe position when permitted.
+command	/enderchest	enderchest,ec	Open your ender chest when permitted.
+command	/workbench	workbench,craft	Open a crafting table when permitted.
+command	/loom	loom	Open a loom when permitted.
+command	/trash	trash	Open a disposal inventory when permitted.
+command	/stonecutter	stonecutter	Open a stonecutter when permitted.
+command	/cartographytable	cartographytable	Open a cartography table when permitted.
+command	/grindstone	grindstone	Open a grindstone when permitted.
+command	/smithingtable	smithingtable	Open a smithing table when permitted.
+command	/anvil	anvil	Open an anvil when permitted.
+command	/hat	hat	Equip the held item as a hat when permitted.
+command	/jump	jump	Jump to the targeted location when permitted.
+command	/condense	condense,blocks	Condense eligible items into blocks when permitted.
+command	/blocks	blocks,condense	Condense eligible items into blocks when permitted.
+command	/veinminer	veinminer	Use the Supreme VeinMiner command.
+command	/speed walk	speed walk	Set the Supreme walking speed when permitted.
+command	/speed fly	speed fly	Set the Supreme flying speed when permitted.
+command	/claim	claim,newclaim,makeclaim	Create a Survival claim.
+command	/newclaim	newclaim,claim,makeclaim	Create a Survival claim.
+command	/makeclaim	makeclaim,claim,newclaim	Create a Survival claim.
+command	/trust	trust	Grant a player claim access.
+command	/accesstrust	accesstrust	Grant limited claim access.
+command	/containertrust	containertrust	Grant claim container access.
+command	/permissiontrust	permissiontrust	Grant claim permission-management access.
+command	/untrust	untrust	Remove a player's claim access.
+command	/claimslist	claimslist,listclaims	List your claims.
+command	/listclaims	listclaims,claimslist	List your claims.
+command	/trustlist	trustlist	List players trusted in a claim.
+command	/unclaim	unclaim,abandonclaim	Remove a claim.
+command	/abandonclaim	abandonclaim,unclaim	Remove a claim.
+command	/declaim	declaim,removeclaim	Remove a claim.
+command	/removeclaim	removeclaim,declaim	Remove a claim.
+command	/expandclaim	expandclaim,extendclaim,resizeclaim	Change a claim boundary.
+command	/extendclaim	extendclaim,expandclaim,resizeclaim	Change a claim boundary.
+command	/resizeclaim	resizeclaim,expandclaim,extendclaim	Change a claim boundary.
+command	/subdivideclaims	subdivideclaims	Create claim subclaims.
+command	/subdivideclaim	subdivideclaim,subdivideclaims	Create a claim subclaim.
+command	/abandonallclaims	abandonallclaims	Remove all your claims.
+command	/trapped	trapped	Request help escaping a claim when applicable.
+command	/abandontoplevelclaim	abandontoplevelclaim	Remove the top-level claim at your location.
+command	/restrictsubclaim	restrictsubclaim	Restrict access for a claim subclaim.
+command	/basicclaims	basicclaims	Switch to basic claim mode.
+command	/givepet	givepet	Give a pet to another player when permitted.
+command	/arm addmember	arm addmember	Add a player to a Survival mall shop.
+command	/arm removemember	arm removemember	Remove a player from a Survival mall shop.
+command	/arm tp	arm tp	Teleport to a Survival mall shop.
+command	/plot claim	plot claim	Claim the current Creative plot.
+command	/plot auto	plot auto	Claim the next available Creative plot.
+command	/plot home	plot home	Teleport to one of your Creative plots.
+command	/plot tp	plot tp	Teleport to a Creative plot.
+command	/plot visit	plot visit	Visit a Creative plot.
+command	/plot list	plot list	List Creative plots.
+command	/plot info	plot info	Show Creative plot information.
+command	/plot delete	plot delete	Delete one of your Creative plots.
+command	/plot trust	plot trust	Trust a player on a Creative plot.
+command	/plot add	plot add	Add a player to a Creative plot.
+command	/plot remove	plot remove	Remove a player from a Creative plot.
+command	/plot deny	plot deny	Deny a player access to a Creative plot.
+command	/plot kick	plot kick	Remove a player from a Creative plot.
+command	/plot clear	plot clear	Clear a Creative plot.
+command	/plot sethome	plot sethome	Set your default Creative plot home.
+command	/plot setbiome	plot setbiome	Set a Creative plot biome.
+command	/plot setdescription	plot setdescription	Set a Creative plot description.
+command	/plot flag	plot flag	Manage Creative plot flags.
+command	/plot music	plot music	Manage Creative plot music.
+command	/plot comment	plot comment	Manage Creative plot comments.
+command	/plot inbox	plot inbox	Open the Creative plot inbox.
+command	/plot help	plot help	Show Creative plot help.
+command	/plot merge	plot merge	Merge eligible Creative plots from Legend.
+command	/plot unlink	plot unlink	Unlink merged Creative plots.
+command	/xp	xp	Show or use the current experience command flow.
+command	/unlock	unlock,unlockchest	Unlock an eligible Survival chest.
+command	/unlockchest	unlockchest,unlock	Unlock an eligible Survival chest.
+command	/trade	trade	Request a trade with another player.
+command	/website	website	Open official HauntedMC website information.
+command	/forum	forum	Open official HauntedMC forum information.
+command	/help	help	Show player help information.
+command	/support	support	Show the official support route.
+command	/staff	staff	Show the current staff listing.
+command	/shoptutorial	shoptutorial	Show Survival shop tutorial information.
+command	/store	store,buy,winkel	Open store information.
+command	/buy	buy,store,winkel	Open store information.
+command	/winkel	winkel,store,buy	Open store information.
+command	/rules	rules,regels	Show server rule information.
+command	/regels	regels,rules	Show server rule information.
+command	/ranks	ranks	Show current HauntedMC rank information.
