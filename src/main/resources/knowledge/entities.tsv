@@ -42,6 +42,9 @@ command	/vote	vote	Open the official vote page.
 command	/vote links	vote links	Show official vote links.
 command	/vote leaderboard	vote leaderboard	Show the vote leaderboard.
 command	/vote remind	vote remind	Control vote reminders.
+command	/besttools	besttools,bt,best tool	Toggle automatic best-tool selection when the feature is available.
+command	/refill	refill,rf,hotbar refill	Toggle automatic hotbar refill when the feature is available.
+command	/pet	pet,pets,cosmetic pet	Open SimplePets help and controls when the feature is available.
 command	/voicechat	voicechat,voice chat,proximity chat	Open Simple Voice Chat help when the client mod and player access are available.
 command	/emf	emf,even more fish,fishing help	Open EvenMoreFish help when the fishing feature is available.
 command	/pp	pp,particles,player particles	Open PlayerParticles controls when the feature is available to you.

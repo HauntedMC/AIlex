@@ -1,6 +1,7 @@
 account-linking.md
 account-security.md
 assistant-help.md
+best-tools.md
 chat-filter.md
 chat-features.md
 client-recommendations.md
@@ -12,9 +13,11 @@ creative-plots.md
 creative-warps.md
 creative-worldedit.md
 custom-portals.md
+crop-growth.md
 dungeons.md
 help-directory.md
 maps.md
+mine-resets.md
 network-maintenance.md
 network-navigation.md
 network-player-list.md
@@ -31,6 +34,7 @@ player-nametags.md
 player-nickname.md
 player-ping.md
 player-particles.md
+player-pets.md
 player-poses.md
 player-playtime.md
 player-skins.md
@@ -56,12 +60,14 @@ lottery.md
 night-vision.md
 parkour.md
 phantom-toggle.md
+pinata-events.md
 player-graves.md
 player-heads.md
 raid-cooldown.md
 repair-npcs.md
 spawner-mining.md
 teleportation.md
+tool-statistics.md
 villager-optimizer.md
 survival-backpacks.md
 survival-claims.md

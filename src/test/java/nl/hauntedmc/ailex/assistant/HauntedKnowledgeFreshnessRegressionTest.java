@@ -85,6 +85,9 @@ class HauntedKnowledgeFreshnessRegressionTest {
         assertTrue(manifest.lines().anyMatch("fishing.md"::equals));
         assertTrue(manifest.lines().anyMatch("player-particles.md"::equals));
         assertTrue(manifest.lines().anyMatch("building-mechanics.md"::equals));
+        assertTrue(manifest.lines().anyMatch("best-tools.md"::equals));
+        assertTrue(manifest.lines().anyMatch("player-pets.md"::equals));
+        assertTrue(manifest.lines().anyMatch("tool-statistics.md"::equals));
         assertTrue(voiceChat.contains("`/voicechat help`"));
         assertTrue(fishing.contains("`/emf`"));
         assertTrue(particles.contains("`/pp`"));
