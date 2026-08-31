@@ -95,6 +95,34 @@ class HauntedKnowledgeFreshnessRegressionTest {
         assertTrue(shops.toLowerCase().contains("live"));
     }
 
+    @Test
+    void currentFeatureCommandKnowledgeUsesRegisteredNamesAndPlayerSubcommands() throws IOException {
+        String entities = resource("/knowledge/entities.tsv");
+        String friends = resource("/knowledge/player-friends.md");
+        String language = resource("/knowledge/player-language.md");
+        String navigation = resource("/knowledge/network-navigation.md");
+        String visualizer = resource("/knowledge/worldedit-visualizer.md");
+
+        assertTrue(entities.contains("command\t/friends\t"));
+        assertTrue(friends.contains("`/friends cancel <player>`"));
+        assertFalse(entities.contains("command\t/friend\t"));
+        assertFalse(friends.contains("`/friend add"));
+
+        assertTrue(language.contains("`/taal` is the registered alias"));
+        assertFalse(language.contains("`/lang` and"));
+        assertFalse(entities.contains("language,lang,taal"));
+
+        assertTrue(entities.contains("command\t/server\t"));
+        assertTrue(entities.contains("command\t/connectioninfo\t"));
+        assertTrue(entities.contains("command\t/resourcepack list\t"));
+        assertTrue(navigation.contains("`/server <destination>`"));
+
+        assertTrue(entities.contains("command\t/worldeditvisualizer\t"));
+        assertTrue(visualizer.contains("`/worldeditvisualizer refresh`"));
+        assertFalse(entities.contains("command\t/rtp\t"));
+        assertFalse(resource("/knowledge/teleportation.md").contains("`/randomtp` or `/rtp`"));
+    }
+
     private String resource(String path) throws IOException {
         try (InputStream stream = getClass().getResourceAsStream(path)) {
             assertNotNull(stream, "Missing resource: " + path);

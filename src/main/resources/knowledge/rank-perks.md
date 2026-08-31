@@ -1,7 +1,7 @@
 ---
 id: hauntedmc.rank-perks
 title: Rank perks in combat
-aliases: [rank perks, fairperks, /fly, /god, combattag]
+aliases: [rank perks, fairperks, /fly, /god, /godmacro, combattag]
 category: ranks
 authority: implementation-confirmed
 updated: 2026-08-29

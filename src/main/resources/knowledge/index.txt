@@ -12,6 +12,7 @@ fishing.md
 creative-plots.md
 creative-warps.md
 creative-worldedit.md
+worldedit-visualizer.md
 custom-portals.md
 crop-growth.md
 dungeons.md

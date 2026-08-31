@@ -1,6 +1,7 @@
 # Reviewed canonical HauntedMC identifiers. Format: kind<TAB>canonical<TAB>aliases<TAB>description
 # Commands are not marked complete: this registry records only player commands verified by official public resources
-# or reviewed current ServerFeatures/ProxyFeatures documentation.
+# or reviewed current ServerFeatures/ProxyFeatures command implementations. Conditional rank, world, or feature
+# permissions still decide whether a command is available to a particular player.
 
 command	/2fa	2fa,two factor	Set up or verify in-game two-factor authentication.
 command	/link	link,hauntylink	Link a Minecraft account to the HauntedMC website.
@@ -10,14 +11,20 @@ command	/dynmap show	dynmap show	Show yourself on Dynmap.
 command	/warp dungeons	warp dungeons,dungeon hub	Open the Survival Dungeon hub.
 command	/dungeon leave	dungeon leave,leave dungeon	Leave a Dungeon; the key is consumed.
 command	/autopickup	autopickup	Toggle AutoPickup for eligible players.
+command	/autopickup on	autopickup on	Enable AutoPickup.
+command	/autopickup off	autopickup off	Disable AutoPickup.
+command	/autopickup toggle	autopickup toggle	Toggle AutoPickup.
 command	/autopickup status	autopickup status	Show the current AutoPickup setting.
 command	/grave	grave,death grave	Show your nearest active virtual grave.
 command	/grave list	grave list	List your active virtual graves.
+command	/grave info	grave info	Show details for one of your active graves.
 command	/grave locate	grave locate	Show a selected grave's coordinates.
 command	/grave track	grave track	Track a selected grave.
+command	/grave track off	grave track off	Stop tracking a grave.
 command	/grave claim	grave claim	Remotely claim a selected grave when available.
+command	/autoreconnect	autoreconnect	Show automatic-reconnect command help.
 command	/autoreconnect cancel	autoreconnect cancel	Opt out of automatic return after a restart.
-command	/queue	queue,q	Show queue status.
+command	/queue	queue	Show queue status.
 command	/queue leave	queue leave	Leave a full-server queue.
 command	/msg	msg,message player	Send an online private message.
 command	/msg reply	msg reply	Reply to the latest message partner.
@@ -27,16 +34,32 @@ command	/msg block	msg block	Block private messages from a player.
 command	/msg unblock	msg unblock	Remove a private-message block.
 command	/reply	reply	Reply to the latest message partner.
 command	/r	r	Reply to the latest message partner.
-command	/friend	friend,friends,fr	Manage friends, requests, and friend blocks.
-command	/friend add	friend add	Send a friend request.
-command	/friend accept	friend accept	Accept a friend request.
-command	/friend server	friend server	Join an accepted visible friend's server.
-command	/language	language,lang,taal	View or set AUTO, NL, or EN language preference.
+command	/friends	friends	Open your friends overview.
+command	/friends add	friends add	Send a friend request.
+command	/friends remove	friends remove	Remove an accepted friend.
+command	/friends accept	friends accept	Accept a friend request.
+command	/friends deny	friends deny	Decline a friend request.
+command	/friends cancel	friends cancel	Withdraw a sent friend request.
+command	/friends acceptall	friends acceptall	Accept all pending friend requests.
+command	/friends denyall	friends denyall	Decline all pending friend requests.
+command	/friends list	friends list	List accepted friends.
+command	/friends requests	friends requests	List pending friend requests.
+command	/friends block	friends block	Block friend-request activity from a player.
+command	/friends unblock	friends unblock	Remove a friend block.
+command	/friends disable	friends disable	Disable friend availability and clear pending requests.
+command	/friends enable	friends enable	Enable friend availability.
+command	/friends server	friends server	Join an accepted visible friend's server.
+command	/language	language,taal	View or set AUTO, NL, or EN language preference.
 command	/playtime	playtime,speeltijd	Show your visible game-mode playtime and total.
 command	/playtime total	playtime total	Show total playtime.
 command	/playtime top	playtime top	Show a playtime leaderboard.
-command	/hub	hub	Move to the configured network hub.
+command	/playtime <gamemode>	playtime gamemode	Show your playtime for a configured logical game mode.
+command	/playtime top <gamemode>	playtime top gamemode	Show a configured game-mode playtime leaderboard.
+command	/server	server	List public Router destinations currently available to you.
+command	/server <destination>	server destination	Connect to a public Router destination when permitted.
+command	/hub	hub	Move to the configured hub destination only when this Router alias is enabled.
 command	/list	list	Show visible players on your current server.
+command	/list <destination>	list destination	Show visible players on a public Router destination.
 command	/glist	glist	Show visible network player counts.
 command	/vote	vote	Open the official vote page.
 command	/vote links	vote links	Show official vote links.
@@ -50,28 +73,71 @@ command	/emf	emf,even more fish,fishing help	Open EvenMoreFish help when the fis
 command	/pp	pp,particles,player particles	Open PlayerParticles controls when the feature is available to you.
 command	/hdb	hdb,headdb,head database	Open HeadDatabase help when the feature is available to you.
 command	/fly	fly	Rank-related flight perk; disabled in combat.
+command	/fly on	fly on	Enable the flight perk when available.
+command	/fly off	fly off	Disable the flight perk.
+command	/fly toggle	fly toggle	Toggle the flight perk.
+command	/fly status	fly status	Show flight-perk status.
 command	/god	god	Rank-related god-mode perk.
-command	/randomtp	randomtp,rtp	Randomly teleport in the current world.
-command	/rtp	rtp,randomtp	Alias for random teleport.
+command	/god on	god on	Enable the god-mode perk when available.
+command	/god off	god off	Disable the god-mode perk.
+command	/god toggle	god toggle	Toggle the god-mode perk.
+command	/god status	god status	Show god-mode status.
+command	/godmacro	godmacro	Manage the double-sneak god-mode preference.
+command	/godmacro on	godmacro on	Enable the god-mode macro.
+command	/godmacro off	godmacro off	Disable the god-mode macro.
+command	/godmacro toggle	godmacro toggle	Toggle the god-mode macro.
+command	/godmacro status	godmacro status	Show god-mode macro status.
+command	/randomtp	randomtp	Randomly teleport in the current world.
 command	/tppos	tppos,teleport coordinates	Teleport to whole-number coordinates in the current world.
 command	/spawn	spawn	Teleport to the local normal spawn.
 command	/spawn cancel	spawn cancel	Cancel a pending spawn warmup.
+command	/spawn <world>	spawn world	Teleport to a permitted loaded world's native spawn.
 command	/combattag status	combattag status,combat tag status	Show your combat-tag state when available.
 command	/lottery	lottery	Show the current lottery.
 command	/lottery buy	lottery buy	Buy lottery tickets.
 command	/lottery donate	lottery donate	Donate to the lottery pot.
 command	/lottery claim	lottery claim	Claim a pending lottery payout.
+command	/lottery history	lottery history	Show previous lottery draws.
+command	/lottery leaderboard wins	lottery leaderboard wins	Show the lottery wins leaderboard.
+command	/lottery leaderboard donations	lottery leaderboard donations	Show the lottery donations leaderboard.
+command	/lottery help	lottery help	Show lottery command help.
 command	/phantomtoggle	phantomtoggle	Manage the phantom-spawn preference.
+command	/phantomtoggle on	phantomtoggle on	Allow natural insomnia phantoms to spawn for you.
+command	/phantomtoggle off	phantomtoggle off	Prevent natural insomnia phantoms from spawning for you.
+command	/phantomtoggle toggle	phantomtoggle toggle	Toggle the phantom-spawn preference.
+command	/phantomtoggle status	phantomtoggle status	Show the phantom-spawn preference.
 command	/nightvision	nightvision	Toggle the temporary Night Vision perk.
 command	/parcour	parcour,parkour	Start, leave, or return to a parkour checkpoint.
+command	/parcour start	parcour start	Start a configured parkour course.
+command	/parcour leave	parcour leave	Leave your current parkour course.
+command	/parcour checkpoint	parcour checkpoint	Return to your latest parkour checkpoint.
 command	/afk	afk	Toggle AFK state.
 command	/nametag selfview	nametag selfview	Control whether you see your own nametag.
+command	/nametag selfview on	nametag selfview on	Show your own nametag.
+command	/nametag selfview off	nametag selfview off	Hide your own nametag.
+command	/nametag selfview toggle	nametag selfview toggle	Toggle your own nametag view.
+command	/nametag selfview status	nametag selfview status	Show your own nametag-view preference.
 command	/nickname	nickname	Set or remove a nickname.
+command	/nickname remove	nickname remove	Remove your nickname.
 command	/glow	glow	Open glow selection.
+command	/glow remove	glow remove	Remove your selected glow.
 command	/balloons	balloons	Open balloon selection.
+command	/balloons remove	balloons remove	Remove your selected balloon.
 command	/skin	skin	Temporarily change to another account's skin.
+command	/skin remove	skin remove	Restore your own skin.
 command	/ping	ping	Show current proxy latency when ConnectionInfo is enabled and access is granted.
+command	/connectioninfo	connectioninfo	Show allowed details about your current proxy connection.
+command	/clientinfo	clientinfo	Show available client information.
+command	/clientinfo info	clientinfo info	Show available client information.
 command	/clientinfo recommend	clientinfo recommend	Show client-setting recommendations.
+command	/clientinfo toggle	clientinfo toggle	Toggle automatic client-setting advice.
+command	/clientinfo help	clientinfo help	Show ClientInfo command help.
+command	/resourcepack	resourcepack	Show ResourcePack command help.
+command	/resourcepack list	resourcepack list	Show pack assignment known for your connection.
+command	/worldeditvisualizer	worldeditvisualizer,worldedit selection visualizer	Toggle a packet-only outline of your WorldEdit selection.
+command	/worldeditvisualizer on	worldeditvisualizer on,worldeditvisualizer enable	Enable the WorldEdit selection outline.
+command	/worldeditvisualizer off	worldeditvisualizer off,worldeditvisualizer disable	Disable the WorldEdit selection outline.
+command	/worldeditvisualizer refresh	worldeditvisualizer refresh	Refresh the WorldEdit selection outline.
 command	/chatplaceholders	chatplaceholders	List enabled chat mentions and preview options.
 command	/homes	homes,home list	List your Survival or Creative homes.
 command	/sethome	sethome,set home	Create a named Survival or Creative home.
