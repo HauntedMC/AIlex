@@ -217,7 +217,7 @@ public final class AssistantChatController implements AutoCloseable {
         if (!configuration.mayUse(source)) {
             chatContextStore.recordGeneralChat(sourceName, message, contextSettings);
             requestTracer.transition(requestId, AssistantRequestTracer.State.REJECTED, "access-denied");
-            sendFeedback(source, "access_denied", "Je kunt AIlex hier niet gebruiken.");
+            sendFeedback(source, "access_denied", "Je kunt Haunty hier niet gebruiken.");
             return;
         }
         if (assistantService == null) {

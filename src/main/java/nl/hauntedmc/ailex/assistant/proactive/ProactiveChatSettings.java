@@ -34,35 +34,35 @@ public record ProactiveChatSettings(
         return new ProactiveChatSettings(
                 config.getBoolean(PATH + ".enabled", true),
                 config.getString(PATH + ".response_visibility", "server"),
-                secondsToMillis(config.getLong(PATH + ".cooldown_seconds", 120L)),
+                secondsToMillis(config.getLong(PATH + ".cooldown_seconds", 900L)),
                 new JoinSettings(
                         config.getBoolean(PATH + ".join.enabled", true),
-                        probability(config.getDouble(PATH + ".join.probability", 0.08D)),
-                        secondsToMillis(config.getLong(PATH + ".join.cooldown_seconds", 300L)),
+                        probability(config.getDouble(PATH + ".join.probability", 0.03D)),
+                        secondsToMillis(config.getLong(PATH + ".join.cooldown_seconds", 1_800L)),
                         joinPrompt(config.getString(PATH + ".join.prompt", DEFAULT_JOIN_PROMPT))
                 ),
                 new QuestionSettings(
                         config.getBoolean(PATH + ".questions.enabled", true),
-                        probability(config.getDouble(PATH + ".questions.probability", 0.18D)),
+                        probability(config.getDouble(PATH + ".questions.probability", 0.10D)),
                         secondsToMillis(config.getLong(PATH + ".questions.conversation_window_seconds", 45L)),
                         Math.clamp(config.getInt(PATH + ".questions.minimum_speaker_alternations", 2), 2, 6),
                         secondsToMillis(config.getLong(PATH + ".questions.social_graph_window_seconds", 180L)),
                         Math.clamp(config.getDouble(PATH + ".questions.strong_pair_score", 2.5D), 0.5D, 12.0D),
-                        Math.clamp(config.getDouble(PATH + ".questions.utility.threshold", 0.25D), -1.0D, 2.0D),
+                        Math.clamp(config.getDouble(PATH + ".questions.utility.threshold", 0.45D), -1.0D, 2.0D),
                         Math.clamp(config.getDouble(PATH + ".questions.utility.helpful_weight", 1.25D), 0.0D, 3.0D),
-                        Math.clamp(config.getDouble(PATH + ".questions.utility.privacy_cost", 1.20D), 0.0D, 3.0D),
-                        Math.clamp(config.getDouble(PATH + ".questions.utility.error_cost", 0.75D), 0.0D, 3.0D),
-                        Math.clamp(config.getDouble(PATH + ".questions.utility.repetition_cost", 0.85D), 0.0D, 3.0D)
+                        Math.clamp(config.getDouble(PATH + ".questions.utility.privacy_cost", 1.50D), 0.0D, 3.0D),
+                        Math.clamp(config.getDouble(PATH + ".questions.utility.error_cost", 1.00D), 0.0D, 3.0D),
+                        Math.clamp(config.getDouble(PATH + ".questions.utility.repetition_cost", 1.25D), 0.0D, 3.0D)
                 ),
                 new CollectiveSettings(
                         config.getBoolean(PATH + ".collective.enabled", true),
                         collectiveTerms(config.getStringList(PATH + ".collective.terms")),
                         Math.clamp(config.getInt(PATH + ".collective.minimum_distinct_players", 2), 2, 10),
                         secondsToMillis(config.getLong(PATH + ".collective.window_seconds", 45L)),
-                        probability(config.getDouble(PATH + ".collective.probability", 0.45D))
+                        probability(config.getDouble(PATH + ".collective.probability", 0.12D))
                 ),
                 new IdleSettings(
-                        config.getBoolean(PATH + ".idle.enabled", true),
+                        config.getBoolean(PATH + ".idle.enabled", false),
                         secondsToMillis(config.getLong(PATH + ".idle.silence_seconds", 30L * 60L)),
                         secondsToMillis(config.getLong(PATH + ".idle.check_interval_seconds", 60L)),
                         probability(config.getDouble(PATH + ".idle.probability", 0.02D)),
@@ -88,8 +88,8 @@ public record ProactiveChatSettings(
 
     private static ProactiveChatSettings disabled() {
         return new ProactiveChatSettings(
-                false, "server", 120_000L,
-                new JoinSettings(false, 0.0D, 300_000L, DEFAULT_JOIN_PROMPT),
+                false, "server", 900_000L,
+                new JoinSettings(false, 0.0D, 1_800_000L, DEFAULT_JOIN_PROMPT),
                 new QuestionSettings(false, 0.0D, 45_000L, 2, 180_000L, 2.5D),
                 new CollectiveSettings(false, DEFAULT_COLLECTIVE_TERMS, 2, 45_000L, 0.0D),
                 new IdleSettings(false, 1_800_000L, 60_000L, 0.0D, 1, 600_000L),
@@ -141,7 +141,7 @@ public record ProactiveChatSettings(
         ) {
             this(
                     enabled, probability, conversationWindowMillis, minimumSpeakerAlternations,
-                    socialGraphWindowMillis, strongPairScore, 0.25D, 1.25D, 1.20D, 0.75D, 0.85D
+                    socialGraphWindowMillis, strongPairScore, 0.45D, 1.25D, 1.50D, 1.00D, 1.25D
             );
         }
     }
@@ -179,15 +179,15 @@ public record ProactiveChatSettings(
             return new GoalSettings(
                     config.getBoolean(PATH + ".goals.enabled", true),
                     Set.copyOf(goals),
-                    ProactiveChatSettings.probability(config.getDouble(PATH + ".goals.probability", 0.30D)),
+                    ProactiveChatSettings.probability(config.getDouble(PATH + ".goals.probability", 0.08D)),
                     ProactiveChatSettings.probability(
-                            config.getDouble(PATH + ".goals.follow_up_probability", 0.12D)
+                            config.getDouble(PATH + ".goals.follow_up_probability", 0.0D)
                     )
             );
         }
 
         static GoalSettings defaults() {
-            return new GoalSettings(true, defaultGoals(), 0.30D, 0.12D);
+            return new GoalSettings(true, defaultGoals(), 0.08D, 0.0D);
         }
 
         static GoalSettings disabled() {
@@ -200,9 +200,8 @@ public record ProactiveChatSettings(
 
         private static Set<CommunityGoal> defaultGoals() {
             return Set.of(
-                    CommunityGoal.HELP_NEW_PLAYER, CommunityGoal.WELCOME, CommunityGoal.CELEBRATE,
-                    CommunityGoal.SUPPORT_CONVERSATION, CommunityGoal.CONNECT, CommunityGoal.DEFUSE,
-                    CommunityGoal.FOLLOW_UP, CommunityGoal.INFORM
+                    CommunityGoal.HELP_NEW_PLAYER, CommunityGoal.CELEBRATE, CommunityGoal.CONNECT,
+                    CommunityGoal.DEFUSE, CommunityGoal.INFORM
             );
         }
     }

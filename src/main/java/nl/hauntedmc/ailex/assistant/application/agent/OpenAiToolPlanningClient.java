@@ -41,7 +41,7 @@ public final class OpenAiToolPlanningClient {
         this.apiKey = config == null ? "" : clean(config.getString("openai.api_key", ""));
         this.model = config == null ? "" : clean(config.getString(
                 "openai.assistant.agent.planner_model",
-                config.getString("openai.assistant.models.fast.model", "gpt-5.6-luna")
+                "gpt-5.6-luna"
         ));
         this.httpClient = httpClient;
     }
@@ -59,7 +59,7 @@ public final class OpenAiToolPlanningClient {
         JsonObject reasoning = new JsonObject();
         reasoning.addProperty("effort", "low");
         payload.add("reasoning", reasoning);
-        payload.addProperty("instructions", "You are AIlex's bounded read-context planner. Do not answer the player. "
+        payload.addProperty("instructions", "You are Haunty's bounded read-context planner. Do not answer the player. "
                 + "Call only the provided read tools when additional evidence would materially improve correctness. "
                 + "Prefer no tool call when supplied information is already sufficient. Never invent tool results or IDs.");
         JsonArray input = new JsonArray();

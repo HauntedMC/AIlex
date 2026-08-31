@@ -136,7 +136,7 @@ openai:
     allow_implicit_followups: false
     session_timeout_seconds: 900
     feedback:
-      access_denied: "Je kunt AIlex hier niet gebruiken."
+      access_denied: "Je kunt Haunty hier niet gebruiken."
       queued: "Ik ben nog even bezig; ik pak je bericht hierna."
       queued_replaced: "Ik ben nog bezig; ik pak je nieuwste bericht hierna."
       busy: "Ik heb het nu te druk om dit betrouwbaar te verwerken. Probeer het zo nog eens."
@@ -144,47 +144,49 @@ openai:
       failure: "Mijn AI-service gaf geen bruikbaar antwoord. Probeer het nog eens."
     standalone:
       enabled: false
-      mention: "AIlex"
-      display_name: "<#7C3AED>[<#C4B5FD>AIlex<#7C3AED>]</#7C3AED>"
-      system_prompt: "Je bent AIlex: een slimme, vriendelijke en nuchtere HauntedMC-communitygenoot. Help direct, natuurlijk en zonder helpdesktoon; gebruik droge humor alleen als de speler zelf informeel is."
-  # Carefully limited behaviour for bots that can contribute without being named. Direct requests always have priority.
+      mention: "Haunty"
+      display_name: "<#7C3AED>[<#C4B5FD>Haunty<#7C3AED>]</#7C3AED>"
+      system_prompt: "Je bent Haunty: een slimme, vriendelijke en nuchtere HauntedMC-communitygenoot. Help direct, natuurlijk en zonder helpdesktoon; gebruik droge humor alleen als de speler zelf informeel is."
+  # Carefully limited behaviour for Haunty when it can contribute without being named. Direct requests always have priority.
   proactive_chat:
     enabled: true
     response_visibility: "server"
-    cooldown_seconds: 120
+    # Unsolicited messages are exceptional: at most one request every fifteen minutes across all triggers.
+    cooldown_seconds: 900
     join:
       enabled: true
-      probability: 0.15
-      cooldown_seconds: 120
+      probability: 0.03
+      cooldown_seconds: 1800
       prompt: "Een speler met de naam {player_name} is zojuist gejoined. Geef precies één korte, persoonlijke begroeting direct aan {player_name}. Je antwoord MOET de exacte naam {player_name} bevatten. Gebruik geen generieke serverwelkomsttekst, slogan, uitleg, 'gg' of avontuur-wens. Houd het natuurlijk en eenvoudig, bijvoorbeeld in de stijl van 'Hey, welkom terug {player_name}!'."
     questions:
       enabled: true
-      probability: 0.3
-      # Two complementary transient signals prevent AIlex from intruding into player-to-player dialogue.
+      probability: 0.10
+      # Two complementary transient signals prevent Haunty from intruding into player-to-player dialogue.
       conversation_window_seconds: 45
       minimum_speaker_alternations: 2
       social_graph_window_seconds: 180
       strong_pair_score: 2.5
       utility:
-        threshold: 0.25
+        threshold: 0.45
         helpful_weight: 1.25
-        privacy_cost: 1.20
-        error_cost: 0.75
-        repetition_cost: 0.85
+        privacy_cost: 1.50
+        error_cost: 1.00
+        repetition_cost: 1.25
     goals:
       enabled: true
-      enabled_goals: ["HELP_NEW_PLAYER", "WELCOME", "CELEBRATE", "SUPPORT_CONVERSATION", "CONNECT", "DEFUSE", "FOLLOW_UP", "INFORM"]
-      probability: 0.30
-      # Follow-ups are requester-only and derive only from explicit non-sensitive player goals.
-      follow_up_probability: 0.12
+      enabled_goals: ["HELP_NEW_PLAYER", "CELEBRATE", "CONNECT", "DEFUSE", "INFORM"]
+      probability: 0.08
+      # Follow-ups are requester-only but disabled by default to avoid unsolicited memory-based chat.
+      follow_up_probability: 0.0
     collective:
       enabled: true
       terms: ["gg", "wp", "well played", "welkom", "welcome", "congrats", "gefeliciteerd", "nice"]
       minimum_distinct_players: 2
       window_seconds: 45
-      probability: 0.7
+      probability: 0.12
     idle:
-      enabled: true
+      # Never fill quiet chat just because Haunty has been silent.
+      enabled: false
       silence_seconds: 1800
       check_interval_seconds: 60
       probability: 0.02
@@ -223,7 +225,7 @@ openai:
       Verzin nooit ontbrekende commands, prijzen, rewards, warps, ranks, resetdatums, eventtijden, Discord-kanalen,
       staffleden, versies of beschikbaarheid. Kopieer server-identifiers exact uit bewijs; vertaal of lokaliseer
       kanaalnamen, commands, URLs, ranks, roles, warps of menu-namen nooit. Bij onvoldoende bewijs: zeg dat je het niet
-      actueel kunt verifiëren en verwijs waar nuttig naar /help, /ranks, /vote, /staff, /menu of /support.
+      actueel kunt verifiëren en verwijs waar nuttig naar /help, /ranks, /vote, /menu of /support.
   chat_context:
     enabled: true
     # Ambient/raw chat is short-lived context only. Durable knowledge belongs in typed semantic/episodic memory.

@@ -66,7 +66,7 @@ public class EvadeBehaviour extends FleeBehaviour {
      * @return The maximum prediction time of the NPC
      */
     private double getMaxPredictionTime() {
-        return ConfigHandler.getInstance().getConfig().getDouble(("npc.behaviour.evade.maxPredictionTime"), 4.0);
+        return ConfigHandler.getInstance().getConfig().getDouble(("npc.behaviour.evade.maxPredictionTime"), 3.0);
     }
 
 }

@@ -16,7 +16,7 @@ The main hard bounds are:
 
 ```yaml
 assistant:
-  total_deadline_seconds: 18
+  total_deadline_seconds: 30
   max_model_calls: 4
   max_tool_rounds: 2
 ```
@@ -27,9 +27,9 @@ Two bounded tool rounds allow an ambiguous grounded request to gather a second d
 
 ```yaml
 context:
-  max_input_tokens_fast: 4000
-  max_input_tokens_grounded: 12000
-  max_input_tokens_deliberate: 24000
+  max_input_tokens_fast: 8000
+  max_input_tokens_grounded: 32000
+  max_input_tokens_deliberate: 64000
 ```
 
 These are ceilings, not targets. `ContextCompiler` prioritizes the current request and useful evidence, then allocates space to dialogue, live state, memory, reviewed knowledge and optional recent chat. Larger ceilings are intended to stop useful memory/evidence from being prematurely clipped; they do not compensate for weak retrieval and are not automatically filled on every turn.
@@ -39,8 +39,8 @@ These are ceilings, not targets. `ContextCompiler` prioritizes the current reque
 ```yaml
 retrieval:
   hybrid_enabled: true
-  max_chunks: 12
-  max_evidence_characters: 32000
+  max_chunks: 64
+  max_evidence_characters: 140000
   query_cache_seconds: 300
   exclude_expired: true
   semantic_embeddings:
@@ -142,9 +142,9 @@ This behavior is deterministic; there is no configuration that allows the model 
 
 `openai.chat.allow_implicit_followups` is `false` by default. With that default, every player-triggered assistant request must explicitly mention the bot name again; an active session only supplies context and does not claim ordinary player chat. Set it to `true` only when deliberately enabling natural no-mention follow-ups.
 
-`openai.chat.session_timeout_seconds` controls how long an active player↔assistant conversation remains available as dialogue context. When implicit follow-ups are enabled, it also bounds how long no-mention continuation can be considered.
+`openai.chat.session_timeout_seconds` defaults to 900 seconds and controls how long an active player↔assistant conversation remains available as dialogue context. When implicit follow-ups are enabled, it also bounds how long no-mention continuation can be considered.
 
-This direct-request boundary is separate from explicitly configured proactive behavior. Join/idle/community triggers may still let AIlex speak autonomously according to `openai.proactive_chat`; they are not treated as the player's direct request.
+This direct-request boundary is separate from explicitly configured proactive behavior. Join/community triggers may still let Haunty speak autonomously according to `openai.proactive_chat`; they are not treated as the player's direct request. Idle output is disabled by the shipped default.
 
 `openai.chat_context` controls short-lived raw conversation/ambient context. `persist_to_disk` is disabled by default. Durable knowledge belongs in typed memory instead of raw transcript persistence. The shipped character ceilings are 18,000 overall, 4,000 for ambient general chat, 8,000 for the active conversation and 5,000 for bot-memory context; message capture is capped at 900 characters.
 
@@ -159,7 +159,7 @@ All proactive work is lower priority than direct player requests.
 ```yaml
 questions:
   enabled: true
-  probability: 0.3
+  probability: 0.10
   conversation_window_seconds: 45
   minimum_speaker_alternations: 2
   social_graph_window_seconds: 180
@@ -176,7 +176,7 @@ The policy is intentionally conservative: false silence is preferable to AIlex i
 
 `join` controls occasional personal join greetings. `collective` reacts only after enough distinct players participate in configured community phrases. `idle` can produce rare low-priority activity after a long bot silence.
 
-Use low probabilities and meaningful cooldowns. Proactive output should be exceptional, not a response to every chat signal.
+The shipped production default applies one shared 15-minute cooldown to every proactive trigger. It retains only rare join greetings, clearly public help, recognized helpful community goals and collective acknowledgements; idle chatter and memory-driven follow-ups are disabled. Proactive output should be exceptional, not a response to every chat signal.
 
 ## Evidence packets and claim-level verification
 

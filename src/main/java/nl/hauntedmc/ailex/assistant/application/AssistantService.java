@@ -173,7 +173,7 @@ public final class AssistantService {
         }
 
         PreparedRequest prepared = new PreparedRequest(
-                playerId.toString(), player.getName(), npc == null ? "AIlex" : npc.getName(), npcMemoryId,
+                playerId.toString(), player.getName(), npc == null ? "Haunty" : npc.getName(), npcMemoryId,
                 message == null ? "" : message, systemPrompt == null ? "" : systemPrompt,
                 userPrompt == null ? "" : userPrompt, analysis, settings, plan, retrieveKnowledge, snapshot, memory,
                 dialogue, canWriteSharedMemory(player), System.nanoTime()

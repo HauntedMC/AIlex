@@ -32,7 +32,7 @@ public class OpenAiResponsesClient {
             + "Keep all replies age-appropriate and safe-for-work.";
 
     private static final int MAX_CHAT_RESPONSE_LENGTH = 1_200;
-    private static final int DEFAULT_MAX_OUTPUT_TOKENS = 120;
+    private static final int DEFAULT_MAX_OUTPUT_TOKENS = 360;
     private static final String DEFAULT_REASONING_EFFORT = "low";
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(30);

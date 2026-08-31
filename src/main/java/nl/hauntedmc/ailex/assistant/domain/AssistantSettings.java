@@ -47,8 +47,8 @@ public record AssistantSettings(
                 Math.clamp(config.getInt(PATH + ".retrieval.max_evidence_characters", 140_000), 500, 200_000),
                 Math.clamp(config.getInt(PATH + ".retrieval.max_chunks", 64), 1, 96),
                 profile(config, "fast", defaultModel, defaultEffort, Math.max(defaultOutputTokens, 400)),
-                profile(config, "grounded", defaultModel, defaultEffort, Math.max(defaultOutputTokens, 640)),
-                profile(config, "deliberate", defaultModel, defaultEffort, Math.max(defaultOutputTokens, 1_000)),
+                profile(config, "grounded", "gpt-5.6-terra", "medium", 640),
+                profile(config, "deliberate", "gpt-5.6-sol", "high", 1_000),
                 config.getBoolean(PATH + ".tools.read_only", true),
                 Set.copyOf(config.getStringList(PATH + ".tools.allowed").stream()
                         .map(value -> value.toLowerCase(Locale.ROOT)).toList()),
@@ -77,7 +77,7 @@ public record AssistantSettings(
     }
 
     public static AssistantSettings defaults() {
-        return new AssistantSettings(true, "adaptive", 30, 4, 2, true, "nl", Set.of("nl", "en"), true, true,
+        return new AssistantSettings(true, "adaptive", 30, 4, 2, true, "nl", Set.of("nl", "en", "de"), true, true,
                 300, true, 140_000, 64,
                 new ModelProfile("gpt-5.6-terra", "low", 400),
                 new ModelProfile("gpt-5.6-terra", "medium", 640),
@@ -106,9 +106,10 @@ public record AssistantSettings(
             }
         }
         if (configuredLanguages.isEmpty()) {
-            allowed.add("en");
+            allowed.addAll(Set.of("nl", "en", "de"));
+        } else {
+            allowed.add("nl");
         }
-        allowed.add("nl");
         return Set.copyOf(allowed);
     }
 

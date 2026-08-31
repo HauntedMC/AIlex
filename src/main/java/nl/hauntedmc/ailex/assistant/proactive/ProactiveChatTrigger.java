@@ -34,7 +34,7 @@ public record ProactiveChatTrigger(
     public static ProactiveChatTrigger newPlayerHelp(String playerName, String message) {
         return new ProactiveChatTrigger(
                 message,
-                "Deze speler lijkt nieuw of weinig bekend met AIlex en stelt een concrete publieke Minecraft/servervraag. "
+                "Deze speler lijkt nieuw of weinig bekend met Haunty en stelt een concrete publieke Minecraft/servervraag. "
                         + "Geef één direct bruikbare volgende stap; maak geen aannames over ervaring en noem de speler alleen "
                         + "wanneer dat natuurlijk is.",
                 "",

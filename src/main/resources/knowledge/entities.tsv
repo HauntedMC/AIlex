@@ -261,7 +261,6 @@ command	/website	website	Open official HauntedMC website information.
 command	/forum	forum	Open official HauntedMC forum information.
 command	/help	help	Show player help information.
 command	/support	support	Show the official support route.
-command	/staff	staff	Show the current staff listing.
 command	/shoptutorial	shoptutorial	Show Survival shop tutorial information.
 command	/store	store,buy,winkel	Open store information.
 command	/buy	buy,store,winkel	Open store information.

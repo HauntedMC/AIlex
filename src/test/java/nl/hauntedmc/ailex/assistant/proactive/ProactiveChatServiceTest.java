@@ -24,7 +24,7 @@ class ProactiveChatServiceTest {
             triggers.add(trigger);
             return true;
         });
-        now.addAndGet(119_999L);
+        now.addAndGet(899_999L);
         service.onChat(source, "Hoe maak ik een beacon?", () -> List.of(source), (player, trigger) -> {
             triggers.add(trigger);
             return true;
@@ -109,8 +109,8 @@ class ProactiveChatServiceTest {
 
     private static ProactiveChatSettings settings(boolean questionsEnabled, boolean collectiveEnabled) {
         return new ProactiveChatSettings(
-                true, "server", 120_000L,
-                new ProactiveChatSettings.JoinSettings(false, 0.0D, 300_000L, "Hoi {player_name}"),
+                true, "server", 900_000L,
+                new ProactiveChatSettings.JoinSettings(false, 0.0D, 1_800_000L, "Hoi {player_name}"),
                 new ProactiveChatSettings.QuestionSettings(
                         questionsEnabled, 1.0D, 45_000L, 2, 180_000L, 2.5D
                 ),

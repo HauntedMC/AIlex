@@ -82,7 +82,7 @@ public class ArriveBehaviour implements MovementBehaviour {
      * @return The slow radius of the NPC
      */
     private double getSlowRadius() {
-        return ConfigHandler.getInstance().getConfig().getDouble(("npc.behaviour.arrive.slowRadius"), 3.0);
+        return ConfigHandler.getInstance().getConfig().getDouble(("npc.behaviour.arrive.slowRadius"), 3.5);
     }
 
 

@@ -16,7 +16,7 @@ public record AssistantChatTarget(
     public static final int STANDALONE_ID = -1;
 
     public AssistantChatTarget {
-        name = clean(name, "AIlex");
+        name = clean(name, "Haunty");
         displayName = clean(displayName, name);
         systemPrompt = clean(systemPrompt, NPCProperties.DEFAULT_SYSTEM_PROMPT);
         userPromptTemplate = clean(userPromptTemplate, NPCProperties.DEFAULT_USER_PROMPT_TEMPLATE);

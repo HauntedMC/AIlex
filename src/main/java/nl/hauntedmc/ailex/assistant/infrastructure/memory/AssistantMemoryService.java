@@ -1451,7 +1451,7 @@ public final class AssistantMemoryService implements AutoCloseable {
     private int maxMemoryContextCharacters() {
         FileConfiguration config = plugin.getConfig();
         return config == null ? 8_000
-                : Math.clamp(config.getInt("openai.assistant.memory.max_context_characters", 8_000), 1_000, 30_000);
+                : Math.clamp(config.getInt("openai.assistant.memory.max_context_characters", 10_000), 1_000, 30_000);
     }
 
     private boolean containsAny(String text, String... values) {

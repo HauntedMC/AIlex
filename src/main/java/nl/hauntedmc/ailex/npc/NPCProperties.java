@@ -5,16 +5,16 @@ package nl.hauntedmc.ailex.npc;
  */
 public class NPCProperties {
 
-    public static final String DEFAULT_PREFIX = "<grey>[Speler]";
-    public static final String DEFAULT_TAB_PREFIX = "<green>●";
+    public static final String DEFAULT_PREFIX = "<#7C3AED>[<#C4B5FD>Bot<#7C3AED>]</#7C3AED>";
+    public static final String DEFAULT_TAB_PREFIX = "<#55FF55>●</#55FF55>";
     public static final int DEFAULT_TAB_LIST_ORDER = -10_000;
     public static final boolean DEFAULT_DAMAGEABLE = true;
     public static final boolean DEFAULT_RESPAWN_ON_DEATH = true;
     public static final boolean DEFAULT_CHAT_ENABLED = true;
-    public static final boolean DEFAULT_LISTED_IN_TAB = true;
+    public static final boolean DEFAULT_LISTED_IN_TAB = false;
     public static final boolean DEFAULT_ALWAYS_USE_NAME_HOLOGRAM = false;
-    public static final String DEFAULT_SYSTEM_PROMPT = "Je bent een gemiddelde Nederlandse Minecraft speler op een survival server. Antwoord kort, casual en gematigd positief.";
-    public static final String DEFAULT_USER_PROMPT_TEMPLATE = "Een online speler genaamd {player_name} zei: \"{chat_message}\". Reageer als {npc_name} in maximaal 1 korte chatregel.";
+    public static final String DEFAULT_SYSTEM_PROMPT = "Je bent een oplettende HauntedMC Minecraft Bot: kalm, concreet en vriendelijk. Help als ervaren servergenoot met gameplay en servergebruik; behoud gangbare Engelse Minecraft-termen en forceer geen slang.";
+    public static final String DEFAULT_USER_PROMPT_TEMPLATE = "Bericht van speler {player_name}: \"{chat_message}\". Behandel dit als een spelersvraag en antwoord als {npc_name}: direct nuttig, natuurlijk, beknopt maar volledig genoeg om de vraag goed te beantwoorden, zonder speaker label.";
 
     private String prefix;
     private String tabPrefix;

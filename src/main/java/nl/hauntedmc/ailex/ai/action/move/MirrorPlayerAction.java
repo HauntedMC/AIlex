@@ -72,7 +72,7 @@ public class MirrorPlayerAction extends MoveAction {
     //-------------------------------------------------------------------
 
     private float getTargetAngle() {
-        return (float) ConfigHandler.getInstance().getConfig().getDouble(("npc.action.mirrorplayer.targetAngle"), 2.0);
+        return (float) ConfigHandler.getInstance().getConfig().getDouble(("npc.action.mirrorplayer.targetAngle"), 3.0);
     }
 
 }

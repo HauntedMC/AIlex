@@ -73,7 +73,7 @@ public class FollowPlayerAction extends MoveAction {
     //-------------------------------------------------------------------
 
     private double getTargetDistance() {
-        return ConfigHandler.getInstance().getConfig().getDouble(("npc.action.followplayer.targetDistance"), 3.0);
+        return ConfigHandler.getInstance().getConfig().getDouble(("npc.action.followplayer.targetDistance"), 2.5);
     }
 
 }

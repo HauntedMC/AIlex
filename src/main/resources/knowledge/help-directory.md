@@ -10,4 +10,4 @@ source: https://www.hauntedmc.nl/help/ | https://www.hauntedmc.nl/threads/global
 
 The official Help directory links to 2-Factor Authentication, terms, cookies, cosmetics, Dynmap, Entity Limits, HauntyLink, privacy policy, server rules, punishment overview, trophies, voting, and store terms. Use that directory or the linked page for the current official wording.
 
-The current Global Rank page lists `/website`, `/forum`, `/help`, `/support`, `/staff`, and `/shoptutorial` as player information commands. These provide guidance or links; use the live response when a linked resource has changed.
+The current Global Rank page lists `/website`, `/forum`, `/help`, `/support`, and `/shoptutorial` as player information commands. These provide guidance or links; use the live response when a linked resource has changed.

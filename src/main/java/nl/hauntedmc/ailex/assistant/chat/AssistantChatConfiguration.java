@@ -38,7 +38,7 @@ public final class AssistantChatConfiguration {
     }
 
     public long sessionTimeoutMillis() {
-        return TimeUnit.SECONDS.toMillis(integer(CHAT + ".session_timeout_seconds", 300, 30, 1_800));
+        return TimeUnit.SECONDS.toMillis(integer(CHAT + ".session_timeout_seconds", 900, 30, 1_800));
     }
 
     /**
@@ -50,7 +50,7 @@ public final class AssistantChatConfiguration {
     }
 
     public String responseVisibility() {
-        return visibility(string(CHAT + ".response_visibility", "requester"));
+        return visibility(string(CHAT + ".response_visibility", "server"));
     }
 
     public int nearbyResponseRadius() {
@@ -67,15 +67,15 @@ public final class AssistantChatConfiguration {
 
     public AssistantChatTarget standaloneTarget() {
         return AssistantChatTarget.standalone(
-                string(CHAT + ".standalone.mention", "AIlex"),
-                string(CHAT + ".standalone.display_name", "AIlex"),
+                string(CHAT + ".standalone.mention", "Haunty"),
+                string(CHAT + ".standalone.display_name", "Haunty"),
                 string(CHAT + ".standalone.system_prompt", "")
         );
     }
 
     public PlayerResponseRateLimiter.ResponseRateLimit responseRateLimit() {
         boolean enabled = bool("openai.rate_limit.enabled", true);
-        int maxResponses = integer("openai.rate_limit.max_responses_per_player", 10, 1, 1000);
+        int maxResponses = integer("openai.rate_limit.max_responses_per_player", 30, 1, 1000);
         long window = TimeUnit.SECONDS.toMillis(integer("openai.rate_limit.window_seconds", 600, 1, 86_400));
         return new PlayerResponseRateLimiter.ResponseRateLimit(enabled, maxResponses, window);
     }

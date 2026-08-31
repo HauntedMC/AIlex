@@ -233,7 +233,7 @@ public abstract class NPC implements Kinematic {
      * @return The maximum rotation of the NPC
      */
     public float getMaxRotation() {
-        return (float) ConfigHandler.getInstance().getConfig().getDouble("npc.general.maxRotation", 20.0);
+        return (float) ConfigHandler.getInstance().getConfig().getDouble("npc.general.maxRotation", 180.0);
     }
 
     /**

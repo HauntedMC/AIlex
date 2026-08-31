@@ -74,6 +74,20 @@ class HauntedKnowledgeFreshnessRegressionTest {
     }
 
     @Test
+    void unsupportedStaffCommandMustNotReenterManagedKnowledge() throws IOException {
+        String entities = resource("/knowledge/entities.tsv");
+        String helpDirectory = resource("/knowledge/help-directory.md");
+        String staffHelp = resource("/knowledge/staff-help.md");
+        String config = resource("/config.yml");
+
+        assertFalse(entities.contains("command\t/staff\t"));
+        assertFalse(helpDirectory.contains("`/staff`"));
+        assertFalse(staffHelp.contains("`/staff`"));
+        assertFalse(config.contains("/staff"));
+        assertTrue(staffHelp.contains("cannot verify a current staff listing"));
+    }
+
+    @Test
     void installedPublicPluginHelpRemainsPlayerFocusedAndConfigurationAware() throws IOException {
         String manifest = resource("/knowledge/index.txt");
         String voiceChat = resource("/knowledge/voice-chat.md");

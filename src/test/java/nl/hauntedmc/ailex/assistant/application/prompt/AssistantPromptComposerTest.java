@@ -11,6 +11,8 @@ class AssistantPromptComposerTest {
     void stableContractSeparatesEpistemologyMemoryCapabilitiesAndInteraction() {
         String prompt = AssistantPromptComposer.stableContractForTest();
 
+        assertTrue(prompt.startsWith("You are Haunty,"));
+        assertFalse(prompt.contains("You are AIlex,"));
         assertTrue(prompt.contains("EPISTEMIC CONTRACT"));
         assertTrue(prompt.contains("MEMORY CONTRACT"));
         assertTrue(prompt.contains("CAPABILITY CONTRACT"));

@@ -580,9 +580,9 @@ public final class LocalKnowledgeIndex {
         if (!directory.exists() || !directory.isDirectory()) {
             return List.of();
         }
-        int maxFiles = Math.clamp(config.getInt("openai.knowledge.external.max_files", 64), 1, 256);
+        int maxFiles = Math.clamp(config.getInt("openai.knowledge.external.max_files", 192), 1, 256);
         int maxCharacters = Math.clamp(config.getInt(
-                "openai.knowledge.external.max_characters", 120_000
+                "openai.knowledge.external.max_characters", 500_000
         ), 1_000, 1_000_000);
         List<Path> files;
         try (Stream<Path> stream = Files.list(directory.toPath())) {

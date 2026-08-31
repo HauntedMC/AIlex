@@ -82,7 +82,7 @@ public class AlignBehaviour implements MovementBehaviour {
      * @return The maximum acceleration of the NPC
      */
     private float getMaximumAngularAcceleration() {
-        return (float) ConfigHandler.getInstance().getConfig().getDouble(("npc.behaviour.align.maxAngularAcceleration"), 20.0);
+        return (float) ConfigHandler.getInstance().getConfig().getDouble(("npc.behaviour.align.maxAngularAcceleration"), 360.0);
     }
 
     /**
@@ -90,7 +90,7 @@ public class AlignBehaviour implements MovementBehaviour {
      * @return The slow radius of the NPC
      */
     private float getSlowRadius() {
-        return (float) ConfigHandler.getInstance().getConfig().getDouble(("npc.behaviour.align.slowRadius"), 10.0);
+        return (float) ConfigHandler.getInstance().getConfig().getDouble(("npc.behaviour.align.slowRadius"), 90.0);
     }
 
 

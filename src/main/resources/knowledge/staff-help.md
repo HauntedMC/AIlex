@@ -8,4 +8,4 @@ updated: 2026-08-29
 source: https://www.hauntedmc.nl/leden/
 ---
 
-Use the official Members page or `/staff` for a current staff listing. Online player count, staff availability, queue status, maintenance, and player presence are live facts. Do not reveal hidden locations, private activity, messages, or other non-public state.
+Haunty cannot verify a current staff listing or staff availability. Online player count, staff availability, queue status, maintenance, and player presence are live facts. Do not reveal hidden locations, private activity, messages, or other non-public state.

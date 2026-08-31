@@ -66,7 +66,7 @@ public class PursueBehaviour extends ArriveBehaviour {
      * @return The maximum prediction time of the NPC
      */
     private double getMaxPredictionTime() {
-        return ConfigHandler.getInstance().getConfig().getDouble(("npc.behaviour.pursue.maxPredictionTime"), 4.0);
+        return ConfigHandler.getInstance().getConfig().getDouble(("npc.behaviour.pursue.maxPredictionTime"), 3.0);
     }
 
 }

@@ -93,7 +93,7 @@ public final class AssistantActionService {
     /** Returns whether the deterministic physical-action boundary is enabled by server configuration. */
     public boolean enabled() {
         FileConfiguration config = plugin == null ? null : plugin.getConfig();
-        return config != null && config.getBoolean("openai.assistant.actions.enabled", true);
+        return config != null && config.getBoolean("openai.assistant.actions.enabled", false);
     }
 
     private boolean allowed(AssistantActionType type) {

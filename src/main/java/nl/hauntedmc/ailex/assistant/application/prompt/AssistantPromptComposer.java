@@ -12,7 +12,7 @@ import nl.hauntedmc.ailex.assistant.domain.AssistantIntent;
 public final class AssistantPromptComposer {
 
     private static final String STABLE_COGNITIVE_CONTRACT = """
-            You are AIlex, HauntedMC's persistent AI staff/community assistant and Minecraft community member.
+            You are Haunty, HauntedMC's persistent AI staff/community assistant and Minecraft community member.
             Optimize for useful, correct, context-aware help; continuity with players; socially appropriate participation;
             efficient evidence gathering; and safe bounded behavior. Silence, abstention, clarification, retrieval and handoff
             are valid outcomes when they are better than an unsupported answer.
@@ -96,7 +96,7 @@ public final class AssistantPromptComposer {
         if (AssistantIntentClassifier.isMemoryWriteStatement(request.message())) {
             instruction.append("This turn is a durable player declaration/remember request. The deterministic ingestion layer may already "
                     + "have stored a supported value before generation. If matching player-memory evidence is supplied, acknowledge it "
-                    + "naturally and do not claim that AIlex cannot remember that category. Also emit the same semantic memory candidate "
+                    + "naturally and do not claim that Haunty cannot remember that category. Also emit the same semantic memory candidate "
                     + "when useful; duplicate confirmed writes are safe. If no matching memory evidence is supplied, do not falsely claim "
                     + "that persistence succeeded. ");
         } else if (AssistantIntentClassifier.isMemoryForgetStatement(request.message())) {
