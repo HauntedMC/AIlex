@@ -39,8 +39,8 @@ dependencies {
     compileOnly("com.github.retrooper:packetevents-spigot:2.13.0")
 
     // Local durable memory uses SQLite/WAL. Shared network memory can use MySQL; bundle both JDBC drivers only.
-    compileOnly("org.xerial:sqlite-jdbc:3.53.2.1")
-    bundled("org.xerial:sqlite-jdbc:3.53.2.1") {
+    compileOnly("org.xerial:sqlite-jdbc:3.53.4.0")
+    bundled("org.xerial:sqlite-jdbc:3.53.4.0") {
         isTransitive = false
     }
     compileOnly("com.mysql:mysql-connector-j:26.7.0")
@@ -54,7 +54,7 @@ dependencies {
     testImplementation("org.mockito:mockito-junit-jupiter:5.23.0")
     testImplementation("org.mockito:mockito-inline:5.2.0")
     testImplementation("com.github.retrooper:packetevents-spigot:2.13.0")
-    testImplementation("org.xerial:sqlite-jdbc:3.53.2.1")
+    testImplementation("org.xerial:sqlite-jdbc:3.53.4.0")
     testImplementation("com.mysql:mysql-connector-j:26.7.0")
 }
 
