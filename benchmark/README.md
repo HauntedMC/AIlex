@@ -28,10 +28,10 @@ export OPENAI_API_KEY="..."
 `./bench selftest` makes no provider calls. It checks Python syntax, materializes the HauntedMC suite and compiles the separate Java benchmark source set:
 
 ```bash
-./gradlew benchmarkCheck
+./bench selftest
 ```
 
-The benchmark source set is not attached to normal `test`, `check`, `build`, or paid/live GitHub workflows.
+The benchmark source set is compiled by the Maven `benchmark` profile during offline `./bench selftest`. Paid/live provider evaluations stay local.
 
 ## Commands
 

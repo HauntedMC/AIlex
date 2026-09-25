@@ -14,7 +14,6 @@ import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryKind;
 import nl.hauntedmc.ailex.assistant.infrastructure.memory.MemoryRecord;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;

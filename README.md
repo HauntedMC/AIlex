@@ -1,7 +1,6 @@
 # AIlex
 
-[![CI Lint](https://github.com/HauntedMC/AIlex/actions/workflows/ci-lint.yml/badge.svg?branch=main)](https://github.com/HauntedMC/AIlex/actions/workflows/ci-lint.yml)
-[![CI Tests and Coverage](https://github.com/HauntedMC/AIlex/actions/workflows/ci-tests-and-coverage.yml/badge.svg?branch=main)](https://github.com/HauntedMC/AIlex/actions/workflows/ci-tests-and-coverage.yml)
+[![CI](https://github.com/HauntedMC/AIlex/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/HauntedMC/AIlex/actions/workflows/ci.yml)
 [![Latest Release](https://img.shields.io/github/v/release/HauntedMC/AIlex?sort=semver)](https://github.com/HauntedMC/AIlex/releases/latest)
 [![Java 25](https://img.shields.io/badge/Java-25-007396?logo=openjdk&logoColor=white)](https://adoptium.net/)
 [![License](https://img.shields.io/github/license/HauntedMC/AIlex)](LICENSE)
@@ -136,7 +135,7 @@ SQLite and MySQL JDBC support are bundled in the plugin jar.
 
 ### Installation
 
-1. Put `AIlex.jar`, Citizens and packetevents in the Paper server's `plugins/` directory.
+1. Put the versioned `AIlex-<version>.jar`, Citizens and packetevents in the Paper server's `plugins/` directory.
 2. Start the server once so AIlex creates its configuration and knowledge directory.
 3. Set `openai.api_key` in `config.yml`.
 4. Keep `openai.assistant.memory.storage.backend: sqlite` for a single AIlex runtime, or configure MySQL when several servers should share one persistent AIlex identity.
@@ -159,16 +158,17 @@ The default `ailex.chat` permission is available to players. Set `openai.chat.ac
 Build everything locally with:
 
 ```bash
-./gradlew clean build
+./mvnw -B -ntp verify
 ```
 
-The jar is written to `build/libs/AIlex.jar`.
+The jar is written to `target/AIlex-<version>.jar`.
 
 For the same quality gates used by CI:
 
 ```bash
-./gradlew --no-daemon checkstyleMain checkstyleTest
-./gradlew --no-daemon test jacocoTestReport jacocoTestCoverageVerification
+bash scripts/verify-artifact.sh
+./mvnw -B -ntp -Pplatform-acceptance verify
+./bench selftest
 ```
 
 Deterministic CI does not require live model-provider calls. Semantic retrieval tests use deterministic fake embeddings so routing, fusion, memory, evidence, privacy and agent-control regressions remain reproducible. `docs/CHAT_EVALUATION.md` defines the separate live-model/offline quality suite for player-facing behavior.
@@ -188,3 +188,5 @@ Deterministic CI does not require live model-provider calls. Semantic retrieval 
 - [Support](SUPPORT.md)
 - [Security policy](SECURITY.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
+
+Version changes use `./tools/release/update-version patch --pr` from clean `main`. CI validates the resulting PR; merging a version change publishes the Maven package and GitHub release.

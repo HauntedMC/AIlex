@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from memory_modules.memory import Memory, MemoryContextItem, register_memory
+from .java_build import java_command
 
 _SKIP_FIELDS = {
     "base64",
@@ -34,7 +35,7 @@ class AIlexTextMemory(Memory):
         if not repository_root:
             raise RuntimeError("ailex_text requires memory_params.repository_root")
         self.repository_root = Path(repository_root).expanduser().resolve()
-        if not (self.repository_root / "gradlew").is_file():
+        if not (self.repository_root / "mvnw").is_file():
             raise RuntimeError(f"AIlex repository_root is invalid: {self.repository_root}")
         self.max_results = max(1, min(96, int(memory_params.get("max_results") or 24)))
         self.chunk_characters = max(120, min(300, int(memory_params.get("chunk_characters") or 300)))
@@ -52,13 +53,12 @@ class AIlexTextMemory(Memory):
         self._sequence = 0
         self._ignored_query_images = 0
         self._process = subprocess.Popen(
-            [
-                str(self.repository_root / "gradlew"),
-                "--no-daemon",
-                "-q",
-                "benchmarkV2Bridge",
-                f"-PbenchmarkBridgeWorkspace={self.workspace}",
-            ],
+            java_command(
+                self.repository_root,
+                "nl.hauntedmc.ailex.benchmark.V2MemoryBridgeMain",
+                str(self.repository_root),
+                str(self.workspace),
+            ),
             cwd=self.repository_root,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
