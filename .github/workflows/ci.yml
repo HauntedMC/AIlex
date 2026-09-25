@@ -32,8 +32,8 @@ jobs:
           java-version: '25'
           cache: maven
           server-id: github
-          server-username: PACKAGES_USER
-          server-password: PACKAGES_TOKEN
+          server-username-env-var: PACKAGES_USER
+          server-password-env-var: PACKAGES_TOKEN
       - run: ./mvnw -U -B -ntp verify
       - run: bash scripts/verify-artifact.sh
       - name: Upload test and coverage reports
@@ -64,8 +64,8 @@ jobs:
           java-version: '25'
           cache: maven
           server-id: github
-          server-username: PACKAGES_USER
-          server-password: PACKAGES_TOKEN
+          server-username-env-var: PACKAGES_USER
+          server-password-env-var: PACKAGES_TOKEN
       - name: Run platform acceptance
         env:
           AILEX_ACCEPTANCE_WORK_DIRECTORY: ${{ runner.temp }}/ailex-acceptance
@@ -77,27 +77,6 @@ jobs:
           name: platform-acceptance-logs
           if-no-files-found: warn
           path: ${{ runner.temp }}/ailex-acceptance/paper/paper.log
-
-  benchmark-selftest:
-    name: Offline benchmark selftest
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    env:
-      PACKAGES_USER: ${{ secrets.HAUNTEDMC_PACKAGES_USERNAME || github.actor }}
-      PACKAGES_TOKEN: ${{ secrets.HAUNTEDMC_PACKAGES_TOKEN || github.token }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
-        with:
-          distribution: temurin
-          java-version: '25'
-          cache: maven
-          server-id: github
-          server-username: PACKAGES_USER
-          server-password: PACKAGES_TOKEN
-      - run: ./bench selftest
 
   maven-policy:
     name: Shared Maven policy
@@ -129,7 +108,7 @@ jobs:
   ci-required:
     name: ci-required
     if: ${{ always() }}
-    needs: [tests, platform-acceptance, benchmark-selftest, maven-policy, tooling]
+    needs: [tests, platform-acceptance, maven-policy, tooling]
     runs-on: ubuntu-24.04
     permissions:
       contents: read

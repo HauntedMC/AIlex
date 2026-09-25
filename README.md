@@ -168,7 +168,6 @@ For the same quality gates used by CI:
 ```bash
 bash scripts/verify-artifact.sh
 ./mvnw -B -ntp -Pplatform-acceptance verify
-./bench selftest
 ```
 
 Deterministic CI does not require live model-provider calls. Semantic retrieval tests use deterministic fake embeddings so routing, fusion, memory, evidence, privacy and agent-control regressions remain reproducible. `docs/CHAT_EVALUATION.md` defines the separate live-model/offline quality suite for player-facing behavior.

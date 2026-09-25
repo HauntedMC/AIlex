@@ -24,7 +24,7 @@ JaCoCo currently enforces the repository regression floor of 55% line coverage a
 
 ## Local live-model evaluation
 
-The separate benchmark source set is compiled by the offline `./bench selftest` gate in CI. Live provider evaluations remain local. Compile the headless harness without provider calls with:
+The separate benchmark source set and `./bench` runner stay outside normal CI. Run the offline self-test locally; live provider evaluations also remain local. Compile the headless harness without provider calls with:
 
 ```bash
 ./bench selftest

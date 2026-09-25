@@ -31,7 +31,7 @@ export OPENAI_API_KEY="..."
 ./bench selftest
 ```
 
-The benchmark source set is compiled by the Maven `benchmark` profile during offline `./bench selftest`. Paid/live provider evaluations stay local.
+The benchmark source set is compiled by the Maven `benchmark` profile during local offline `./bench selftest`. Neither benchmark self-tests nor paid/live provider evaluations run in CI.
 
 ## Commands
 

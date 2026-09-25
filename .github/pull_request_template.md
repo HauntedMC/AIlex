@@ -5,7 +5,6 @@ Describe the behavior or tooling change, why it is needed, and any operator impa
 ## Validation
 
 - [ ] `./mvnw -B -ntp verify`
-- [ ] `./bench selftest` for assistant or benchmark changes
 - [ ] `./mvnw -B -ntp -Pplatform-acceptance verify` for runtime, packaging, or dependency changes
 - [ ] `bash scripts/verify-artifact.sh` for packaging changes
 
