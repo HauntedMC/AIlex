@@ -24,6 +24,7 @@ from .external import (
     setup_upstreams,
 )
 from .judge import judge_result
+from .java_build import benchmark_classpath, java_command
 from .report import compare_runs, load_jsonl, write_jsonl, write_report
 from .suites import materialize
 
@@ -161,7 +162,7 @@ def doctor() -> None:
     print(f"CI: {os.environ.get('CI', 'false')}")
     java = command_output(["java", "-version"], stderr=True).splitlines()
     print(f"java: {java[0] if java else 'not found'}")
-    print(f"gradle wrapper: {'ok' if (REPO / 'gradlew').is_file() else 'missing'}")
+    print(f"maven wrapper: {'ok' if (REPO / 'mvnw').is_file() else 'missing'}")
     for module in ("datasets", "inspect_ai", "ragchecker"):
         print(f"{module}: {'installed' if importlib.util.find_spec(module) else 'not installed'}")
     print(f"LongMemEval-V2 env: {'installed' if v2_python().is_file() else 'not installed'}")
@@ -211,7 +212,7 @@ def selftest() -> None:
         raise RuntimeError(f"Expected generated canonical-identifier coverage, found only {len(generated)} cases")
     print(f"Haunted suite materialization: {len(cases)} cases ({len(generated)} generated identifier cases)")
     print("Compiling Java benchmark source set...")
-    subprocess.run([str(REPO / "gradlew"), "--no-daemon", "benchmarkCheck"], cwd=REPO, check=True)
+    benchmark_classpath(REPO)
     print("Benchmark self-test passed without provider calls.")
 
 
@@ -272,12 +273,11 @@ def run_command(args: argparse.Namespace) -> None:
     }
     request_path = run_dir / "request.json"
     request_path.write_text(json.dumps(request, indent=2), encoding="utf-8")
-    subprocess.run([
-        str(REPO / "gradlew"),
-        "--no-daemon",
-        "benchmarkRun",
-        f"-PbenchmarkRequest={request_path.resolve()}",
-    ], cwd=REPO, check=True)
+    subprocess.run(java_command(
+        REPO,
+        "nl.hauntedmc.ailex.benchmark.BenchmarkMain",
+        str(request_path.resolve()),
+    ), cwd=REPO, check=True)
 
     rows = load_jsonl(run_dir / "results.jsonl")
     if args.judge != "none":

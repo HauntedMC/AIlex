@@ -2,19 +2,19 @@
 
 ## Local setup
 
-Requirements are the Java toolchain configured by Gradle and access to the declared Paper/Citizens dependencies.
+Requirements are Java 25, the Maven wrapper, and access to the declared Paper/PacketEvents dependencies. Citizens compile stubs are kept in a separate source tree and excluded from the distributable.
 
 Run full validation with:
 
 ```bash
-./gradlew clean build
+./mvnw -B -ntp verify
 ```
 
 For faster iteration:
 
 ```bash
-./gradlew test
-./gradlew checkstyleMain checkstyleTest
+./mvnw -B -ntp test
+./mvnw -B -ntp -DskipTests compile
 ```
 
 ## Cognitive architecture rules

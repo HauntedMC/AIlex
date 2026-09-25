@@ -1,5 +1,5 @@
 name: AIlex
-version: '${version}'
+version: '${project.version}'
 main: nl.hauntedmc.ailex.AIlexPlugin
 description: AI-powered Minecraft NPC framework
 author: HauntedMC

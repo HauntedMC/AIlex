@@ -10,21 +10,21 @@ AIlex has two kinds of quality checks:
 Run the complete local build with:
 
 ```bash
-./gradlew clean build
+./mvnw -B -ntp verify
 ```
 
-The two CI gates can also be reproduced directly:
+The packaging and Paper runtime gates can also be reproduced directly:
 
 ```bash
-./gradlew --no-daemon checkstyleMain checkstyleTest
-./gradlew --no-daemon test jacocoTestReport jacocoTestCoverageVerification
+bash scripts/verify-artifact.sh
+./mvnw -B -ntp -Pplatform-acceptance verify
 ```
 
 JaCoCo currently enforces the repository regression floor of 55% line coverage and 40% branch coverage.
 
 ## Local live-model evaluation
 
-The separate benchmark source set and `./bench` runner are intentionally outside normal CI. Compile the headless harness without provider calls with:
+The separate benchmark source set and `./bench` runner stay outside normal CI. Run the offline self-test locally; live provider evaluations also remain local. Compile the headless harness without provider calls with:
 
 ```bash
 ./bench selftest

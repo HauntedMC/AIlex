@@ -2,9 +2,11 @@
 .vs/
 *.iml
 
+# Local build outputs from current Maven and previous Gradle builds
 .gradle/
 .gradle-user/
 build/
+
 jars/
 target/
 logs/
@@ -25,6 +27,9 @@ benchmark/.mypy_cache/
 
 *.class
 *.jar
-!gradle/wrapper/gradle-wrapper.jar
 
 .DS_Store
+
+# Maven and release tooling
+.flattened-pom.xml
+.mvn/timing.properties

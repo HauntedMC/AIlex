@@ -6,7 +6,6 @@ import nl.hauntedmc.ailex.assistant.domain.AssistantMode;
 import nl.hauntedmc.ailex.assistant.domain.AssistantSettings;
 import nl.hauntedmc.ailex.assistant.infrastructure.knowledge.SemanticEmbeddingProvider;
 
-import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;

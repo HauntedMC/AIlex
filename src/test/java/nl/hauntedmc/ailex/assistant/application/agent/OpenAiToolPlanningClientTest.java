@@ -1,7 +1,6 @@
 package nl.hauntedmc.ailex.assistant.application.agent;
 
 import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
 import nl.hauntedmc.ailex.util.LoggerUtils;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;

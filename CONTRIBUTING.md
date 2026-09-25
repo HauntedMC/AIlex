@@ -4,7 +4,7 @@ Thanks for taking the time to contribute.
 
 ## Before You Start
 
-- Use the Java toolchain declared by the Gradle build.
+- Use Java 25 and the Maven wrapper.
 - Make sure you can run a local compile and test pass.
 - If your change affects runtime NPC, live-context or proactive behavior, test it on a Paper server.
 
@@ -13,7 +13,7 @@ Thanks for taking the time to contribute.
 ```bash
 git clone <repo-url>
 cd AIlex
-./gradlew compileJava
+./mvnw -B -ntp -DskipTests compile
 ```
 
 ## Contribution Workflow
@@ -29,15 +29,15 @@ cd AIlex
 Minimum checks:
 
 ```bash
-./gradlew compileJava
-./gradlew test
+./mvnw -B -ntp -DskipTests compile
+./mvnw -B -ntp test
 ```
 
 Recommended before merge:
 
 ```bash
-./gradlew checkstyleMain checkstyleTest
-./gradlew check
+./mvnw -B -ntp verify
+./mvnw -B -ntp verify
 ```
 
 ## Pull Request Expectations
