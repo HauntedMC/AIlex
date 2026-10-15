@@ -82,7 +82,10 @@ jobs:
     name: Shared Maven policy
     uses: HauntedMC/HauntedPlatform/.github/workflows/maven-ci.yml@043e5ca6059b1c2453500840c41d2cedba55bbc1 # release hardening
     with:
-      maven-command: ./mvnw -U -B -ntp validate
+      # The shared workflow already uses the runner's installed Maven for its
+      # dependency-tree/effective-POM step. Avoid a redundant Maven Wrapper
+      # bootstrap download, which can fail on fresh runners before validation.
+      maven-command: mvn -U -B -ntp validate
     secrets:
       PACKAGES_USER: ${{ secrets.HAUNTEDMC_PACKAGES_USERNAME || github.actor }}
       PACKAGES_TOKEN: ${{ secrets.HAUNTEDMC_PACKAGES_TOKEN || github.token }}
