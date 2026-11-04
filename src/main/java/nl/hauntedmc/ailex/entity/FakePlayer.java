@@ -15,6 +15,8 @@ import net.citizensnpcs.api.npc.NPCRegistry;
 import net.citizensnpcs.trait.SkinTrait;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.key.Key;
+import net.kyori.adventure.key.Namespaced;
 import net.kyori.adventure.sound.Sound.Source;
 import net.kyori.adventure.util.TriState;
 
@@ -43,6 +45,8 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Predicate;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -991,4 +995,59 @@ public class FakePlayer implements Entity {
     public boolean hasData(@NotNull DataComponentType dataComponentType) {
         return npc.getEntity().hasData(dataComponentType);
     }
+    @Override
+    public @Nullable ItemStack getWeapon() {
+        return npc.getEntity().getWeapon();
+    }
+
+    @Override
+    public boolean isMarkedInvulnerable() {
+        return npc.getEntity().isMarkedInvulnerable();
+    }
+
+    @Override
+    public boolean isInvulnerableTo(@NotNull org.bukkit.damage.DamageSource source) {
+        return npc.getEntity().isInvulnerableTo(source);
+    }
+
+    @Override
+    public double getDefaultGravity() {
+        return npc.getEntity().getDefaultGravity();
+    }
+
+    @Override
+    public double getGravity() {
+        return npc.getEntity().getGravity();
+    }
+
+    @Override
+    public float getAirDrag() {
+        return npc.getEntity().getAirDrag();
+    }
+
+    @Override
+    public boolean isAlliedTo(@NotNull Entity other) {
+        return npc.getEntity().isAlliedTo(other);
+    }
+
+    @Override
+    public @NotNull Map<Key, Predicate<Entity>> getAdditionalAlliedRules() {
+        return npc.getEntity().getAdditionalAlliedRules();
+    }
+
+    @Override
+    public void addAdditionalAlliedRule(@NotNull Key key, @NotNull Predicate<Entity> rule) {
+        npc.getEntity().addAdditionalAlliedRule(key, rule);
+    }
+
+    @Override
+    public void removeAdditionalAlliedRule(@NotNull Key key) {
+        npc.getEntity().removeAdditionalAlliedRule(key);
+    }
+
+    @Override
+    public void removeAdditionalAlliedRule(@NotNull Namespaced namespace) {
+        npc.getEntity().removeAdditionalAlliedRule(namespace);
+    }
+
 }
