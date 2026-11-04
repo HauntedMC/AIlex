@@ -3,7 +3,7 @@ version: '${project.version}'
 main: nl.hauntedmc.ailex.AIlexPlugin
 description: AI-powered Minecraft NPC framework
 author: HauntedMC
-api-version: '26.2'
+api-version: '26.3'
 depend: [Citizens, packetevents]
 commands:
   ailex:
