@@ -51,8 +51,8 @@ curl --fail --silent --show-error --location --output "$work_directory/paper/pap
 [[ "$(sha256sum "$work_directory/paper/paper.jar" | cut -d ' ' -f1)" == "$paper_sha256" ]] || fail 'Paper runtime checksum mismatch'
 citizens_url="https://ci.citizensnpcs.co/job/Citizens2/4255/artifact/dist/target/Citizens-2.0.44-b4255.jar"
 citizens_sha256="ab6cfed31112a225fab3982c0040ecc7af9843942111c4f803ddda95c474e8cf"
-packetevents_url="https://github.com/retrooper/packetevents/releases/download/v2.13.0/packetevents-spigot-2.13.0.jar"
-packetevents_sha256="6d9ece0d87ee727a79a20b7ffbd432021609c6f52bafcb654fc2d3e9b6f064c5"
+packetevents_url="https://github.com/retrooper/packetevents/releases/download/v2.14.0/packetevents-spigot-2.14.0.jar"
+packetevents_sha256="060087c58ec268eae7dd0eb1f17ac3bea1eaadda1693414141ff64e506091bd7"
 curl --fail --silent --show-error --location --output "$work_directory/paper/plugins/Citizens.jar" "$citizens_url"
 [[ "$(sha256sum "$work_directory/paper/plugins/Citizens.jar" | cut -d ' ' -f1)" == "$citizens_sha256" ]] || fail 'Citizens checksum mismatch'
 curl --fail --silent --show-error --location --output "$work_directory/paper/plugins/packetevents.jar" "$packetevents_url"
