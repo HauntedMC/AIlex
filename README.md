@@ -25,6 +25,14 @@ Physical NPC actions are an optional bounded subsystem, disabled by default, and
 
 AIlex may also participate without being named, but silence is a valid and often preferable choice. The proactive system tries to distinguish a public question or community moment from a conversation between players and applies cooldowns, privacy costs and repetition penalties before speaking.
 
+## Chat visibility and plugin compatibility
+
+AIlex checks incoming chat at Paper's `MONITOR` priority, after plugins have had the opportunity to cancel or route it. Cancelled messages never enter assistant processing. An uncancelled message is eligible only when its explicit player recipients include the sender and every currently online player. Empty, restricted, console-only, and opaque audiences are rejected before observation, conversation context, memory, proactive processing, or reply generation. The assistant uses the modified message, preserving plugin redactions.
+
+If another plugin registers a synchronous Paper `ChatEvent` handler, AIlex stops ingesting chat because that later event can still change cancellation, content, or recipients. AIlex logs the compatibility change once without message contents and resumes ingestion when those handlers are removed. Integrations should use `AsyncChatEvent` and finish changes before `MONITOR`; AIlex does not register the deprecated synchronous event or force chat to wait for the server thread.
+
+This is conservative automatic detection, not explicit channel authorization. It can also reject public chat when recipient filtering excludes a player, such as an ignore or local-chat feature. It cannot distinguish a private channel containing everyone online or detect content hidden only by a renderer. Those cases require an explicit chat integration to establish authorization. Previously stored content is not removed by this gate.
+
 ## How a message becomes an answer
 
 The main flow is intentionally simple to describe even though several systems sit underneath it:
